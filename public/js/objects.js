@@ -5,27 +5,32 @@ import {
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
+import { createBuildingMaterial, createClouds, TEX } from './graphics.js';
 
-const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+const lambert = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, ...extra });
 
 // ---------- Étiquettes (visibles seulement à portée) ----------
 export const labels = [];
-export function makeLabel(text, { color = '#fff', size = 0.035, bg = 'rgba(0,0,0,0.45)', depthTest = true } = {}) {
+export function makeLabel(text, { color = '#fff', size = 0.03, depthTest = true } = {}) {
   const cv = document.createElement('canvas');
   const ctx = cv.getContext('2d');
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  const w = Math.ceil(ctx.measureText(text).width) + 30;
-  cv.width = w; cv.height = 60;
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, 60);
-  ctx.fillStyle = color;
+  const font = '600 38px system-ui, -apple-system, Segoe UI, sans-serif';
+  ctx.font = font;
+  const w = Math.ceil(ctx.measureText(text).width) + 24;
+  cv.width = w; cv.height = 56;
+  ctx.font = font;
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 15, 32);
+  ctx.shadowColor = 'rgba(0,0,0,0.85)';
+  ctx.shadowBlur = 6;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.strokeText(text, 12, 30);
+  ctx.fillStyle = color;
+  ctx.fillText(text, 12, 30);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthTest, fog: false }));
-  sp.scale.set((size * w) / 60, size, 1);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthTest, fog: false, toneMapped: false }));
+  sp.scale.set((size * w) / 56, size, 1);
   sp.renderOrder = 10;
   return sp;
 }
@@ -41,25 +46,60 @@ export function updateLabels(cam) {
 }
 
 // ---------- Aéroports ----------
-function runwayTexture(grass) {
+function runwayTexture(a) {
+  const W = 128, H = 2048;
   const cv = document.createElement('canvas');
-  cv.width = 64; cv.height = 1024;
+  cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = grass ? '#6f8f45' : '#3b3f45';
-  ctx.fillRect(0, 0, 64, 1024);
-  if (grass) {
-    for (let i = 0; i < 400; i++) { ctx.fillStyle = Math.random() < 0.5 ? '#7a9a4c' : '#62803d'; ctx.fillRect(Math.random() * 64, Math.random() * 1024, 3, 6); }
-    ctx.fillStyle = '#f0f0f0';
-    for (let y = 20; y < 1024; y += 100) { ctx.fillRect(1, y, 4, 12); ctx.fillRect(59, y, 4, 12); }
+  const r = rng(Math.round(a.x + a.z));
+  if (a.surface === 'grass') {
+    for (let i = 0; i < 16; i++) { ctx.fillStyle = i % 2 ? '#5f7a3a' : '#6b8743'; ctx.fillRect(0, (i * H) / 16, W, H / 16); }
+    for (let i = 0; i < 9000; i++) { ctx.fillStyle = `rgba(${40 + r() * 60},${70 + r() * 60},${20 + r() * 30},0.5)`; ctx.fillRect(r() * W, r() * H, 2, 3 + r() * 4); }
+    for (let i = 0; i < 40; i++) { ctx.fillStyle = 'rgba(110,90,60,0.25)'; ctx.fillRect(W * 0.3 + r() * W * 0.4, r() * H, 6, 60); }
+    ctx.fillStyle = '#f2f2f2';
+    for (let y = 20; y < H; y += 160) { ctx.fillRect(1, y, 5, 26); ctx.fillRect(W - 6, y, 5, 26); }
   } else {
-    ctx.fillStyle = '#e8e8e8';
-    for (let y = 70; y < 954; y += 50) ctx.fillRect(30, y, 4, 26);
-    ctx.fillRect(2, 0, 3, 1024); ctx.fillRect(59, 0, 3, 1024);
-    for (let i = 0; i < 6; i++) { ctx.fillRect(8 + i * 8, 6, 4, 34); ctx.fillRect(8 + i * 8, 984, 4, 34); }
+    ctx.fillStyle = '#3c3e42';
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 26000; i++) { const v = 45 + r() * 40; ctx.fillStyle = `rgba(${v},${v},${v + 3},0.5)`; ctx.fillRect(r() * W, r() * H, 1 + r() * 2, 1 + r() * 2); }
+    // traces de pneus dans les zones de toucher
+    for (const end of [0, 1]) {
+      for (let i = 0; i < 140; i++) {
+        const y = end ? H - 140 - r() * 420 : 140 + r() * 420;
+        ctx.fillStyle = 'rgba(20,20,22,0.18)';
+        ctx.fillRect(W / 2 - 22 + (r() - 0.5) * 18, y, 7, 30 + r() * 80);
+        ctx.fillRect(W / 2 + 15 + (r() - 0.5) * 18, y, 7, 30 + r() * 80);
+      }
+    }
+    // marquages dessinés en mètres (repère : x = travers, y = longueur depuis le bout « haut »)
+    ctx.save();
+    ctx.scale(W / a.width, H / a.length);
+    const L = a.length, Wd = a.width;
+    ctx.fillStyle = '#e9e9e6';
+    ctx.fillRect(0.8, 0, 0.9, L); ctx.fillRect(Wd - 1.7, 0, 0.9, L); // bords
+    for (let y = 120; y < L - 120; y += 50) ctx.fillRect(Wd / 2 - 0.45, y, 0.9, 30); // axe
+    const bars = Wd >= 60 ? 16 : 12, bw = 1.8, gap = (Wd - 6 - bars * bw) / (bars - 1);
+    for (let i = 0; i < bars; i++) { const x = 3 + i * (bw + gap); ctx.fillRect(x, 6, bw, 30); ctx.fillRect(x, L - 36, bw, 30); } // seuils
+    for (const y of [300, L - 345]) { ctx.fillRect(Wd / 2 - 9, y, 4, 45); ctx.fillRect(Wd / 2 + 5, y, 4, 45); } // point de visée
+    for (const y of [150, 450, 600, L - 172, L - 472, L - 622]) {
+      for (const x of [Wd / 2 - 9, Wd / 2 - 6.5, Wd / 2 + 4.5, Wd / 2 + 7]) ctx.fillRect(x, y, 1.6, 22);
+    }
+    // numéros de piste (cap / 10)
+    const hdg = (THREE.MathUtils.radToDeg(-a.heading) % 360 + 360) % 360;
+    const num = (d) => String(Math.round((((d % 360) + 360) % 360) / 10) || 36).padStart(2, '0');
+    ctx.font = 'bold 9px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const digits = (txt, y, flip) => {
+      ctx.save(); ctx.translate(Wd / 2, y); if (flip) ctx.rotate(Math.PI); ctx.scale(1, 2.1); ctx.fillText(txt, 0, 0); ctx.restore();
+    };
+    digits(num(hdg), L - 60, false);
+    digits(num(hdg + 180), 60, true);
+    ctx.restore();
   }
   const t = new THREE.CanvasTexture(cv);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
+  t.anisotropy = 16;
   return t;
 }
 
@@ -76,25 +116,28 @@ function createAirliner(color) {
     [new THREE.BoxGeometry(0.6, 2.6, 0.6).translate(0, -3, -12), 0x222831],
     [new THREE.BoxGeometry(5, 2.6, 0.6).translate(0, -3, 3), 0x222831],
   ];
-  const m = new THREE.Mesh(mergeColored(parts), lambert(0xffffff, { vertexColors: true }));
+  const m = new THREE.Mesh(mergeColored(parts), lambert(0xffffff, { vertexColors: true, roughness: 0.35, metalness: 0.3 }));
   m.position.y = 4.3;
+  m.castShadow = true;
   const g = new THREE.Group();
   g.add(m);
   return g;
 }
+
+const TERMINAL_MAT = createBuildingMaterial({ floor: 4.5, bay: 4, glass: 0.95 });
 
 function buildAirport(scene, a, r) {
   const g = new THREE.Group();
   g.position.set(a.x, a.elev, a.z);
   g.rotation.y = a.heading; // axe local X = travers (u), axe local Z = piste (v)
   const grass = a.surface === 'grass';
-  const rwMat = lambert(0xffffff, { map: runwayTexture(grass), polygonOffset: true, polygonOffsetFactor: -4 });
+  const rwMat = lambert(0xffffff, { map: runwayTexture(a), roughness: grass ? 0.95 : 0.85, polygonOffset: true, polygonOffsetFactor: -4 });
   const rw = new THREE.Mesh(new THREE.PlaneGeometry(a.width, a.length).rotateX(-Math.PI / 2), rwMat);
   rw.position.y = 0.2;
   g.add(rw);
 
   // parking / taxiway
-  const apronMat = lambert(grass ? 0x7c8f55 : 0x55595f, { polygonOffset: true, polygonOffsetFactor: -2 });
+  const apronMat = lambert(grass ? 0x6d7f4a : 0x6c6e70, { roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
   const apronLen = Math.min(a.length * 0.6, 900);
   const apron = new THREE.Mesh(new THREE.PlaneGeometry(110, apronLen).rotateX(-Math.PI / 2), apronMat);
   apron.position.set(a.width / 2 + 70, 0.15, 0);
@@ -106,7 +149,8 @@ function buildAirport(scene, a, r) {
   }
 
   const bx = a.width / 2 + 160;
-  const hangarMat = lambert(0xb8c0c8), roofMat = lambert(0x8a3b32), white = lambert(0xeeeeee), glass = lambert(0x5aa0d0, { emissive: 0x0a1a28 });
+  const hangarMat = lambert(0xa7afb6, { metalness: 0.55, roughness: 0.45 }), roofMat = lambert(0x7d8790, { metalness: 0.6, roughness: 0.4 });
+  const white = lambert(0xe6e6e2, { roughness: 0.6 }), glass = lambert(0x24323f, { metalness: 0.7, roughness: 0.08 });
   const nH = a.type === 'international' ? 4 : a.type === 'regional' ? 3 : 1;
   for (let i = 0; i < nH; i++) {
     const h = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 34), hangarMat);
@@ -117,13 +161,13 @@ function buildAirport(scene, a, r) {
     g.add(h, rf);
   }
   if (a.type === 'international') {
-    const term = new THREE.Mesh(new THREE.BoxGeometry(60, 18, 320), glass);
+    const term = new THREE.Mesh(new THREE.BoxGeometry(60, 18, 320), TERMINAL_MAT);
     term.position.set(bx + 30, 9, 140);
     const roof = new THREE.Mesh(new THREE.BoxGeometry(70, 2, 330), white);
     roof.position.set(bx + 30, 19, 140);
     g.add(term, roof);
     for (let i = 0; i < 3; i++) {
-      const jet = createAirliner([0xffffff, 0xe8e8f0, 0xf4efe6][i]);
+      const jet = createAirliner([0xffffff, 0xf2f2f4, 0xf4efe6][i]);
       jet.position.set(a.width / 2 + 75, 0, 40 + i * 70);
       jet.rotation.y = Math.PI / 2;
       g.add(jet);
@@ -169,17 +213,20 @@ function buildAirport(scene, a, r) {
     p.rotation.y = -Math.PI / 2;
     g.add(p);
   }
+  g.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  rw.castShadow = apron.castShadow = false;
   scene.add(g);
-  addLabel(scene, `🛬 ${a.name}`, a.x, a.elev + 160, a.z, 30000, { color: '#9fe3ff' });
+  addLabel(scene, a.name, a.x, a.elev + 160, a.z, 30000, { color: '#bfe8ff' });
 }
 
 // ---------- Villes ----------
 function buildCities(scene) {
   const total = CITIES.reduce((s, c) => s + c.n, 0);
   const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  const mesh = new THREE.InstancedMesh(geo, lambert(0xffffff), total);
+  const mesh = new THREE.InstancedMesh(geo, createBuildingMaterial(), total);
+  mesh.castShadow = mesh.receiveShadow = true;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  const palette = [0xd9d2c5, 0xc7b8a3, 0xe8e2d5, 0xa9b4c0, 0xd6a77a, 0xf0ede6, 0x8fa3b8, 0xb9c4cc];
+  const palette = [0xc9c2b5, 0xb7a993, 0xd8d2c5, 0x99a4b0, 0xb89a7a, 0xe0ddd6, 0x7f93a8, 0xa9b4bc, 0x8a8580];
   const col = new THREE.Color();
   const r = rng(7);
   let n = 0;
@@ -201,7 +248,7 @@ function buildCities(scene) {
       mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
       n++;
     }
-    addLabel(scene, c.name, c.x, terrainHeight(c.x, c.z) + 300, c.z, 18000, { color: '#ffffff', size: 0.03 });
+    addLabel(scene, c.name, c.x, terrainHeight(c.x, c.z) + 300, c.z, 18000, { color: '#ffffff', size: 0.027 });
   }
   mesh.count = n;
   mesh.computeBoundingSphere();
@@ -213,8 +260,8 @@ function buildLandmark(scene, l, anim) {
   const g = new THREE.Group();
   const base = Math.max(0, l.type === 'volcano' ? l.y : groundHeight(l.x, l.z));
   g.position.set(l.x, base, l.z);
-  const white = lambert(0xf4f4f4), red = lambert(0xc8352b), rock = lambert(0x8b7e6f, { flatShading: true });
-  const stone = lambert(0xb9b2a5, { flatShading: true }), sand = lambert(0xd9be82, { flatShading: true });
+  const white = lambert(0xeeeeea, { roughness: 0.6 }), red = lambert(0xb02a22, { roughness: 0.5 }), rock = lambert(0x6f675d, { roughness: 0.95 });
+  const stone = lambert(0xa49d90, { roughness: 0.95 }), sand = lambert(0xcdb07a, { roughness: 0.95 });
   const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
   let labelY = 150;
 
@@ -290,8 +337,8 @@ function buildLandmark(scene, l, anim) {
     }
     case 'statue':
       add(new THREE.BoxGeometry(40, 30, 40), stone, 0, 15);
-      add(new THREE.CylinderGeometry(9, 13, 60, 8), lambert(0x6fa59a, { flatShading: true }), 0, 60);
-      add(new THREE.SphereGeometry(9, 8, 6), lambert(0x6fa59a, { flatShading: true }), 0, 100);
+      add(new THREE.CylinderGeometry(9, 13, 60, 8), lambert(0x6fa59a, { roughness: 0.5, metalness: 0.6 }), 0, 60);
+      add(new THREE.SphereGeometry(9, 8, 6), lambert(0x6fa59a, { roughness: 0.5, metalness: 0.6 }), 0, 100);
       add(new THREE.BoxGeometry(5, 40, 5), lambert(0x6fa59a), 14, 95).rotation.z = -0.3;
       add(new THREE.ConeGeometry(6, 12, 6), new THREE.MeshBasicMaterial({ color: 0xffc94a }), 20, 120);
       labelY = 180;
@@ -303,8 +350,8 @@ function buildLandmark(scene, l, anim) {
       break;
     case 'volcano': {
       g.position.y = VOLCANO.h - 330;
-      add(new THREE.CircleGeometry(260, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff5a1a }), 0, 0);
-      const smokeMat = new THREE.SpriteMaterial({ color: 0x777777, transparent: true, opacity: 0.45, depthWrite: false });
+      add(new THREE.CircleGeometry(260, 24).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x220800, emissive: 0xff4a10, emissiveIntensity: 2.5 }), 0, 0);
+      const smokeMat = new THREE.SpriteMaterial({ map: TEX.puff, color: 0x6a6a6a, transparent: true, opacity: 0.9, depthWrite: false });
       const puffs = [];
       for (let i = 0; i < 40; i++) {
         const sp = new THREE.Sprite(smokeMat);
@@ -325,7 +372,8 @@ function buildLandmark(scene, l, anim) {
     }
   }
   scene.add(g);
-  addLabel(scene, l.name, l.x, g.position.y + labelY, l.z, 15000, { color: '#ffe9b0', size: 0.03 });
+  g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial)) { o.castShadow = true; o.receiveShadow = true; } });
+  addLabel(scene, l.name, l.x, g.position.y + labelY, l.z, 15000, { color: '#ffe9b0', size: 0.027 });
 }
 
 // ---------- Trafic ----------
@@ -362,7 +410,7 @@ function buildBalloons(scene, anim) {
   const colors = [0xe84a3a, 0xf2c230, 0x3a8ae8, 0x9a4ae8, 0x3ac87a, 0xff8a2a];
   for (const b of BALLOONS) {
     const g = new THREE.Group();
-    const env = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 10).scale(1, 1.2, 1), lambert(colors[b.color], { flatShading: true }));
+    const env = new THREE.Mesh(new THREE.SphereGeometry(10, 28, 18).scale(1, 1.2, 1), lambert(colors[b.color], { roughness: 0.55 }));
     env.position.y = 16;
     const stripes = new THREE.Mesh(new THREE.SphereGeometry(10.1, 12, 2, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.1).scale(1, 1.2, 1), lambert(0xffffff));
     stripes.position.y = 16;
@@ -411,27 +459,6 @@ function nearInfrastructure(x, z) {
     || CITIES.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius + 200);
 }
 
-// ---------- Nuages ----------
-function buildClouds(scene) {
-  const r = rng(99);
-  const CLUSTERS = 700, PUFFS = 5;
-  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
-    lambert(0xffffff, { emissive: 0x9aa4ad, flatShading: true, transparent: true, opacity: 0.9 }), CLUSTERS * PUFFS);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  let n = 0;
-  for (let c = 0; c < CLUSTERS; c++) {
-    const cx = (r() - 0.5) * WORLD.size * 1.2, cz = (r() - 0.5) * WORLD.size * 1.2, cy = 1800 + r() * 1400;
-    for (let j = 0; j < PUFFS; j++) {
-      const k = 120 + r() * 180;
-      m.compose(p.set(cx + (r() - 0.5) * 450, cy + (r() - 0.5) * 70, cz + (r() - 0.5) * 350), q, s.set(k * 1.6, k * 0.55, k));
-      mesh.setMatrixAt(n++, m);
-    }
-  }
-  mesh.computeBoundingSphere();
-  scene.add(mesh);
-  return mesh;
-}
-
 // ---------- Construction globale ----------
 export function buildWorldObjects(scene) {
   const anim = [];
@@ -442,7 +469,8 @@ export function buildWorldObjects(scene) {
   buildShips(scene, anim);
   buildBalloons(scene, anim);
   buildWindFarms(scene, anim);
-  const clouds = buildClouds(scene);
+  const clouds = createClouds();
+  scene.add(clouds);
   return {
     clouds,
     update(dt, t) { for (const f of anim) f(dt, t); },

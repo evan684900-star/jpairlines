@@ -7,6 +7,8 @@ export const SCHEMA = [
   { key: 'decoDist', label: 'Distance des arbres', type: 'range', def: 2, min: 1, max: 4, step: 1, unit: ' km × 2' },
   { key: 'fov', label: 'Champ de vision', type: 'range', def: 65, min: 45, max: 95, step: 5, unit: '°' },
   { key: 'clouds', label: 'Nuages', type: 'check', def: true },
+  { key: 'shadows', label: 'Ombres', type: 'check', def: true },
+  { key: 'timeOfDay', label: 'Heure de la journée', type: 'range', def: 10.5, min: 6, max: 19.5, step: 0.5, unit: ' h' },
   { section: 'Simulation' },
   { key: 'difficulty', label: 'Difficulté', type: 'select', def: 'normal', options: [['easy', 'Facile (moteur auto, crash rare)'], ['normal', 'Normale'], ['realistic', 'Réaliste (pas d\'aide)']] },
   { key: 'fuel', label: 'Consommation de carburant', type: 'check', def: true },

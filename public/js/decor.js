@@ -1,61 +1,96 @@
 import * as THREE from 'three';
 import { WORLD, AIRPORTS, CITIES, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
+import { createBuildingMaterial } from './graphics.js';
 
 const CH = WORLD.chunk;
 
-// Fusionne plusieurs géométries en une seule, avec une couleur par morceau
+// Fusionne plusieurs géométries (indexées) en une seule, avec une couleur par morceau
 export function mergeColored(parts) {
-  const geos = parts.map(([g, color]) => {
-    const ng = g.index ? g.toNonIndexed() : g;
+  const pos = [], nor = [], col = [], idx = [];
+  for (const [g0, color] of parts) {
+    const g = g0;
     const c = new THREE.Color(color);
-    const n = ng.attributes.position.count;
-    const col = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
-    ng.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    return ng;
-  });
-  const total = geos.reduce((s, g) => s + g.attributes.position.count, 0);
-  const out = new THREE.BufferGeometry();
-  for (const name of ['position', 'normal', 'color']) {
-    const arr = new Float32Array(total * 3);
-    let o = 0;
-    for (const g of geos) { arr.set(g.attributes[name].array, o); o += g.attributes[name].array.length; }
-    out.setAttribute(name, new THREE.BufferAttribute(arr, 3));
+    const base = pos.length / 3;
+    const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) {
+      pos.push(p.getX(i), p.getY(i), p.getZ(i));
+      nor.push(n.getX(i), n.getY(i), n.getZ(i));
+      col.push(c.r, c.g, c.b);
+    }
+    if (g.index) for (const k of g.index.array) idx.push(base + k);
+    else for (let i = 0; i < p.count; i++) idx.push(base + i);
   }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  out.setIndex(idx);
   return out;
 }
 
-const TRUNK = 0x6b4a2f;
+const TRUNK = 0x4a3526;
+// bruit déterministe selon la position : les sommets dupliqués bougent pareil (pas de fissures)
+const prand = (x, y, z, k) => { const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + k * 4.581) * 43758.5453; return v - Math.floor(v); };
+
+// assombrit le bas du feuillage (occlusion ambiante simple)
+function shadeByHeight(geo, h0, h1, min = 0.55) {
+  const p = geo.attributes.position, c = geo.attributes.color;
+  for (let i = 0; i < p.count; i++) {
+    const k = min + (1 - min) * Math.min(1, Math.max(0, (p.getY(i) - h0) / (h1 - h0)));
+    c.setXYZ(i, c.getX(i) * k, c.getY(i) * k, c.getZ(i) * k);
+  }
+  return geo;
+}
+function jitter(geo, amount) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = Math.round(p.getX(i) * 100) / 100, y = Math.round(p.getY(i) * 100) / 100, z = Math.round(p.getZ(i) * 100) / 100;
+    p.setXYZ(i, x + (prand(x, y, z, 1) - 0.5) * amount, y + (prand(x, y, z, 2) - 0.5) * amount * 0.5, z + (prand(x, y, z, 3) - 0.5) * amount);
+  }
+  return geo;
+}
+function finish(geo, h0, h1) {
+  shadeByHeight(geo, h0, h1);
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const TREE_GEOS = {
-  conifer: mergeColored([
-    [new THREE.CylinderGeometry(0.5, 0.7, 4, 5).translate(0, 2, 0), TRUNK],
-    [new THREE.ConeGeometry(4.2, 9, 6).translate(0, 7.5, 0), 0x2c5e2e],
-    [new THREE.ConeGeometry(3.2, 7, 6).translate(0, 12, 0), 0x336b33],
-  ]),
-  broadleaf: mergeColored([
-    [new THREE.CylinderGeometry(0.5, 0.7, 5, 5).translate(0, 2.5, 0), TRUNK],
-    [new THREE.IcosahedronGeometry(4.5, 0).scale(1, 0.85, 1).translate(0, 8, 0), 0x4a8a35],
-  ]),
-  palm: mergeColored([
-    [new THREE.CylinderGeometry(0.3, 0.45, 10, 5).translate(0, 5, 0), 0x8a6b45],
-    [new THREE.BoxGeometry(9, 0.3, 1.6).translate(0, 10, 0), 0x3f8f3a],
-    [new THREE.BoxGeometry(1.6, 0.3, 9).translate(0, 10, 0), 0x3f8f3a],
-    [new THREE.BoxGeometry(6.5, 0.3, 1.2).rotateY(Math.PI / 4).translate(0, 10.2, 0), 0x4c9c42],
-  ]),
-  cactus: mergeColored([
-    [new THREE.CylinderGeometry(0.6, 0.7, 6, 6).translate(0, 3, 0), 0x4f7f3a],
-    [new THREE.BoxGeometry(2.4, 0.8, 0.8).translate(1, 3, 0), 0x4f7f3a],
-    [new THREE.BoxGeometry(0.8, 2, 0.8).translate(2, 4, 0), 0x4f7f3a],
-  ]),
-  rock: mergeColored([[new THREE.DodecahedronGeometry(2.5, 0).scale(1.3, 0.7, 1), 0x8a8580]]),
+  conifer: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.25, 0.45, 5, 6).translate(0, 2.5, 0), TRUNK],
+    [jitter(new THREE.ConeGeometry(3.6, 6, 9, 2), 0.4).translate(0, 5, 0), 0x22402a],
+    [jitter(new THREE.ConeGeometry(3.0, 5.5, 9, 2), 0.35).translate(0, 8, 0), 0x264630],
+    [jitter(new THREE.ConeGeometry(2.3, 5, 8, 2), 0.3).translate(0, 11, 0), 0x2a4b31],
+    [jitter(new THREE.ConeGeometry(1.4, 4, 7, 1), 0.2).translate(0, 14, 0), 0x2e5034],
+  ]), 2, 16),
+  broadleaf: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.3, 0.5, 5, 6).translate(0, 2.5, 0), TRUNK],
+    [jitter(new THREE.IcosahedronGeometry(3.4, 1), 0.7).scale(1, 0.85, 1).translate(0, 7.5, 0), 0x3d5d2a],
+    [jitter(new THREE.IcosahedronGeometry(2.6, 1), 0.6).translate(1.9, 6.6, 0.8), 0x456730],
+    [jitter(new THREE.IcosahedronGeometry(2.5, 1), 0.6).translate(-1.6, 6.9, -1.0), 0x3a5828],
+    [jitter(new THREE.IcosahedronGeometry(2.2, 1), 0.5).translate(0.3, 9.6, -0.4), 0x4b6e33],
+  ]), 3, 11),
+  palm: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.22, 0.32, 4, 6).translate(0, 2, 0), 0x7a6248],
+    [new THREE.CylinderGeometry(0.2, 0.22, 4, 6).rotateZ(0.12).translate(0.25, 5.9, 0), 0x7a6248],
+    [new THREE.CylinderGeometry(0.18, 0.2, 3, 6).rotateZ(0.22).translate(0.75, 9.3, 0), 0x7a6248],
+    ...[0, 1, 2, 3, 4, 5, 6].map((k) => [new THREE.BoxGeometry(4.6, 0.08, 0.9).translate(2.3, 0, 0).rotateZ(-0.45).rotateY((k / 7) * Math.PI * 2).translate(1.1, 10.7, 0), k % 2 ? 0x4c7a34 : 0x41692c]),
+  ]), 6, 11),
+  cactus: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.45, 0.5, 6, 8).translate(0, 3, 0), 0x56733f],
+    [new THREE.CylinderGeometry(0.3, 0.3, 2, 6).rotateZ(Math.PI / 2).translate(1, 3, 0), 0x56733f],
+    [new THREE.CylinderGeometry(0.3, 0.3, 2.2, 6).translate(1.9, 4, 0), 0x56733f],
+  ]), 0, 6),
+  rock: finish(mergeColored([[jitter(new THREE.DodecahedronGeometry(2.5, 1), 0.9).scale(1.3, 0.7, 1), 0x7d776f]]), -1, 2),
 };
 const HOUSE_WALL = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
 const HOUSE_ROOF = new THREE.ConeGeometry(0.78, 0.55, 4).rotateY(Math.PI / 4).translate(0, 1.27, 0);
-const WALL_COLORS = [0xf2ead8, 0xe8d6b5, 0xdcc9a8, 0xf5f0e6, 0xcfb894, 0xe6cfc0];
-const ROOF_COLORS = [0xa8432f, 0x8b3a2b, 0x5b4a44, 0xb5552f, 0x6a5145];
+const WALL_COLORS = [0xe9e1cf, 0xdccbb0, 0xcdbb9c, 0xf0ebe0, 0xc4ad8a, 0xd8c4b4];
+const ROOF_COLORS = [0x8e3b2a, 0x733226, 0x4a403c, 0x9a4a2c, 0x5a463c];
 
-const treeMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-const houseMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
+const wallMat = createBuildingMaterial({ floor: 2.9, bay: 2.6, glass: 0.45 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75 });
 
 function inExcludedZone(x, z) {
   for (const a of AIRPORTS) {
@@ -119,16 +154,20 @@ function buildChunkDecor(ci, cj, density) {
   for (const [type, mats] of Object.entries(lists)) {
     if (!mats.length) continue;
     const im = new THREE.InstancedMesh(TREE_GEOS[type], treeMat, mats.length);
+    im.castShadow = true;
+    im.receiveShadow = true;
     mats.forEach((mm, i) => {
       im.setMatrixAt(i, mm);
-      im.setColorAt(i, col.setHSL(0, 0, 0.82 + r() * 0.3));
+      im.setColorAt(i, col.setRGB(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.75 + r() * 0.25));
     });
     im.computeBoundingSphere();
     group.add(im);
   }
   if (houses.length) {
-    const walls = new THREE.InstancedMesh(HOUSE_WALL, houseMat, houses.length);
-    const roofs = new THREE.InstancedMesh(HOUSE_ROOF, houseMat, houses.length);
+    const walls = new THREE.InstancedMesh(HOUSE_WALL, wallMat, houses.length);
+    const roofs = new THREE.InstancedMesh(HOUSE_ROOF, roofMat, houses.length);
+    walls.castShadow = roofs.castShadow = true;
+    walls.receiveShadow = roofs.receiveShadow = true;
     houses.forEach((hh, i) => {
       walls.setMatrixAt(i, hh.m); roofs.setMatrixAt(i, hh.m);
       walls.setColorAt(i, col.setHex(hh.wall)); roofs.setColorAt(i, col.setHex(hh.roof));

@@ -16,13 +16,21 @@ const TYPES = {
   '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
 };
 
-const THREE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_modules/three/build/three.module.js');
+const THREE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_modules/three');
+const THREE_FILE = path.join(THREE_DIR, 'build/three.module.js');
+const ADDONS = path.join(THREE_DIR, 'examples/jsm');
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
-  let file = url.pathname === '/vendor/three.module.js' ? THREE_FILE : path.normalize(path.join(ROOT, decodeURIComponent(url.pathname)));
-  if (file === THREE_FILE) return sendFile(file, res);
+  // three.js est servi directement depuis node_modules (en local, sans build)
+  if (url.pathname === '/vendor/three.module.js') return sendFile(THREE_FILE, res);
+  if (url.pathname.startsWith('/vendor/addons/')) {
+    const f = path.normalize(path.join(ADDONS, decodeURIComponent(url.pathname.slice('/vendor/addons/'.length))));
+    if (!f.startsWith(ADDONS + path.sep)) { res.writeHead(403); return res.end(); }
+    return sendFile(f, res);
+  }
+  let file = path.normalize(path.join(ROOT, decodeURIComponent(url.pathname)));
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
   if (url.pathname.endsWith('/')) file = path.join(file, 'index.html');
   sendFile(file, res);

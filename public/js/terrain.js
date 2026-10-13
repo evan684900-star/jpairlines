@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { WORLD, HALF, terrainHeight, climate, snowLine, fbm } from './world.js';
+import { WORLD, HALF, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
+import { createTerrainMaterial, createWaterMaterial, TEX } from './graphics.js';
 
 const CH = WORLD.chunk;
 const LOD_SEGMENTS = [80, 40, 20, 10]; // 25 m, 50 m, 100 m, 200 m
@@ -11,32 +12,50 @@ const fieldHash = (a, b) => {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
-const FIELD_COLORS = [[0.78, 0.7, 0.32], [0.45, 0.6, 0.25], [0.55, 0.42, 0.28], [0.62, 0.7, 0.3], [0.36, 0.52, 0.2]];
+// palette en sRGB (convertie en couleurs linéaires pour le rendu)
+const FIELD_COLORS = [[0.7, 0.63, 0.4], [0.38, 0.47, 0.22], [0.44, 0.38, 0.28], [0.45, 0.52, 0.27], [0.32, 0.41, 0.2], [0.55, 0.57, 0.32], [0.62, 0.58, 0.36]];
+const SRGB = THREE.SRGBColorSpace;
+const mix = (a, b, t) => a + (b - a) * t;
 
 export function terrainColor(h, slope, x, z, out) {
   if (h < -1) {
     const k = Math.min(1, -h / 60);
-    return out.setRGB(0.7 - k * 0.55, 0.66 - k * 0.42, 0.5 - k * 0.22);
+    return out.setRGB(mix(0.74, 0.16, k), mix(0.68, 0.26, k), mix(0.52, 0.28, k), SRGB);
   }
-  if (h < 6) return out.setRGB(0.88, 0.82, 0.62);
+  if (h < 5) return out.setRGB(0.83, 0.77, 0.6, SRGB);
   const { temp, dry } = climate(x, z);
   const n = fbm(x / 500, z / 500, 2, 5);
   const snow = snowLine(temp) + (n - 0.5) * 300;
-  if (h > snow && slope < 1.1) return out.setRGB(0.94, 0.96, 1);
-  if (slope > 0.75 || h > snow - 250) return out.setRGB(0.45 + n * 0.12, 0.42 + n * 0.1, 0.4 + n * 0.08);
+  if (h > snow && slope < 1.1) return out.setRGB(0.84, 0.86, 0.9, SRGB);
+  if (slope > 0.8 || h > snow - 250) return out.setRGB(0.47 + n * 0.08, 0.44 + n * 0.07, 0.4 + n * 0.06, SRGB);
   if (dry > 0.62 && temp > 0.45) {
     const d = Math.min(1, (dry - 0.62) * 6);
-    return out.setRGB(0.62 + d * 0.28 + n * 0.05, 0.6 + d * 0.15 + n * 0.05, 0.36 + d * 0.1);
+    return out.setRGB(mix(0.6, 0.84, d) + n * 0.04, mix(0.56, 0.7, d) + n * 0.04, mix(0.36, 0.47, d), SRGB);
   }
-  if (temp < 0.3) return out.setRGB(0.42 + n * 0.1, 0.48 + n * 0.08, 0.36);
-  // champs cultivés autour des villages
-  if (h < 400 && slope < 0.12 && fbm(x / 2600, z / 2600, 2, 300) > 0.6) {
-    const c = FIELD_COLORS[Math.floor(fieldHash(Math.floor(x / 140), Math.floor(z / 110)) * FIELD_COLORS.length)];
-    return out.setRGB(c[0], c[1], c[2]);
+  if (temp < 0.3) return out.setRGB(0.5 + n * 0.06, 0.51 + n * 0.05, 0.4, SRGB);
+  const lush = Math.max(0, Math.min(1, 1.25 - dry * 1.4));
+  const forest = smoothstep(0.5, 0.58, fbm(x / 1800, z / 1800, 3, 77)) * (temp > 0.3 ? 1 : 0);
+  const g = 0.9 + n * 0.2;
+  let r = mix(0.55, 0.3, lush) * g, gg = mix(0.53, 0.42, lush) * g, b = mix(0.3, 0.17, lush) * g;
+  // champs cultivés : parcelles irrégulières, orientées selon la région
+  const farm = fbm(x / 2600, z / 2600, 2, 300);
+  if (h < 450 && slope < 0.14 && farm > 0.56 && forest < 0.5) {
+    const ang = fbm(x / 9000, z / 9000, 1, 400) * Math.PI;
+    const wx = x + (fbm(x / 600, z / 600, 2, 401) - 0.5) * 140, wz = z + (fbm(x / 600, z / 600, 2, 402) - 0.5) * 140;
+    const u = wx * Math.cos(ang) - wz * Math.sin(ang), v = wx * Math.sin(ang) + wz * Math.cos(ang);
+    const band = Math.floor(u / 520);
+    const iu = Math.floor(u / (90 + fieldHash(band, 3) * 150));
+    const iv = Math.floor(v / (140 + fieldHash(iu, band) * 260));
+    const hsh = fieldHash(iu * 7 + band, iv);
+    if (hsh < smoothstep(0.56, 0.7, farm)) {
+      const c = FIELD_COLORS[Math.floor(fieldHash(iv, iu) * FIELD_COLORS.length)];
+      const k = 0.8;
+      r = mix(r, c[0], k); gg = mix(gg, c[1], k); b = mix(b, c[2], k);
+      return out.setRGB(r, gg, b, SRGB);
+    }
   }
-  const lush = Math.max(0, Math.min(1, 1.2 - dry * 1.4));
-  const g = 0.75 + n * 0.35;
-  return out.setRGB((0.42 - lush * 0.24) * g, (0.52 + lush * 0.04) * g, (0.24 - lush * 0.08) * g);
+  r = mix(r, 0.2, forest); gg = mix(gg, 0.29, forest); b = mix(b, 0.12, forest);
+  return out.setRGB(r, gg, b, SRGB);
 }
 
 // ---------- Construction d'un morceau ----------
@@ -106,16 +125,14 @@ function buildChunkGeometry(ci, cj, seg) {
 export class Terrain {
   constructor(scene) {
     this.scene = scene;
-    this.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.material = createTerrainMaterial();
     this.chunks = new Map();
     this.queue = [];
     this.center = null;
     this.radius = 10;
 
-    this.water = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
-      new THREE.MeshPhongMaterial({ color: 0x2a7fb8, shininess: 90, specular: 0x557799, transparent: true, opacity: 0.86 }),
-    );
+    this.water = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), createWaterMaterial());
+    this.water.material.uniforms.tNormal.value = TEX.waterNormal;
     this.water.position.y = 0.4;
     this.water.renderOrder = 1;
     scene.add(this.water);
@@ -167,6 +184,7 @@ export class Terrain {
       return;
     }
     const mesh = new THREE.Mesh(geo, this.material);
+    mesh.receiveShadow = true;
     mesh.position.set(job.i * CH, 0, job.j * CH);
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();

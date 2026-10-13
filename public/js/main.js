@@ -8,18 +8,23 @@ import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
+import { buildTextures, Atmosphere } from './graphics.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => { $('load-status').textContent = t; };
 
 // ================= Rendu =================
-const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: false });
 renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.42;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-const SKY = 0x9cc8ee;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(SKY);
-scene.fog = new THREE.Fog(SKY, 3000, 20000);
+scene.fog = new THREE.FogExp2(0xbfd4e6, 0.0001);
+buildTextures();
+const atmo = new Atmosphere(renderer, scene);
 
 const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 60000);
 addEventListener('resize', () => {
@@ -28,10 +33,6 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xdbeeff, 0x4a5a3a, 0.9));
-const sun = new THREE.DirectionalLight(0xfff3dd, 1.6);
-sun.position.set(3000, 5000, 2000);
-scene.add(sun);
 
 const terrain = new Terrain(scene);
 const decor = new Decor(scene);
@@ -42,14 +43,16 @@ function applySettings(key) {
   if (!key || key === 'viewDist') {
     const d = settings.viewDist * 1000;
     terrain.setViewDistance(d);
-    scene.fog.near = d * 0.25;
-    scene.fog.far = d * 0.95;
+    scene.fog.density = 1.4 / d;
     camera.far = d * 1.6;
     camera.updateProjectionMatrix();
+    atmo.sky.scale.setScalar(camera.far * 0.9);
   }
   if (!key || key === 'trees' || key === 'decoDist') decor.setOptions({ density: settings.trees, radius: settings.decoDist });
   if (!key || key === 'fov') { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
   if (world && (!key || key === 'clouds')) world.clouds.visible = settings.clouds;
+  if (!key || key === 'timeOfDay') atmo.setTime(settings.timeOfDay);
+  if (!key || key === 'shadows' || key === 'quality') atmo.setShadows(settings.shadows, settings.quality);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
   if (!key || key === 'units') {
@@ -481,7 +484,7 @@ function buildMapImage() {
         continue;
       }
       const hx = terrainHeight(wx + px, wz);
-      terrainColor(h, Math.abs(hx - h) / px, wx, wz, c);
+      terrainColor(h, Math.abs(hx - h) / px, wx, wz, c).convertLinearToSRGB();
       const shade = THREE.MathUtils.clamp(1 + ((h - hx) / px) * 1.5, 0.6, 1.25);
       img.data[i] = c.r * 255 * shade; img.data[i + 1] = c.g * 255 * shade; img.data[i + 2] = c.b * 255 * shade;
     }
@@ -826,6 +829,7 @@ function frame(now) {
   labelTimer -= realDt;
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
+  updateAtmosphere(wallT);
 
   // autres joueurs : interpolation douce
   const k = 1 - Math.exp(-realDt * 8);
@@ -836,6 +840,23 @@ function frame(now) {
   }
 
   renderer.render(scene, camera);
+}
+
+const sunTmp = new THREE.Color();
+function updateAtmosphere(t) {
+  atmo.follow(started ? plane.pos : camera.position, camera.position);
+  const w = terrain.water.material.uniforms;
+  w.time.value = t % 10000;
+  w.sunDir.value.copy(atmo.sunDir);
+  w.sunColor.value.copy(atmo.sun.color).multiplyScalar(atmo.sun.intensity * 0.35);
+  w.skyZenith.value.copy(atmo.zenith);
+  w.skyHorizon.value.copy(atmo.horizon);
+  if (world) {
+    const c = world.clouds.material.uniforms;
+    sunTmp.copy(atmo.sun.color).multiplyScalar(0.6 + atmo.sun.intensity * 0.35);
+    c.litColor.value.copy(sunTmp);
+    c.shadowColor.value.copy(atmo.horizon).multiplyScalar(0.75);
+  }
 }
 
 // ================= Démarrage =================
