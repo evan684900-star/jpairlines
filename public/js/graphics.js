@@ -173,10 +173,10 @@ export function createTerrainMaterial() {
           vec3 rockCol = mix(vec3(0.33, 0.31, 0.29), vec3(0.55, 0.52, 0.48), rk.r) * mix(0.85, 1.1, rk.g);
           // la neige reste sur les pentes douces
           float isSnow = smoothstep(0.45, 0.62, min(diffuseColor.r, diffuseColor.b));
-          base = mix(base, diffuseColor.rgb * mix(0.94, 1.03, d2.g), isSnow);
+          base = mix(base, diffuseColor.rgb * mix(0.97, 1.02, d3.g), isSnow);
           rockW *= 1.0 - isSnow * (1.0 - smoothstep(0.5, 0.75, slope));
           diffuseColor.rgb = mix(base, rockCol, rockW);
-          jpH = mix(mix(mix(d2.b, d1.b, near * 0.7), d0.b, close * 0.6), rk.r, rockW) * (1.0 - isSnow * 0.7);
+          jpH = mix(mix(mix(d2.b, d1.b, near * 0.7), d0.b, close * 0.6), rk.r, rockW) * (1.0 - isSnow);
         }
       `)
       .replace('#include <normal_fragment_begin>', /* glsl */`
