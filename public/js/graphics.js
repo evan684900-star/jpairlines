@@ -172,7 +172,7 @@ export function createTerrainMaterial() {
           float rockW = smoothstep(0.28, 0.5, slope + (d2.g - 0.5) * 0.15);
           vec3 rockCol = mix(vec3(0.33, 0.31, 0.29), vec3(0.55, 0.52, 0.48), rk.r) * mix(0.85, 1.1, rk.g);
           // la neige reste sur les pentes douces
-          float isSnow = step(0.6, diffuseColor.r) * step(0.6, diffuseColor.b);
+          float isSnow = smoothstep(0.45, 0.62, min(diffuseColor.r, diffuseColor.b));
           base = mix(base, diffuseColor.rgb * mix(0.94, 1.03, d2.g), isSnow);
           rockW *= 1.0 - isSnow * (1.0 - smoothstep(0.5, 0.75, slope));
           diffuseColor.rgb = mix(base, rockCol, rockW);

@@ -17,6 +17,8 @@ const FIELD_COLORS = [[0.7, 0.63, 0.4], [0.38, 0.47, 0.22], [0.44, 0.38, 0.28], 
 const SRGB = THREE.SRGBColorSpace;
 const mix = (a, b, t) => a + (b - a) * t;
 
+const tmpRock = new THREE.Color(), tmpSnow = new THREE.Color();
+
 export function terrainColor(h, slope, x, z, out) {
   if (h < -1) {
     const k = Math.min(1, -h / 60);
@@ -25,9 +27,17 @@ export function terrainColor(h, slope, x, z, out) {
   if (h < 5) return out.setRGB(0.83, 0.77, 0.6, SRGB);
   const { temp, dry } = climate(x, z);
   const n = fbm(x / 500, z / 500, 2, 5);
+  lowlandColor(h, slope, x, z, temp, dry, n, out);
+  // transitions progressives vers la roche puis la neige (pas de saut d'un sommet à l'autre)
   const snow = snowLine(temp) + (n - 0.5) * 300;
-  if (h > snow && slope < 1.1) return out.setRGB(0.84, 0.86, 0.9, SRGB);
-  if (slope > 0.8 || h > snow - 250) return out.setRGB(0.47 + n * 0.08, 0.44 + n * 0.07, 0.4 + n * 0.06, SRGB);
+  const rockF = Math.max(smoothstep(0.6, 0.95, slope), smoothstep(snow - 450, snow - 150, h));
+  const snowF = smoothstep(snow - 120, snow + 80, h) * (1 - smoothstep(0.8, 1.25, slope));
+  if (rockF > 0) out.lerp(tmpRock.setRGB(0.47 + n * 0.08, 0.44 + n * 0.07, 0.4 + n * 0.06, SRGB), rockF);
+  if (snowF > 0) out.lerp(tmpSnow.setRGB(0.84, 0.86, 0.9, SRGB), snowF);
+  return out;
+}
+
+function lowlandColor(h, slope, x, z, temp, dry, n, out) {
   if (dry > 0.62 && temp > 0.45) {
     const d = Math.min(1, (dry - 0.62) * 6);
     return out.setRGB(mix(0.6, 0.84, d) + n * 0.04, mix(0.56, 0.7, d) + n * 0.04, mix(0.36, 0.47, d), SRGB);
@@ -46,12 +56,9 @@ export function terrainColor(h, slope, x, z, out) {
     const band = Math.floor(u / 520);
     const iu = Math.floor(u / (90 + fieldHash(band, 3) * 150));
     const iv = Math.floor(v / (140 + fieldHash(iu, band) * 260));
-    const hsh = fieldHash(iu * 7 + band, iv);
-    if (hsh < smoothstep(0.56, 0.7, farm)) {
+    if (fieldHash(iu * 7 + band, iv) < smoothstep(0.56, 0.7, farm)) {
       const c = FIELD_COLORS[Math.floor(fieldHash(iv, iu) * FIELD_COLORS.length)];
-      const k = 0.8;
-      r = mix(r, c[0], k); gg = mix(gg, c[1], k); b = mix(b, c[2], k);
-      return out.setRGB(r, gg, b, SRGB);
+      return out.setRGB(mix(r, c[0], 0.8), mix(gg, c[1], 0.8), mix(b, c[2], 0.8), SRGB);
     }
   }
   r = mix(r, 0.2, forest); gg = mix(gg, 0.29, forest); b = mix(b, 0.12, forest);
