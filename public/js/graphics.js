@@ -410,20 +410,20 @@ export class Atmosphere {
     return new THREE.Color(r / 64, g / 64, b / 64);
   }
 
-  // hour : 5 à 21
+  // hour : lever vers 5 h 30, coucher vers 20 h 30
   setTime(hour) {
-    const t = (hour - 6) / 12; // 0 = lever, 1 = coucher
-    const elev = Math.max(-0.08, Math.sin(t * Math.PI)) * THREE.MathUtils.degToRad(62);
+    const t = (hour - 5.5) / 15; // 0 = lever, 1 = coucher
+    const elev = Math.max(0.02, Math.sin(t * Math.PI)) * THREE.MathUtils.degToRad(62);
     const az = THREE.MathUtils.degToRad(100 + t * 160);
     this.sunDir.setFromSphericalCoords(1, Math.PI / 2 - elev, az);
     for (const s of [this.sky, this.skyClone]) s.material.uniforms.sunPosition.value.copy(this.sunDir);
 
     // couleur et intensité du soleil (plus chaude quand il est bas)
     const h = Math.max(0, this.sunDir.y);
-    const warm = 1 - Math.min(1, h * 3.2);
-    this.sun.color.setRGB(1, 0.95 - warm * 0.35, 0.88 - warm * 0.6);
-    this.sun.intensity = 0.25 + Math.min(1, h * 4) * 3.8;
-    this.hemi.intensity = 0.15 + Math.min(1, h * 3) * 0.35;
+    const warm = 1 - Math.min(1, h * 2);
+    this.sun.color.setRGB(1, 0.95 - warm * 0.3, 0.88 - warm * 0.5);
+    this.sun.intensity = 1.2 + Math.min(1, h * 3) * 2.8;
+    this.hemi.intensity = 0.3 + Math.min(1, h * 3) * 0.2;
 
     // couleurs du ciel pour le brouillard et l'eau
     const side = new THREE.Vector3(-this.sunDir.z, 0, this.sunDir.x).normalize();
@@ -436,7 +436,7 @@ export class Atmosphere {
     if (this.envRT) this.envRT.dispose();
     this.envRT = this.pmrem.fromScene(this.skyScene, 0, 0.1, 2000);
     this.scene.environment = this.envRT.texture;
-    this.scene.environmentIntensity = 0.35 + Math.min(1, h * 3) * 0.45;
+    this.scene.environmentIntensity = 0.6 + Math.min(1, h * 3) * 0.2;
   }
 
   setShadows(on, quality) {
