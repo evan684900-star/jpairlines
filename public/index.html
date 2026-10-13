@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JP Airlines</title>
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Écran de départ -->
+  <div id="menu" class="overlay">
+    <div class="panel">
+      <h1>✈ JP Airlines</h1>
+      <p class="sub">Une seule île, tous les pilotes ensemble.</p>
+      <label>Nom de pilote <input id="pilot-name" maxlength="16" placeholder="Pilote" /></label>
+      <button id="start">Décoller</button>
+      <div class="help">
+        <b>Commandes</b>
+        <div><kbd>Z</kbd>/<kbd>W</kbd> plus de gaz · <kbd>S</kbd> moins de gaz</div>
+        <div><kbd>↓</kbd> cabrer (monter) · <kbd>↑</kbd> piquer (descendre)</div>
+        <div><kbd>←</kbd> <kbd>→</kbd> s'incliner · <kbd>Q</kbd>/<kbd>A</kbd> <kbd>D</kbd> palonnier / roulage</div>
+        <div><kbd>Espace</kbd> freins · <kbd>C</kbd> caméra · <kbd>M</kbd> carte · <kbd>J</kbd> quêtes</div>
+        <div><kbd>F</kbd> accepter une quête · <kbd>R</kbd> réapparaître · <kbd>I</kbd> inverser la profondeur</div>
+        <p>Décollage : plein gaz, attends ~90 km/h puis tire légèrement (<kbd>↓</kbd>).</p>
+      </div>
+      <p id="load-status" class="sub">Génération de la carte…</p>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="instruments">
+      <div><span class="lbl">VITESSE</span><span id="spd">0</span> km/h</div>
+      <div><span class="lbl">ALTITUDE</span><span id="alt">0</span> m</div>
+      <div><span class="lbl">SOL</span><span id="agl">0</span> m</div>
+      <div><span class="lbl">VARIO</span><span id="vs">0</span> m/s</div>
+      <div><span class="lbl">CAP</span><span id="hdg">000</span>°</div>
+      <div class="throttle"><span class="lbl">GAZ</span><div class="bar"><div id="thr"></div></div></div>
+      <div id="stall" class="warn hidden">DÉCROCHAGE</div>
+    </div>
+    <div id="topbar">
+      <span id="money">0 ₣</span>
+      <span id="online">Solo</span>
+    </div>
+    <div id="quest-box" class="hidden">
+      <div id="quest-title"></div>
+      <div id="quest-step"></div>
+      <div id="quest-dist"></div>
+    </div>
+    <div id="arrow" class="hidden">▲</div>
+    <div id="prompt" class="hidden"></div>
+    <div id="toast"></div>
+    <canvas id="minimap" width="200" height="200"></canvas>
+  </div>
+
+  <div id="bigmap" class="overlay hidden"><canvas id="bigmap-canvas" width="700" height="700"></canvas></div>
+
+  <div id="journal" class="overlay hidden">
+    <div class="panel wide">
+      <h2>Journal de quêtes</h2>
+      <p class="sub">Va aux balises jaunes <b>!</b> sur la carte et appuie sur <kbd>F</kbd> pour accepter une quête.</p>
+      <ul id="quest-list"></ul>
+      <button id="abandon">Abandonner la quête en cours</button>
+    </div>
+  </div>
+
+  <div id="crash" class="overlay hidden">
+    <div class="panel">
+      <h2>💥 Crash !</h2>
+      <p id="crash-reason"></p>
+      <p>Appuie sur <kbd>R</kbd> pour repartir du dernier aéroport.</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

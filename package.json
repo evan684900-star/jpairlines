@@ -1,0 +1,28 @@
+{
+  "name": "jpairlines",
+  "version": "1.0.0",
+  "description": "Simulateur de vol 3D multijoueur avec quêtes",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evan684900-star/jpairlines.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/evan684900-star/jpairlines/issues"
+  },
+  "homepage": "https://github.com/evan684900-star/jpairlines#readme",
+  "dependencies": {
+    "three": "^0.160.0",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
