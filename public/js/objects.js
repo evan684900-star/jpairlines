@@ -1,0 +1,451 @@
+import * as THREE from 'three';
+import {
+  WORLD, AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
+  terrainHeight, groundHeight, rng,
+} from './world.js';
+import { createPlaneMesh } from './plane.js';
+import { mergeColored } from './decor.js';
+
+const lambert = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+
+// ---------- Étiquettes (visibles seulement à portée) ----------
+export const labels = [];
+export function makeLabel(text, { color = '#fff', size = 0.035, bg = 'rgba(0,0,0,0.45)', depthTest = true } = {}) {
+  const cv = document.createElement('canvas');
+  const ctx = cv.getContext('2d');
+  ctx.font = 'bold 40px system-ui, sans-serif';
+  const w = Math.ceil(ctx.measureText(text).width) + 30;
+  cv.width = w; cv.height = 60;
+  ctx.font = 'bold 40px system-ui, sans-serif';
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, w, 60);
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 15, 32);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthTest, fog: false }));
+  sp.scale.set((size * w) / 60, size, 1);
+  sp.renderOrder = 10;
+  return sp;
+}
+function addLabel(scene, text, x, y, z, range, opts) {
+  const sp = makeLabel(text, opts);
+  sp.position.set(x, y, z);
+  scene.add(sp);
+  labels.push({ sp, range });
+  return sp;
+}
+export function updateLabels(cam) {
+  for (const l of labels) l.sp.visible = cam.distanceTo(l.sp.position) < l.range;
+}
+
+// ---------- Aéroports ----------
+function runwayTexture(grass) {
+  const cv = document.createElement('canvas');
+  cv.width = 64; cv.height = 1024;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = grass ? '#6f8f45' : '#3b3f45';
+  ctx.fillRect(0, 0, 64, 1024);
+  if (grass) {
+    for (let i = 0; i < 400; i++) { ctx.fillStyle = Math.random() < 0.5 ? '#7a9a4c' : '#62803d'; ctx.fillRect(Math.random() * 64, Math.random() * 1024, 3, 6); }
+    ctx.fillStyle = '#f0f0f0';
+    for (let y = 20; y < 1024; y += 100) { ctx.fillRect(1, y, 4, 12); ctx.fillRect(59, y, 4, 12); }
+  } else {
+    ctx.fillStyle = '#e8e8e8';
+    for (let y = 70; y < 954; y += 50) ctx.fillRect(30, y, 4, 26);
+    ctx.fillRect(2, 0, 3, 1024); ctx.fillRect(59, 0, 3, 1024);
+    for (let i = 0; i < 6; i++) { ctx.fillRect(8 + i * 8, 6, 4, 34); ctx.fillRect(8 + i * 8, 984, 4, 34); }
+  }
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function createAirliner(color) {
+  const parts = [
+    [new THREE.CylinderGeometry(2.2, 2.2, 34, 10).rotateX(Math.PI / 2), color],
+    [new THREE.ConeGeometry(2.2, 5, 10).rotateX(-Math.PI / 2).translate(0, 0, -19.5), color],
+    [new THREE.ConeGeometry(2.2, 7, 10).rotateX(Math.PI / 2).translate(0, 0.6, 20.5), color],
+    [new THREE.BoxGeometry(34, 0.5, 5).translate(0, -0.8, 1), 0xd8dde3],
+    [new THREE.BoxGeometry(12, 0.4, 3).translate(0, 0.8, 21), 0xd8dde3],
+    [new THREE.BoxGeometry(0.4, 7, 4).translate(0, 4.2, 21), 0x2a4bd8],
+    [new THREE.CylinderGeometry(1, 1, 4, 8).rotateX(Math.PI / 2).translate(7, -2, -1), 0x9aa3ad],
+    [new THREE.CylinderGeometry(1, 1, 4, 8).rotateX(Math.PI / 2).translate(-7, -2, -1), 0x9aa3ad],
+    [new THREE.BoxGeometry(0.6, 2.6, 0.6).translate(0, -3, -12), 0x222831],
+    [new THREE.BoxGeometry(5, 2.6, 0.6).translate(0, -3, 3), 0x222831],
+  ];
+  const m = new THREE.Mesh(mergeColored(parts), lambert(0xffffff, { vertexColors: true }));
+  m.position.y = 4.3;
+  const g = new THREE.Group();
+  g.add(m);
+  return g;
+}
+
+function buildAirport(scene, a, r) {
+  const g = new THREE.Group();
+  g.position.set(a.x, a.elev, a.z);
+  g.rotation.y = a.heading; // axe local X = travers (u), axe local Z = piste (v)
+  const grass = a.surface === 'grass';
+  const rwMat = lambert(0xffffff, { map: runwayTexture(grass), polygonOffset: true, polygonOffsetFactor: -4 });
+  const rw = new THREE.Mesh(new THREE.PlaneGeometry(a.width, a.length).rotateX(-Math.PI / 2), rwMat);
+  rw.position.y = 0.2;
+  g.add(rw);
+
+  // parking / taxiway
+  const apronMat = lambert(grass ? 0x7c8f55 : 0x55595f, { polygonOffset: true, polygonOffsetFactor: -2 });
+  const apronLen = Math.min(a.length * 0.6, 900);
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(110, apronLen).rotateX(-Math.PI / 2), apronMat);
+  apron.position.set(a.width / 2 + 70, 0.15, 0);
+  g.add(apron);
+  for (const v of [-apronLen / 2 + 30, apronLen / 2 - 30]) {
+    const tw = new THREE.Mesh(new THREE.PlaneGeometry(30, 20).rotateX(-Math.PI / 2), apronMat);
+    tw.position.set(a.width / 2 + 10, 0.16, v);
+    g.add(tw);
+  }
+
+  const bx = a.width / 2 + 160;
+  const hangarMat = lambert(0xb8c0c8), roofMat = lambert(0x8a3b32), white = lambert(0xeeeeee), glass = lambert(0x5aa0d0, { emissive: 0x0a1a28 });
+  const nH = a.type === 'international' ? 4 : a.type === 'regional' ? 3 : 1;
+  for (let i = 0; i < nH; i++) {
+    const h = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 34), hangarMat);
+    h.position.set(bx, 7, -apronLen / 2 + 60 + i * 55);
+    const rf = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 40, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), roofMat);
+    rf.scale.set(1, 0.35, 1);
+    rf.position.set(bx, 14, -apronLen / 2 + 60 + i * 55);
+    g.add(h, rf);
+  }
+  if (a.type === 'international') {
+    const term = new THREE.Mesh(new THREE.BoxGeometry(60, 18, 320), glass);
+    term.position.set(bx + 30, 9, 140);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(70, 2, 330), white);
+    roof.position.set(bx + 30, 19, 140);
+    g.add(term, roof);
+    for (let i = 0; i < 3; i++) {
+      const jet = createAirliner([0xffffff, 0xe8e8f0, 0xf4efe6][i]);
+      jet.position.set(a.width / 2 + 75, 0, 40 + i * 70);
+      jet.rotation.y = Math.PI / 2;
+      g.add(jet);
+    }
+  }
+  // tour de contrôle
+  const towerH = a.type === 'strip' ? 10 : a.type === 'regional' ? 26 : 45;
+  const tw = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, towerH, 8), white);
+  tw.position.set(bx - 20, towerH / 2, apronLen / 2 + 20);
+  const cab = new THREE.Mesh(new THREE.CylinderGeometry(7, 6, 6, 8), glass);
+  cab.position.set(bx - 20, towerH + 3, apronLen / 2 + 20);
+  g.add(tw, cab);
+  // pompe à essence
+  const pump = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 6), lambert(0xd83a2e));
+  pump.position.set(a.width / 2 + 100, 2, -40);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(4, 4, 10, 12).rotateZ(Math.PI / 2), white);
+  tank.position.set(a.width / 2 + 112, 4, -40);
+  g.add(pump, tank);
+  // manche à air
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 8), white);
+  pole.position.set(-a.width / 2 - 30, 4, -a.length / 2 + 150);
+  const sock = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4, 8).rotateZ(Math.PI / 2), lambert(0xff7a1a));
+  sock.position.set(-a.width / 2 - 28, 7.5, -a.length / 2 + 150);
+  g.add(pole, sock);
+  // balisage lumineux le long de la piste
+  if (!grass) {
+    const lampGeo = new THREE.BoxGeometry(0.8, 0.5, 0.8);
+    const n = Math.floor(a.length / 60);
+    const lamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xfff1a8 }), n * 2);
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) {
+      const v = -a.length / 2 + 30 + i * 60;
+      lamps.setMatrixAt(i * 2, m.makeTranslation(a.width / 2 + 3, 0.4, v));
+      lamps.setMatrixAt(i * 2 + 1, m.makeTranslation(-a.width / 2 - 3, 0.4, v));
+    }
+    g.add(lamps);
+  }
+  // petits avions garés
+  const nParked = a.type === 'strip' ? 1 : 3;
+  for (let i = 0; i < nParked; i++) {
+    const p = createPlaneMesh([0xf2d24b, 0x8fd0ff, 0xffffff, 0xff9b8f][Math.floor(r() * 4)], 0x2a4bd8);
+    p.position.set(a.width / 2 + 40, 1.55, -apronLen / 2 + 130 + i * 20);
+    p.rotation.y = -Math.PI / 2;
+    g.add(p);
+  }
+  scene.add(g);
+  addLabel(scene, `🛬 ${a.name}`, a.x, a.elev + 160, a.z, 30000, { color: '#9fe3ff' });
+}
+
+// ---------- Villes ----------
+function buildCities(scene) {
+  const total = CITIES.reduce((s, c) => s + c.n, 0);
+  const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const mesh = new THREE.InstancedMesh(geo, lambert(0xffffff), total);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  const palette = [0xd9d2c5, 0xc7b8a3, 0xe8e2d5, 0xa9b4c0, 0xd6a77a, 0xf0ede6, 0x8fa3b8, 0xb9c4cc];
+  const col = new THREE.Color();
+  const r = rng(7);
+  let n = 0;
+  for (const c of CITIES) {
+    const grid = 60;
+    const angle = r() * Math.PI;
+    for (let i = 0; i < c.n * 3 && n < total; i++) {
+      // rues en damier
+      const gx = Math.round(((r() - 0.5) * 2 * c.radius) / grid) * grid, gz = Math.round(((r() - 0.5) * 2 * c.radius) / grid) * grid;
+      const x = c.x + gx * Math.cos(angle) - gz * Math.sin(angle);
+      const z = c.z + gx * Math.sin(angle) + gz * Math.cos(angle);
+      const d = Math.hypot(gx, gz) / c.radius;
+      if (d > 1 || r() > 1.1 - d) continue;
+      const h = terrainHeight(x, z);
+      if (h < 3) continue;
+      const tall = 8 + r() * c.tall * Math.pow(Math.max(0.05, 1 - d), 2) * (r() < 0.08 ? 2.2 : 1);
+      m.compose(p.set(x, groundHeight(x, z) - 3, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle), s.set(20 + r() * 25, tall + 3, 20 + r() * 25));
+      mesh.setMatrixAt(n, m);
+      mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
+      n++;
+    }
+    addLabel(scene, c.name, c.x, terrainHeight(c.x, c.z) + 300, c.z, 18000, { color: '#ffffff', size: 0.03 });
+  }
+  mesh.count = n;
+  mesh.computeBoundingSphere();
+  scene.add(mesh);
+}
+
+// ---------- Points d'intérêt ----------
+function buildLandmark(scene, l, anim) {
+  const g = new THREE.Group();
+  const base = Math.max(0, l.type === 'volcano' ? l.y : groundHeight(l.x, l.z));
+  g.position.set(l.x, base, l.z);
+  const white = lambert(0xf4f4f4), red = lambert(0xc8352b), rock = lambert(0x8b7e6f, { flatShading: true });
+  const stone = lambert(0xb9b2a5, { flatShading: true }), sand = lambert(0xd9be82, { flatShading: true });
+  const add = (geo, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); return m; };
+  let labelY = 150;
+
+  switch (l.type) {
+    case 'lighthouse': {
+      add(new THREE.CylinderGeometry(30, 45, 16, 8), rock, 0, 2);
+      for (let i = 0; i < 5; i++) add(new THREE.CylinderGeometry(8 - i * 0.6, 8.6 - i * 0.6, 12, 12), i % 2 ? red : white, 0, 16 + i * 12);
+      add(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffee88 }), 0, 77);
+      const beam = add(new THREE.ConeGeometry(14, 160, 12, 1, true).rotateZ(Math.PI / 2).translate(80, 0, 0), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.18, depthWrite: false }), 0, 77);
+      anim.push((dt) => { beam.rotation.y += dt * 0.8; });
+      break;
+    }
+    case 'tower':
+      add(new THREE.CylinderGeometry(1.5, 7, 260, 4), red, 0, 130);
+      for (let i = 1; i < 6; i++) add(new THREE.BoxGeometry(11 - i, 2.5, 11 - i), white, 0, i * 45);
+      add(new THREE.SphereGeometry(2.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2020 }), 0, 262);
+      labelY = 300;
+      break;
+    case 'arch':
+      g.position.y = 0;
+      add(new THREE.TorusGeometry(120, 30, 8, 20, Math.PI), rock, 0, -10);
+      add(new THREE.DodecahedronGeometry(45, 0), rock, 120, 0, 0);
+      add(new THREE.DodecahedronGeometry(45, 0), rock, -120, 0, 0);
+      break;
+    case 'wreck': {
+      g.position.y = 0;
+      const hull = add(new THREE.BoxGeometry(18, 10, 80), lambert(0x5b3a26), 0, 1);
+      hull.rotation.set(0.15, 0.6, 0.35);
+      const mast = add(new THREE.CylinderGeometry(0.8, 0.8, 30), lambert(0x3a2a1c), 4, 14, 0);
+      mast.rotation.z = 0.5;
+      break;
+    }
+    case 'rig': {
+      g.position.y = 0;
+      const steel = lambert(0x7f8a94), yellow = lambert(0xf2c230);
+      for (const [x, z] of [[-25, -25], [25, -25], [-25, 25], [25, 25]]) add(new THREE.CylinderGeometry(3, 4, 60, 8), steel, x, 10, z);
+      add(new THREE.BoxGeometry(80, 8, 80), yellow, 0, 42);
+      add(new THREE.BoxGeometry(30, 20, 30), white, -15, 56, -15);
+      add(new THREE.CylinderGeometry(1.5, 4, 70, 6), steel, 25, 80, 25);
+      add(new THREE.CylinderGeometry(20, 20, 1, 16), lambert(0x33363b), 20, 47, -20); // héliport
+      const flame = add(new THREE.ConeGeometry(3, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff8a2a }), 25, 120, 25);
+      anim.push((dt, t) => { flame.scale.y = 0.8 + Math.sin(t * 13) * 0.25; });
+      labelY = 180;
+      break;
+    }
+    case 'castle':
+      add(new THREE.BoxGeometry(70, 22, 70), stone, 0, 11);
+      for (const [x, z] of [[-35, -35], [35, -35], [-35, 35], [35, 35]]) {
+        add(new THREE.CylinderGeometry(9, 10, 40, 8), stone, x, 20, z);
+        add(new THREE.ConeGeometry(11, 16, 8), lambert(0x3d4f7a), x, 48, z);
+      }
+      add(new THREE.BoxGeometry(24, 50, 24), stone, 0, 25);
+      add(new THREE.ConeGeometry(18, 24, 4).rotateY(Math.PI / 4), lambert(0x3d4f7a), 0, 62);
+      break;
+    case 'pyramids':
+      add(new THREE.ConeGeometry(110, 140, 4).rotateY(Math.PI / 4), sand, 0, 65);
+      add(new THREE.ConeGeometry(75, 95, 4).rotateY(Math.PI / 4), sand, 220, 42, 120);
+      add(new THREE.ConeGeometry(50, 62, 4).rotateY(Math.PI / 4), sand, -180, 26, 160);
+      labelY = 220;
+      break;
+    case 'observatory':
+      add(new THREE.CylinderGeometry(22, 24, 18, 16), white, 0, 9);
+      add(new THREE.SphereGeometry(22, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), lambert(0xd5dbe2), 0, 18);
+      add(new THREE.BoxGeometry(5, 4, 30), lambert(0x222831), 0, 34, -6).rotation.x = 0.6;
+      break;
+    case 'stadium': {
+      const ring = add(new THREE.TorusGeometry(110, 22, 6, 32), lambert(0xd8dde3), 0, 14);
+      ring.rotation.x = Math.PI / 2;
+      ring.scale.set(1.3, 1, 1);
+      add(new THREE.PlaneGeometry(180, 110).rotateX(-Math.PI / 2), lambert(0x3e9a3a), 0, 1);
+      labelY = 120;
+      break;
+    }
+    case 'statue':
+      add(new THREE.BoxGeometry(40, 30, 40), stone, 0, 15);
+      add(new THREE.CylinderGeometry(9, 13, 60, 8), lambert(0x6fa59a, { flatShading: true }), 0, 60);
+      add(new THREE.SphereGeometry(9, 8, 6), lambert(0x6fa59a, { flatShading: true }), 0, 100);
+      add(new THREE.BoxGeometry(5, 40, 5), lambert(0x6fa59a), 14, 95).rotation.z = -0.3;
+      add(new THREE.ConeGeometry(6, 12, 6), new THREE.MeshBasicMaterial({ color: 0xffc94a }), 20, 120);
+      labelY = 180;
+      break;
+    case 'summit':
+      add(new THREE.CylinderGeometry(0.5, 0.5, 18), white, 0, 9);
+      add(new THREE.BoxGeometry(10, 6, 0.3), red, 5, 15, 0);
+      add(new THREE.ConeGeometry(4, 6, 4), stone, 0, 1);
+      break;
+    case 'volcano': {
+      g.position.y = VOLCANO.h - 330;
+      add(new THREE.CircleGeometry(260, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff5a1a }), 0, 0);
+      const smokeMat = new THREE.SpriteMaterial({ color: 0x777777, transparent: true, opacity: 0.45, depthWrite: false });
+      const puffs = [];
+      for (let i = 0; i < 40; i++) {
+        const sp = new THREE.Sprite(smokeMat);
+        sp.userData.t = i / 40;
+        g.add(sp);
+        puffs.push(sp);
+      }
+      anim.push((dt) => {
+        for (const sp of puffs) {
+          sp.userData.t = (sp.userData.t + dt * 0.02) % 1;
+          const t = sp.userData.t;
+          sp.position.set(Math.sin(t * 9 + sp.id) * 60 + t * 600, 100 + t * 1600, Math.cos(t * 7 + sp.id) * 60);
+          sp.scale.setScalar(150 + t * 700);
+        }
+      });
+      labelY = 1900;
+      break;
+    }
+  }
+  scene.add(g);
+  addLabel(scene, l.name, l.x, g.position.y + labelY, l.z, 15000, { color: '#ffe9b0', size: 0.03 });
+}
+
+// ---------- Trafic ----------
+function buildShips(scene, anim) {
+  for (const s of SHIPS) {
+    const g = new THREE.Group();
+    if (s.kind === 'cargo') {
+      const parts = [
+        [new THREE.BoxGeometry(22, 10, 130).translate(0, 2, 0), 0x2f3b4a],
+        [new THREE.BoxGeometry(18, 12, 18).translate(0, 13, 48), 0xf0f0f0],
+        [new THREE.CylinderGeometry(2, 2, 10).translate(0, 22, 52), 0xd83a2e],
+      ];
+      const cc = [0xd83a2e, 0x2a6fd8, 0xf2c230, 0x3a9a4a, 0xe07a2a];
+      for (let i = 0; i < 12; i++) parts.push([new THREE.BoxGeometry(8, 6, 14).translate(i % 2 ? 4.5 : -4.5, 10, -45 + Math.floor(i / 2) * 15), cc[i % cc.length]]);
+      g.add(new THREE.Mesh(mergeColored(parts), lambert(0xffffff, { vertexColors: true })));
+    } else {
+      const parts = [
+        [new THREE.BoxGeometry(4, 2.4, 14).translate(0, 0.6, 0), 0xffffff],
+        [new THREE.CylinderGeometry(0.2, 0.2, 16).translate(0, 9, -1), 0x8a6b45],
+        [new THREE.ConeGeometry(4, 13, 3).scale(0.1, 1, 1).translate(0, 9, 2.2), 0xfafafa],
+      ];
+      g.add(new THREE.Mesh(mergeColored(parts), lambert(0xffffff, { vertexColors: true })));
+    }
+    scene.add(g);
+    anim.push((dt, t) => {
+      const a = s.phase + (s.dir * s.speed * t) / s.radius;
+      g.position.set(s.x + Math.cos(a) * s.radius, 0, s.z + Math.sin(a) * s.radius);
+      g.rotation.y = s.dir > 0 ? Math.PI - a : -a;
+    });
+  }
+}
+
+function buildBalloons(scene, anim) {
+  const colors = [0xe84a3a, 0xf2c230, 0x3a8ae8, 0x9a4ae8, 0x3ac87a, 0xff8a2a];
+  for (const b of BALLOONS) {
+    const g = new THREE.Group();
+    const env = new THREE.Mesh(new THREE.SphereGeometry(10, 12, 10).scale(1, 1.2, 1), lambert(colors[b.color], { flatShading: true }));
+    env.position.y = 16;
+    const stripes = new THREE.Mesh(new THREE.SphereGeometry(10.1, 12, 2, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.1).scale(1, 1.2, 1), lambert(0xffffff));
+    stripes.position.y = 16;
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(3, 2.4, 3), lambert(0x8a6b45));
+    g.add(env, stripes, basket);
+    scene.add(g);
+    anim.push((dt, t) => {
+      const a = b.phase + t * b.speed;
+      g.position.set(b.x + Math.cos(a) * b.radius, b.alt + Math.sin(t * 0.2 + b.phase) * 25, b.z + Math.sin(a) * b.radius);
+    });
+  }
+}
+
+function buildWindFarms(scene, anim) {
+  const towerGeo = new THREE.CylinderGeometry(1.2, 2.2, 80, 8).translate(0, 40, 0);
+  const white = lambert(0xf2f4f6);
+  const bladeGeo = new THREE.BoxGeometry(1.4, 36, 0.4).translate(0, 18, 0);
+  for (const f of WIND_FARMS) {
+    for (let i = 0; i < f.n; i++) {
+      const x = f.x + Math.cos(f.heading) * (i - f.n / 2) * 220, z = f.z + Math.sin(f.heading) * (i - f.n / 2) * 220;
+      const h = terrainHeight(x, z);
+      if (h < 5 || nearInfrastructure(x, z)) continue;
+      const g = new THREE.Group();
+      g.position.set(x, groundHeight(x, z) - 1, z);
+      g.add(new THREE.Mesh(towerGeo, white));
+      const nac = new THREE.Mesh(new THREE.BoxGeometry(3.5, 3.5, 8), white);
+      nac.position.set(0, 81, 0);
+      const rotor = new THREE.Group();
+      rotor.position.set(0, 81, -4.5);
+      for (let k = 0; k < 3; k++) {
+        const bl = new THREE.Mesh(bladeGeo, white);
+        bl.rotation.z = (k * Math.PI * 2) / 3;
+        rotor.add(bl);
+      }
+      g.add(nac, rotor);
+      g.rotation.y = 0.6;
+      scene.add(g);
+      const sp = 0.8 + (i % 3) * 0.1;
+      anim.push((dt) => { rotor.rotation.z += dt * sp; });
+    }
+  }
+}
+
+function nearInfrastructure(x, z) {
+  return AIRPORTS.some((a) => Math.hypot(x - a.x, z - a.z) < a.length / 2 + a.pad + 500)
+    || CITIES.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius + 200);
+}
+
+// ---------- Nuages ----------
+function buildClouds(scene) {
+  const r = rng(99);
+  const CLUSTERS = 700, PUFFS = 5;
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1),
+    lambert(0xffffff, { emissive: 0x9aa4ad, flatShading: true, transparent: true, opacity: 0.9 }), CLUSTERS * PUFFS);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  let n = 0;
+  for (let c = 0; c < CLUSTERS; c++) {
+    const cx = (r() - 0.5) * WORLD.size * 1.2, cz = (r() - 0.5) * WORLD.size * 1.2, cy = 1800 + r() * 1400;
+    for (let j = 0; j < PUFFS; j++) {
+      const k = 120 + r() * 180;
+      m.compose(p.set(cx + (r() - 0.5) * 450, cy + (r() - 0.5) * 70, cz + (r() - 0.5) * 350), q, s.set(k * 1.6, k * 0.55, k));
+      mesh.setMatrixAt(n++, m);
+    }
+  }
+  mesh.computeBoundingSphere();
+  scene.add(mesh);
+  return mesh;
+}
+
+// ---------- Construction globale ----------
+export function buildWorldObjects(scene) {
+  const anim = [];
+  const r = rng(4242);
+  for (const a of AIRPORTS) buildAirport(scene, a, r);
+  buildCities(scene);
+  for (const l of LANDMARKS) buildLandmark(scene, l, anim);
+  buildShips(scene, anim);
+  buildBalloons(scene, anim);
+  buildWindFarms(scene, anim);
+  const clouds = buildClouds(scene);
+  return {
+    clouds,
+    update(dt, t) { for (const f of anim) f(dt, t); },
+  };
+}
+

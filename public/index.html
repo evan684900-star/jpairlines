@@ -16,37 +16,44 @@
   <div id="menu" class="overlay">
     <div class="panel">
       <h1>✈ JP Airlines</h1>
-      <p class="sub">Une seule île, tous les pilotes ensemble.</p>
+      <p class="sub">Un monde de 80 × 80 km, tous les pilotes ensemble.</p>
       <label>Nom de pilote <input id="pilot-name" maxlength="16" placeholder="Pilote" /></label>
-      <button id="start">Décoller</button>
-      <div class="help">
-        <b>Commandes</b>
-        <div><kbd>Z</kbd>/<kbd>W</kbd> plus de gaz · <kbd>S</kbd> moins de gaz</div>
-        <div><kbd>↓</kbd> cabrer (monter) · <kbd>↑</kbd> piquer (descendre)</div>
-        <div><kbd>←</kbd> <kbd>→</kbd> s'incliner · <kbd>Q</kbd>/<kbd>A</kbd> <kbd>D</kbd> palonnier / roulage</div>
-        <div><kbd>Espace</kbd> freins · <kbd>C</kbd> caméra · <kbd>M</kbd> carte · <kbd>J</kbd> quêtes</div>
-        <div><kbd>F</kbd> accepter une quête · <kbd>R</kbd> réapparaître · <kbd>I</kbd> inverser la profondeur</div>
-        <p>Décollage : plein gaz, attends ~90 km/h puis tire légèrement (<kbd>↓</kbd>).</p>
-      </div>
-      <p id="load-status" class="sub">Génération de la carte…</p>
+      <button id="start" disabled>Décoller</button>
+      <button id="open-help" class="secondary">Commandes</button>
+      <p id="load-status" class="sub">Génération du monde…</p>
     </div>
   </div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
-    <div id="instruments">
-      <div><span class="lbl">VITESSE</span><span id="spd">0</span> km/h</div>
-      <div><span class="lbl">ALTITUDE</span><span id="alt">0</span> m</div>
-      <div><span class="lbl">SOL</span><span id="agl">0</span> m</div>
-      <div><span class="lbl">VARIO</span><span id="vs">0</span> m/s</div>
-      <div><span class="lbl">CAP</span><span id="hdg">000</span>°</div>
-      <div class="throttle"><span class="lbl">GAZ</span><div class="bar"><div id="thr"></div></div></div>
-      <div id="stall" class="warn hidden">DÉCROCHAGE</div>
-    </div>
     <div id="topbar">
       <span id="money">0 ₣</span>
       <span id="online">Solo</span>
+      <span id="place"></span>
     </div>
+
+    <div id="instruments">
+      <div><span class="lbl">VITESSE</span><b id="spd">0</b> <small id="u-spd">km/h</small></div>
+      <div><span class="lbl">ALTITUDE</span><b id="alt">0</b> <small id="u-alt">m</small></div>
+      <div><span class="lbl">SOL</span><b id="agl">0</b> <small class="u-alt2">m</small></div>
+      <div><span class="lbl">VARIO</span><b id="vs">0</b> <small id="u-vs">m/s</small></div>
+      <div><span class="lbl">CAP</span><b id="hdg">000</b>°</div>
+      <div class="bar-row"><span class="lbl">GAZ</span><div class="bar"><div id="thr"></div></div></div>
+      <div class="bar-row"><span class="lbl">RÉGIME</span><div class="bar"><div id="rpm" class="rpm"></div></div></div>
+      <div class="bar-row"><span class="lbl">CARBURANT</span><div class="bar"><div id="fuel" class="fuel"></div></div></div>
+      <div class="bar-row"><span class="lbl">TRIM</span><div class="bar trim"><div id="trim"></div></div></div>
+    </div>
+
+    <div id="systems">
+      <div class="sys" id="sys-engine"><i></i>MOTEUR</div>
+      <div class="sys" id="sys-gear"><span class="gear"><i></i><i></i><i></i></span>TRAIN</div>
+      <div class="sys" id="sys-flaps"><b id="flaps-val">0°</b>VOLETS</div>
+      <div class="sys" id="sys-brake"><i></i>FREINS</div>
+      <div class="sys" id="sys-park"><i></i>PARKING</div>
+      <div class="sys" id="sys-lights"><i></i>FEUX</div>
+    </div>
+
+    <div id="warnings"></div>
     <div id="quest-box" class="hidden">
       <div id="quest-title"></div>
       <div id="quest-step"></div>
@@ -55,19 +62,74 @@
     <div id="arrow" class="hidden">▲</div>
     <div id="prompt" class="hidden"></div>
     <div id="toast"></div>
+    <div id="log"></div>
     <canvas id="minimap" width="200" height="200"></canvas>
   </div>
 
-  <div id="bigmap" class="overlay hidden"><canvas id="bigmap-canvas" width="700" height="700"></canvas></div>
+  <div id="bigmap" class="overlay hidden">
+    <div class="map-wrap">
+      <canvas id="bigmap-canvas" width="900" height="900"></canvas>
+      <div class="map-help">Molette : zoom · Glisser : déplacer · <kbd>M</kbd> fermer</div>
+    </div>
+  </div>
 
   <div id="journal" class="overlay hidden">
     <div class="panel wide">
       <h2>Journal de quêtes</h2>
-      <p class="sub">Va aux balises jaunes <b>!</b> sur la carte et appuie sur <kbd>F</kbd> pour accepter une quête.</p>
+      <p class="sub">Va aux balises jaunes <b>!</b> et appuie sur <kbd>Entrée</kbd> pour accepter une quête.</p>
       <ul id="quest-list"></ul>
       <button id="abandon">Abandonner la quête en cours</button>
     </div>
   </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="panel wide">
+      <h2>Pause</h2>
+      <div class="tabs">
+        <button data-tab="tab-settings" class="tab active">Paramètres</button>
+        <button data-tab="tab-travel" class="tab">Aéroports</button>
+        <button data-tab="tab-help" class="tab">Commandes</button>
+      </div>
+      <div id="tab-settings" class="tab-body"><div id="settings-form"></div>
+        <p><button id="reset-progress" class="danger">Effacer ma progression</button></p>
+      </div>
+      <div id="tab-travel" class="tab-body hidden">
+        <p class="sub">Réapparais dans un aéroport où tu t'es déjà posé.</p>
+        <ul id="airport-list"></ul>
+      </div>
+      <div id="tab-help" class="tab-body hidden"></div>
+      <button id="resume">Reprendre</button>
+    </div>
+  </div>
+
+  <div id="help" class="overlay hidden"><div class="panel wide"><h2>Commandes</h2><div class="help-content"></div><button class="close-help">Fermer</button></div></div>
+
+  <template id="help-template">
+    <table class="keys">
+      <tr><th colspan="2">Pilotage</th></tr>
+      <tr><td><kbd>Z</kbd>/<kbd>W</kbd> · <kbd>S</kbd></td><td>Plus / moins de gaz</td></tr>
+      <tr><td><kbd>↓</kbd> · <kbd>↑</kbd></td><td>Cabrer (monter) · piquer (descendre)</td></tr>
+      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>S'incliner (ailerons)</td></tr>
+      <tr><td><kbd>Q</kbd>/<kbd>A</kbd> · <kbd>D</kbd></td><td>Palonnier / direction au sol</td></tr>
+      <tr><td><kbd>T</kbd> · <kbd>B</kbd></td><td>Trim nez haut · nez bas</td></tr>
+      <tr><th colspan="2">Systèmes</th></tr>
+      <tr><td><kbd>E</kbd></td><td>Démarrer / couper le moteur</td></tr>
+      <tr><td><kbd>F</kbd> · <kbd>V</kbd></td><td>Sortir / rentrer les volets (0°, 10°, 20°, 30°)</td></tr>
+      <tr><td><kbd>G</kbd></td><td>Sortir / rentrer le train d'atterrissage</td></tr>
+      <tr><td><kbd>Espace</kbd></td><td>Freins (maintenir)</td></tr>
+      <tr><td><kbd>P</kbd></td><td>Frein de parking</td></tr>
+      <tr><td><kbd>L</kbd></td><td>Feux de navigation</td></tr>
+      <tr><td><kbd>K</kbd></td><td>Faire le plein (arrêté dans un aéroport)</td></tr>
+      <tr><th colspan="2">Jeu</th></tr>
+      <tr><td><kbd>Entrée</kbd></td><td>Accepter une quête (près d'une balise « ! »)</td></tr>
+      <tr><td><kbd>J</kbd> · <kbd>M</kbd></td><td>Journal de quêtes · grande carte</td></tr>
+      <tr><td><kbd>C</kbd> · molette · clic-glisser</td><td>Caméra · zoom · tourner autour de l'avion</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Réapparaître au dernier aéroport</td></tr>
+      <tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr>
+    </table>
+    <p><b>Décollage :</b> <kbd>E</kbd> moteur, <kbd>P</kbd> desserrer le frein, volets 10° (<kbd>F</kbd>), plein gaz, à ~90 km/h tirer doucement (<kbd>↓</kbd>), puis rentrer le train (<kbd>G</kbd>) et les volets (<kbd>V</kbd>).</p>
+    <p><b>Atterrissage :</b> réduire les gaz, sortir le train sous 210 km/h et les volets sous 165 km/h, descendre doucement (moins de 7 m/s), ailes à plat, puis freiner jusqu'à l'arrêt.</p>
+  </template>
 
   <div id="crash" class="overlay hidden">
     <div class="panel">

@@ -1,5 +1,7 @@
 // Serveur JP Airlines : sert le jeu et relaie les positions des joueurs.
 // Léger : un seul processus, aucune base de données, ~quelques Ko/s par joueur.
+// Peut aussi tourner seul (jeu hébergé sur Vercel) : il suffit d'indiquer
+// son adresse dans public/js/config.js.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +20,7 @@ const THREE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   let file = url.pathname === '/vendor/three.module.js' ? THREE_FILE : path.normalize(path.join(ROOT, decodeURIComponent(url.pathname)));
   if (file === THREE_FILE) return sendFile(file, res);
   if (file !== ROOT && !file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
@@ -37,12 +40,13 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
 const players = new Map();
 let nextId = 1;
 
+const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : 0);
 const isVec = (a, n) => Array.isArray(a) && a.length === n && a.every((v) => typeof v === 'number' && Number.isFinite(v));
 
 wss.on('connection', (ws) => {
   if (players.size >= MAX_PLAYERS) return ws.close(1013, 'Serveur plein');
   const id = nextId++;
-  const player = { id, name: 'Pilote', p: null, q: null, s: 0 };
+  const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0 };
   players.set(id, player);
   ws.send(JSON.stringify({ t: 'welcome', id }));
 
@@ -54,7 +58,8 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'state' && isVec(msg.p, 3) && isVec(msg.q, 4)) {
       player.p = msg.p;
       player.q = msg.q;
-      player.s = typeof msg.s === 'number' && Number.isFinite(msg.s) ? msg.s : 0;
+      // état visible par les autres : vitesse, régime, train, volets, feux
+      for (const k of ['s', 'r', 'g', 'f', 'l']) player[k] = num(msg[k], 0, 1000);
     }
   });
   ws.on('close', () => players.delete(id));

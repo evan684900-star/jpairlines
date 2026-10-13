@@ -1,25 +1,27 @@
 import * as THREE from 'three';
 import {
-  WORLD, AIRPORTS, RUNWAY, LANDMARKS, QUESTS, heightGrid, heightAt, rng, fbm, smoothstep, runwayLocal,
+  WORLD, HALF, AIRPORTS, LANDMARKS, QUESTS, CITIES, terrainHeight, groundHeight, airportById,
 } from './world.js';
-import { Plane, createPlaneMesh, SPECS } from './plane.js';
+import { Plane, createPlaneMesh, animatePlaneMesh, SPECS, DIFFICULTY } from './plane.js';
+import { Terrain, terrainColor } from './terrain.js';
+import { Decor } from './decor.js';
+import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
+import { settings, buildSettingsForm } from './settings.js';
+import { MULTIPLAYER_URL } from './config.js';
 
 const $ = (id) => document.getElementById(id);
-const HALF = WORLD.size / 2;
-const N = WORLD.segments + 1;
-const STEP = WORLD.size / WORLD.segments;
+const status = (t) => { $('load-status').textContent = t; };
 
 // ================= Rendu =================
-const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
 
 const SKY = 0x9cc8ee;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(SKY);
-scene.fog = new THREE.Fog(SKY, 2500, 15000);
+scene.fog = new THREE.Fog(SKY, 3000, 20000);
 
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 40000);
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 60000);
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -31,258 +33,31 @@ const sun = new THREE.DirectionalLight(0xfff3dd, 1.6);
 sun.position.set(3000, 5000, 2000);
 scene.add(sun);
 
-// ================= Terrain =================
-function terrainColor(h, slope, x, z, out) {
-  const n = fbm(x / 400, z / 400, 2, 5);
-  if (h < 4) return out.setRGB(0.86, 0.8, 0.6); // sable
-  if (h > 1050 + n * 150) return out.setRGB(0.95, 0.97, 1); // neige
-  if (slope > 0.75 || h > 700 + n * 200) return out.setRGB(0.48 + n * 0.1, 0.45 + n * 0.08, 0.42); // roche
-  const g = 0.45 + n * 0.25;
-  return out.setRGB(0.25 * g + 0.08, 0.55 * g + 0.12, 0.18 * g);
-}
+const terrain = new Terrain(scene);
+const decor = new Decor(scene);
+let world = null;
 
-function buildTerrain() {
-  const pos = new Float32Array(N * N * 3);
-  const col = new Float32Array(N * N * 3);
-  const c = new THREE.Color();
-  for (let iz = 0; iz < N; iz++) {
-    for (let ix = 0; ix < N; ix++) {
-      const i = iz * N + ix;
-      const x = -HALF + ix * STEP, z = -HALF + iz * STEP, h = heightGrid[i];
-      pos[i * 3] = x; pos[i * 3 + 1] = h; pos[i * 3 + 2] = z;
-      const hx = heightGrid[iz * N + Math.min(N - 1, ix + 1)] - heightGrid[iz * N + Math.max(0, ix - 1)];
-      const hz = heightGrid[Math.min(N - 1, iz + 1) * N + ix] - heightGrid[Math.max(0, iz - 1) * N + ix];
-      const slope = Math.hypot(hx, hz) / (2 * STEP);
-      terrainColor(h, slope, x, z, c);
-      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    }
+function applySettings(key) {
+  if (!key || key === 'quality') renderer.setPixelRatio({ low: 0.75, medium: 1, high: Math.min(devicePixelRatio, 2) }[settings.quality] || 1);
+  if (!key || key === 'viewDist') {
+    const d = settings.viewDist * 1000;
+    terrain.setViewDistance(d);
+    scene.fog.near = d * 0.25;
+    scene.fog.far = d * 0.95;
+    camera.far = d * 1.6;
+    camera.updateProjectionMatrix();
   }
-  const idx = new Uint32Array((N - 1) * (N - 1) * 6);
-  let k = 0;
-  for (let iz = 0; iz < N - 1; iz++) {
-    for (let ix = 0; ix < N - 1; ix++) {
-      const a = iz * N + ix, b = a + 1, cc = a + N, d = cc + 1;
-      idx[k++] = a; idx[k++] = cc; idx[k++] = b;
-      idx[k++] = b; idx[k++] = cc; idx[k++] = d;
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
-  geo.computeVertexNormals();
-  scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
-
-  const water = new THREE.Mesh(
-    new THREE.PlaneGeometry(WORLD.size * 4, WORLD.size * 4).rotateX(-Math.PI / 2),
-    new THREE.MeshPhongMaterial({ color: 0x2a7fb8, shininess: 80, transparent: true, opacity: 0.88 }),
-  );
-  water.position.y = 0.5;
-  scene.add(water);
-}
-
-// ================= Labels =================
-function makeLabel(text, { color = '#fff', size = 0.035, bg = 'rgba(0,0,0,0.45)', depthTest = true } = {}) {
-  const cv = document.createElement('canvas');
-  const ctx = cv.getContext('2d');
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  const w = Math.ceil(ctx.measureText(text).width) + 30;
-  cv.width = w; cv.height = 60;
-  ctx.font = 'bold 40px system-ui, sans-serif';
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, w, 60);
-  ctx.fillStyle = color;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, 15, 32);
-  const tex = new THREE.CanvasTexture(cv);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, sizeAttenuation: false, depthTest, fog: false }));
-  sp.scale.set((size * w) / 60, size, 1);
-  sp.renderOrder = 10;
-  return sp;
-}
-
-// ================= Aéroports =================
-function runwayTexture() {
-  const cv = document.createElement('canvas');
-  cv.width = 64; cv.height = 1024;
-  const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#3b3f45';
-  ctx.fillRect(0, 0, 64, 1024);
-  ctx.fillStyle = '#e8e8e8';
-  for (let y = 60; y < 964; y += 50) ctx.fillRect(30, y, 4, 26); // axe
-  ctx.fillRect(2, 0, 3, 1024); ctx.fillRect(59, 0, 3, 1024);
-  for (let i = 0; i < 6; i++) { ctx.fillRect(8 + i * 8, 6, 4, 34); ctx.fillRect(8 + i * 8, 984, 4, 34); }
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
-
-function buildAirports() {
-  const rwMat = new THREE.MeshLambertMaterial({ map: runwayTexture(), polygonOffset: true, polygonOffsetFactor: -4 });
-  const hangarMat = new THREE.MeshLambertMaterial({ color: 0xb8c0c8 });
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0x8a3b32 });
-  const towerMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
-  for (const a of AIRPORTS) {
-    const g = new THREE.Group();
-    g.position.set(a.x, a.elev, a.z);
-    g.rotation.y = -a.heading;
-    const rw = new THREE.Mesh(new THREE.PlaneGeometry(RUNWAY.width, RUNWAY.length).rotateX(-Math.PI / 2), rwMat);
-    rw.position.y = 0.15;
-    g.add(rw);
-    for (let i = 0; i < 3; i++) {
-      const h = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 30), hangarMat);
-      h.position.set(90, 7, -200 + i * 50);
-      const r = new THREE.Mesh(new THREE.BoxGeometry(42, 2, 32), roofMat);
-      r.position.set(90, 15, -200 + i * 50);
-      g.add(h, r);
-    }
-    const tw = new THREE.Mesh(new THREE.CylinderGeometry(4, 5, 30, 8), towerMat);
-    tw.position.set(80, 15, 120);
-    const cab = new THREE.Mesh(new THREE.CylinderGeometry(7, 6, 6, 8), new THREE.MeshLambertMaterial({ color: 0x5aa0d0 }));
-    cab.position.set(80, 33, 120);
-    g.add(tw, cab);
-    const label = makeLabel('🛬 ' + a.name, { color: '#9fe3ff' });
-    label.position.set(0, 120, 0);
-    g.add(label);
-    scene.add(g);
-  }
-}
-
-// ================= Végétation, villes, nuages =================
-function nearRunway(x, z, margin) {
-  for (const a of AIRPORTS) {
-    const { u, v } = runwayLocal(a, x, z);
-    if (Math.abs(u) < 150 + margin && Math.abs(v) < RUNWAY.length / 2 + margin) return true;
-  }
-  return false;
-}
-
-function buildTrees() {
-  const r = rng(42);
-  const COUNT = 9000;
-  const geo = new THREE.ConeGeometry(6, 22, 6).translate(0, 11, 0);
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0x2f6b2a, flatShading: true }), COUNT);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  let n = 0;
-  for (let tries = 0; tries < COUNT * 12 && n < COUNT; tries++) {
-    const x = (r() - 0.5) * WORLD.size, z = (r() - 0.5) * WORLD.size;
-    const h = heightAt(x, z);
-    if (h < 15 || h > 650) continue;
-    if (fbm(x / 1500, z / 1500, 3, 77) < 0.52) continue; // forêts en bosquets
-    if (Math.abs(heightAt(x + 20, z) - h) > 12) continue;
-    if (nearRunway(x, z, 80)) continue;
-    const k = 0.7 + r() * 0.8;
-    m.compose(p.set(x, h - 1, z), q, s.set(k, k * (0.8 + r() * 0.5), k));
-    mesh.setMatrixAt(n++, m);
-  }
-  mesh.count = n;
-  scene.add(mesh);
-}
-
-function buildCities() {
-  const r = rng(7);
-  const centers = [
-    { x: -5300, z: 4100, n: 140, spread: 500 },
-    { x: 500, z: 900, n: 90, spread: 450 },
-    { x: 5900, z: 3500, n: 70, spread: 400 },
-  ];
-  const total = centers.reduce((s, c) => s + c.n, 0);
-  const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff }), total);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  const palette = [0xd9d2c5, 0xc7b8a3, 0xe8e2d5, 0xa9b4c0, 0xd6a77a, 0xf0ede6];
-  const col = new THREE.Color();
-  let n = 0;
-  for (const c of centers) {
-    for (let i = 0; i < c.n * 4 && n < total; i++) {
-      const x = c.x + (r() - 0.5) * c.spread * 2, z = c.z + (r() - 0.5) * c.spread * 2;
-      const h = heightAt(x, z);
-      if (h < 3 || nearRunway(x, z, 60)) continue;
-      const d = Math.hypot(x - c.x, z - c.z) / c.spread;
-      const tall = 8 + r() * 25 * Math.max(0.2, 1 - d) * (r() < 0.1 ? 3 : 1);
-      m.compose(p.set(x, h - 2, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), r() * 3), s.set(14 + r() * 16, tall, 14 + r() * 16));
-      mesh.setMatrixAt(n, m);
-      mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
-      n++;
-    }
-  }
-  mesh.count = n;
-  scene.add(mesh);
-}
-
-function buildClouds() {
-  const r = rng(99);
-  const COUNT = 260;
-  const geo = new THREE.IcosahedronGeometry(1, 1);
-  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x9aa4ad, flatShading: true, transparent: true, opacity: 0.9 }), COUNT);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-  let n = 0;
-  for (let c = 0; c < COUNT / 5; c++) {
-    const cx = (r() - 0.5) * WORLD.size * 1.2, cz = (r() - 0.5) * WORLD.size * 1.2, cy = 1500 + r() * 900;
-    for (let j = 0; j < 5; j++) {
-      const k = 120 + r() * 160;
-      m.compose(p.set(cx + (r() - 0.5) * 400, cy + (r() - 0.5) * 60, cz + (r() - 0.5) * 300), q, s.set(k * 1.6, k * 0.55, k));
-      mesh.setMatrixAt(n++, m);
-    }
-  }
-  scene.add(mesh);
-}
-
-// ================= Points d'intérêt =================
-function buildLandmarks() {
-  const white = new THREE.MeshLambertMaterial({ color: 0xf4f4f4 });
-  const red = new THREE.MeshLambertMaterial({ color: 0xc8352b });
-  const rock = new THREE.MeshLambertMaterial({ color: 0x8b7e6f, flatShading: true });
-  for (const l of LANDMARKS) {
-    const g = new THREE.Group();
-    const ground = Math.max(0, heightAt(l.x, l.z));
-    g.position.set(l.x, ground, l.z);
-    if (l.type === 'lighthouse') {
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(40, 60, 20, 8), rock);
-      base.position.y = 5;
-      g.add(base);
-      for (let i = 0; i < 5; i++) {
-        const seg = new THREE.Mesh(new THREE.CylinderGeometry(8 - i * 0.6, 8.6 - i * 0.6, 12, 12), i % 2 ? red : white);
-        seg.position.y = 21 + i * 12;
-        g.add(seg);
-      }
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffee88 }));
-      lamp.position.y = 82;
-      g.add(lamp);
-    } else if (l.type === 'tower') {
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 6, 220, 4), red);
-      t.position.y = 110;
-      g.add(t);
-      for (let i = 1; i < 5; i++) {
-        const b = new THREE.Mesh(new THREE.BoxGeometry(10 - i, 2, 10 - i), white);
-        b.position.y = i * 45;
-        g.add(b);
-      }
-    } else if (l.type === 'arch') {
-      const arch = new THREE.Mesh(new THREE.TorusGeometry(110, 28, 8, 20, Math.PI), rock);
-      arch.position.y = -10;
-      g.add(arch);
-    } else if (l.type === 'wreck') {
-      const hull = new THREE.Mesh(new THREE.BoxGeometry(18, 10, 70), new THREE.MeshLambertMaterial({ color: 0x5b3a26 }));
-      hull.rotation.set(0.15, 0.6, 0.35);
-      hull.position.y = 2;
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 30), new THREE.MeshLambertMaterial({ color: 0x3a2a1c }));
-      mast.rotation.z = 0.5;
-      mast.position.set(4, 14, 0);
-      g.add(hull, mast);
-    } else if (l.type === 'summit') {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 16), white);
-      pole.position.y = 8;
-      const flag = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 0.3), red);
-      flag.position.set(4, 13.5, 0);
-      g.add(pole, flag);
-    }
-    const label = makeLabel(l.name, { color: '#ffe9b0', size: 0.03 });
-    label.position.y = l.type === 'tower' ? 260 : 140;
-    g.add(label);
-    scene.add(g);
+  if (!key || key === 'trees' || key === 'decoDist') decor.setOptions({ density: settings.trees, radius: settings.decoDist });
+  if (!key || key === 'fov') { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
+  if (world && (!key || key === 'clouds')) world.clouds.visible = settings.clouds;
+  if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
+  if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
+  if (!key || key === 'units') {
+    const av = settings.units === 'aviation';
+    $('u-spd').textContent = av ? 'kt' : 'km/h';
+    $('u-alt').textContent = av ? 'ft' : 'm';
+    document.querySelector('.u-alt2').textContent = av ? 'ft' : 'm';
+    $('u-vs').textContent = av ? 'ft/min' : 'm/s';
   }
 }
 
@@ -293,8 +68,10 @@ scene.add(planeMesh);
 
 // ================= Sauvegarde =================
 const SAVE_KEY = 'jpairlines-save';
-let save = { name: '', money: 0, completed: [], lastAirport: 'alpha' };
+let save = { name: '', money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'] };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch { /* sauvegarde absente */ }
+if (!airportById(save.lastAirport)) save.lastAirport = 'alpha';
+if (!Array.isArray(save.visited)) save.visited = ['alpha'];
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* stockage indisponible */ } };
 
 // ================= Quêtes =================
@@ -303,22 +80,22 @@ const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc928, fog: false });
 const ringNextMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, fog: false });
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.35, depthWrite: false, fog: false });
 
-const quest = { active: null, step: 0, objects: [], marker: null };
+const quest = { active: null, step: 0, objects: [] };
 const givers = [];
 
 function stepPos(st) {
   if (st.type === 'land') {
-    const a = AIRPORTS.find((x) => x.id === st.airport);
+    const a = airportById(st.airport);
     return new THREE.Vector3(a.x, a.elev, a.z);
   }
-  if (st.type === 'ring') return new THREE.Vector3(st.x, Math.max(0, heightAt(st.x, st.z)) + st.agl, st.z);
-  if (st.type === 'reach') return new THREE.Vector3(st.x, Math.max(0, heightAt(st.x, st.z)), st.z);
+  if (st.type === 'ring') return new THREE.Vector3(st.x, st.alt ?? Math.max(0, terrainHeight(st.x, st.z)) + st.agl, st.z);
+  if (st.type === 'reach') return new THREE.Vector3(st.x, Math.max(0, terrainHeight(st.x, st.z)), st.z);
   return null;
 }
 
 function stepText(st) {
   if (st.type === 'ring') return 'Passe dans l\'anneau jaune';
-  if (st.type === 'land') return `Pose-toi et arrête-toi à ${AIRPORTS.find((a) => a.id === st.airport).name}`;
+  if (st.type === 'land') return `Pose-toi et arrête-toi à ${airportById(st.airport).name}`;
   if (st.type === 'reach') return `Rejoins : ${st.label}` + (st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : '');
   if (st.type === 'altitude') return `Monte au-dessus de ${st.min} m`;
   return '';
@@ -328,16 +105,16 @@ const questAvailable = (q) => !save.completed.includes(q.id) && (!q.requires || 
 
 function buildGivers() {
   for (const q of QUESTS) {
-    const y = Math.max(0, heightAt(q.giver.x, q.giver.z));
+    const y = Math.max(0, terrainHeight(q.giver.x, q.giver.z));
     const g = new THREE.Group();
     g.position.set(q.giver.x, y, q.giver.z);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(25, 25, 500, 16, 1, true), beamMat);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 500, 16, 1, true), beamMat);
     beam.position.y = 250;
-    const label = makeLabel('! ' + q.title, { color: '#ffd23f', size: 0.032, depthTest: false });
+    const label = makeLabel('! ' + q.title, { color: '#ffd23f', size: 0.03, depthTest: false });
     label.position.y = 520;
     g.add(beam, label);
     scene.add(g);
-    givers.push({ q, g });
+    givers.push({ q, g, label });
   }
   refreshGivers();
 }
@@ -365,13 +142,14 @@ function showStep() {
       const r = new THREE.Mesh(ringGeo, k === 0 ? ringMat : ringNextMat);
       r.scale.setScalar(s2.size || 30);
       r.position.copy(stepPos(s2));
-      r.lookAt(k === 0 ? prev : p);
+      r.lookAt(k === 0 ? (prev || p) : p);
       scene.add(r);
       quest.objects.push(r);
     }
   } else if (p) {
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(st.radius || 60, st.radius || 60, 3000, 24, 1, true), beamMat);
-    beam.position.set(p.x, p.y + 1500, p.z);
+    const rad = st.radius || 80;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 4000, 24, 1, true), beamMat);
+    beam.position.set(p.x, p.y + 2000, p.z);
     scene.add(beam);
     quest.objects.push(beam);
   }
@@ -417,18 +195,16 @@ function updateQuest() {
   if (!q) return;
   const st = q.steps[quest.step];
   const p = stepPos(st);
-  const agl = plane.pos.y - Math.max(0, heightAt(plane.pos.x, plane.pos.z));
+  const agl = plane.pos.y - Math.max(0, terrainHeight(plane.pos.x, plane.pos.z));
   let done = false;
   if (st.type === 'ring') done = plane.pos.distanceTo(p) < (st.size || 30) + 4;
   else if (st.type === 'land') done = plane.landedAt?.id === st.airport;
   else if (st.type === 'reach') done = Math.hypot(plane.pos.x - p.x, plane.pos.z - p.z) < st.radius && (!st.maxAgl || agl < st.maxAgl);
   else if (st.type === 'altitude') done = plane.pos.y >= st.min;
 
-  // flèche de direction + distance
   if (p) {
     const dx = p.x - plane.pos.x, dz = p.z - plane.pos.z;
-    const bearing = THREE.MathUtils.radToDeg(Math.atan2(dx, -dz));
-    const rel = bearing - plane.headingDeg;
+    const rel = THREE.MathUtils.radToDeg(Math.atan2(dx, -dz)) - plane.headingDeg;
     $('arrow').classList.remove('hidden');
     $('arrow').style.transform = `rotate(${rel}deg)`;
     const d = Math.hypot(dx, dz);
@@ -443,17 +219,27 @@ function updateQuest() {
 let nearGiver = null;
 function updateGivers() {
   nearGiver = null;
-  for (const { q, g } of givers) {
+  for (const { q, g, label } of givers) {
     if (!g.visible) continue;
     const d = Math.hypot(plane.pos.x - g.position.x, plane.pos.z - g.position.z);
+    label.visible = d < 12000;
     if (d < 300 && plane.pos.y - g.position.y < 600) nearGiver = q;
   }
   const pr = $('prompt');
-  if (nearGiver && !plane.crashed) {
-    pr.innerHTML = `<b>${nearGiver.title}</b> — ${nearGiver.desc}<br>Récompense : ${nearGiver.reward} ₣ · <kbd>F</kbd> pour accepter`
+  let html = '';
+  if (plane.crashed) html = '';
+  else if (nearGiver) {
+    html = `<b>${nearGiver.title}</b> — ${nearGiver.desc}<br>Récompense : ${nearGiver.reward} ₣ · <kbd>Entrée</kbd> pour accepter`
       + (quest.active ? '<br><small>(remplace la quête en cours)</small>' : '');
-    pr.classList.remove('hidden');
-  } else pr.classList.add('hidden');
+  } else if (canRefuel() && plane.fuel < SPECS.fuelCapacity - 0.5) {
+    html = `⛽ Maintiens <kbd>K</kbd> pour faire le plein (${Math.round(plane.fuel)} / ${SPECS.fuelCapacity} L)`;
+  } else if (plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
+    html = 'Appuie sur <kbd>E</kbd> pour démarrer le moteur · <kbd>H</kbd> commandes';
+  } else if (plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
+    html = 'Le frein de parking est serré : appuie sur <kbd>P</kbd>';
+  }
+  pr.innerHTML = html;
+  pr.classList.toggle('hidden', !html);
 }
 
 function renderJournal() {
@@ -463,10 +249,19 @@ function renderJournal() {
     const li = document.createElement('li');
     const done = save.completed.includes(q.id);
     li.className = done ? 'done' : quest.active === q ? 'active' : '';
-    const status = done ? '✅ ' : quest.active === q ? '▶ ' : questAvailable(q) ? '❗ ' : '🔒 ';
-    li.innerHTML = `<span class="r">${q.reward} ₣</span><b>${status}${q.title}</b><br><small>${q.desc}</small>`;
+    const icon = done ? '✅ ' : quest.active === q ? '▶ ' : questAvailable(q) ? '❗ ' : '🔒 ';
+    li.innerHTML = `<span class="r">${q.reward} ₣</span><b>${icon}${q.title}</b> <small>· ${nearestPlaceName(q.giver.x, q.giver.z)}</small><br><small>${q.desc}</small>`;
     ul.appendChild(li);
   }
+}
+
+function nearestPlaceName(x, z) {
+  let best = null, bd = Infinity;
+  for (const p of [...AIRPORTS, ...LANDMARKS, ...CITIES]) {
+    const d = Math.hypot(p.x - x, p.z - z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return bd < 4000 ? best.name : `${Math.round(x / 1000)} km, ${Math.round(z / 1000)} km`;
 }
 
 // ================= Messages / son =================
@@ -477,6 +272,14 @@ function toast(msg) {
   t.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+function logMsg(msg) {
+  const box = $('log');
+  const d = document.createElement('div');
+  d.textContent = msg;
+  box.appendChild(d);
+  while (box.children.length > 5) box.firstChild.remove();
+  setTimeout(() => { d.style.opacity = 0; setTimeout(() => d.remove(), 1000); }, 4000);
 }
 
 let audio = null;
@@ -490,81 +293,197 @@ function initAudio() {
     filter.frequency.value = 400;
     const gain = ctx.createGain();
     gain.gain.value = 0;
+    // bruit du vent
+    const noise = ctx.createBufferSource();
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noise.buffer = buf;
+    noise.loop = true;
+    const wf = ctx.createBiquadFilter();
+    wf.type = 'bandpass';
+    wf.frequency.value = 600;
+    const wg = ctx.createGain();
+    wg.gain.value = 0;
     osc.connect(filter).connect(gain).connect(ctx.destination);
+    noise.connect(wf).connect(wg).connect(ctx.destination);
     osc.start();
-    audio = { ctx, osc, gain };
+    noise.start();
+    audio = { ctx, osc, gain, wg };
   } catch { audio = null; }
 }
-function beep(freq, dur) {
+function beep(freq, dur, vol = 0.15) {
   if (!audio) return;
   const o = audio.ctx.createOscillator();
   const g = audio.ctx.createGain();
   o.frequency.value = freq;
-  g.gain.setValueAtTime(0.15, audio.ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, audio.ctx.currentTime + dur);
+  g.gain.setValueAtTime(Math.max(0.0001, vol * settings.volume * 2), audio.ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, audio.ctx.currentTime + dur);
   o.connect(g).connect(audio.ctx.destination);
   o.start();
   o.stop(audio.ctx.currentTime + dur);
 }
 
-// ================= Entrées clavier =================
+// ================= Entrées =================
 const keys = new Set();
-let invertPitch = false;
 let camMode = 0;
+let camDist = 19;
+const orbit = { yaw: 0, pitch: 0, dragging: false };
+let paused = false;
+let started = false;
+
+const OVERLAYS = ['journal', 'pause', 'help', 'bigmap'];
+const overlayOpen = () => OVERLAYS.some((id) => !$(id).classList.contains('hidden'));
+function closeOverlays() {
+  for (const id of OVERLAYS) $(id).classList.add('hidden');
+  paused = false;
+}
+
 addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
-  if (e.target.tagName === 'INPUT') return;
-  if (k.startsWith('arrow') || k === ' ') e.preventDefault();
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (k.startsWith('arrow') || k === ' ' || k === 'enter') e.preventDefault();
   keys.add(k);
   if (e.repeat || !started) return;
-  if (k === 'c') camMode = (camMode + 1) % 2;
-  if (k === 'm') { $('bigmap').classList.toggle('hidden'); drawMap($('bigmap-canvas'), 0, 0, WORLD.size, true); }
+  if (k === 'escape') {
+    if (overlayOpen()) closeOverlays();
+    else openPause();
+    return;
+  }
+  if (k === 'm') {
+    const nowHidden = $('bigmap').classList.toggle('hidden');
+    if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); }
+  }
   if (k === 'j') { renderJournal(); $('journal').classList.toggle('hidden'); }
-  if (k === 'i') { invertPitch = !invertPitch; toast(invertPitch ? 'Profondeur inversée' : 'Profondeur normale'); }
+  if (k === 'h') $('help').classList.toggle('hidden');
+  if (paused) return;
+  if (k === 'c') camMode = (camMode + 1) % 2;
   if (k === 'r') respawn();
-  if (k === 'f' && nearGiver) startQuest(nearGiver);
+  if (k === 'enter' && nearGiver) startQuest(nearGiver);
+  if (plane.crashed) return;
+  if (k === 'e') plane.toggleEngine();
+  if (k === 'f') plane.setFlaps(1);
+  if (k === 'v') plane.setFlaps(-1);
+  if (k === 'g') plane.toggleGear();
+  if (k === 'p') plane.toggleParking();
+  if (k === 'l') plane.toggleLights();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
 
+const canvas = $('game');
+canvas.addEventListener('pointerdown', (e) => { orbit.dragging = true; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', () => { orbit.dragging = false; });
+canvas.addEventListener('pointermove', (e) => {
+  if (!orbit.dragging) return;
+  orbit.yaw -= e.movementX * 0.006;
+  orbit.pitch = THREE.MathUtils.clamp(orbit.pitch - e.movementY * 0.004, -0.6, 1.2);
+});
+canvas.addEventListener('wheel', (e) => { camDist = THREE.MathUtils.clamp(camDist * (e.deltaY > 0 ? 1.12 : 0.89), 9, 120); }, { passive: true });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
 function readInput() {
   const has = (...ks) => ks.some((k) => keys.has(k));
   let pitch = (has('arrowdown') ? 1 : 0) - (has('arrowup') ? 1 : 0);
-  if (invertPitch) pitch = -pitch;
+  if (settings.invertPitch) pitch = -pitch;
   return {
     pitch,
     roll: (has('arrowright') ? 1 : 0) - (has('arrowleft') ? 1 : 0),
     yaw: (has('d') ? 1 : 0) - (has('q', 'a') ? 1 : 0),
     throttle: (has('z', 'w', 'shift') ? 1 : 0) - (has('s', 'control') ? 1 : 0),
     brake: has(' '),
+    trim: (has('t') ? 1 : 0) - (has('b') ? 1 : 0),
+    refuel: has('k'),
   };
 }
 
-function respawn() {
-  const a = AIRPORTS.find((x) => x.id === save.lastAirport) || AIRPORTS[0];
-  plane.placeOnRunway(a);
+function canRefuel() {
+  return plane.onGround && plane.speed < 1 && !plane.crashed && !!plane.landedAt;
+}
+
+function respawn(airport) {
+  const a = airport || airportById(save.lastAirport) || AIRPORTS[0];
+  const far = plane.pos.distanceTo(new THREE.Vector3(a.x, a.elev, a.z)) > 4000;
+  const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : SPECS.fuelCapacity;
+  plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
+  plane.fuel = keepFuel;
   camQuat.copy(plane.quat);
   $('crash').classList.add('hidden');
+  if (far) {
+    terrain.buildAround(plane.pos.x, plane.pos.z, 3);
+    decor.update(plane.pos.x, plane.pos.z, 50);
+  }
+}
+
+// ================= Pause / paramètres / voyage =================
+function openPause() {
+  paused = true;
+  $('pause').classList.remove('hidden');
+  renderAirportList();
+}
+$('resume').onclick = closeOverlays;
+for (const b of document.querySelectorAll('.tab')) {
+  b.onclick = () => {
+    for (const t of document.querySelectorAll('.tab')) t.classList.toggle('active', t === b);
+    for (const body of document.querySelectorAll('.tab-body')) body.classList.toggle('hidden', body.id !== b.dataset.tab);
+  };
+}
+$('tab-help').innerHTML = $('help-template').innerHTML;
+document.querySelector('#help .help-content').innerHTML = $('help-template').innerHTML;
+document.querySelector('#help .close-help').onclick = () => $('help').classList.add('hidden');
+$('open-help').onclick = () => $('help').classList.remove('hidden');
+buildSettingsForm($('settings-form'), applySettings);
+$('reset-progress').onclick = () => {
+  if (!confirm('Effacer argent, quêtes et aéroports visités ?')) return;
+  save = { name: save.name, money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'] };
+  persist();
+  stopQuest();
+  toast('Progression effacée');
+};
+
+function renderAirportList() {
+  const ul = $('airport-list');
+  ul.innerHTML = '';
+  for (const a of AIRPORTS) {
+    const li = document.createElement('li');
+    const known = save.visited.includes(a.id);
+    li.innerHTML = `<span>${known ? '🛬' : '🔒'} <b>${a.name}</b> <small>· ${a.label}, ${a.elev} m</small></span>`;
+    if (known) {
+      const b = document.createElement('button');
+      b.textContent = 'Y aller';
+      b.onclick = () => { respawn(a); save.lastAirport = a.id; persist(); closeOverlays(); };
+      li.appendChild(b);
+    }
+    ul.appendChild(li);
+  }
 }
 
 $('abandon').onclick = () => { stopQuest(); renderJournal(); };
 
-// ================= Carte (minimap + grande carte) =================
+// ================= Cartes =================
+const MAP_RES = 512;
 const mapImg = document.createElement('canvas');
 function buildMapImage() {
-  const R = 400;
-  mapImg.width = R; mapImg.height = R;
+  mapImg.width = MAP_RES; mapImg.height = MAP_RES;
   const ctx = mapImg.getContext('2d');
-  const img = ctx.createImageData(R, R);
+  const img = ctx.createImageData(MAP_RES, MAP_RES);
   const c = new THREE.Color();
-  for (let y = 0; y < R; y++) {
-    for (let x = 0; x < R; x++) {
-      const wx = -HALF + (x / R) * WORLD.size, wz = -HALF + (y / R) * WORLD.size;
-      const h = heightAt(wx, wz);
-      if (h < 0.5) c.setRGB(0.16, 0.45, 0.7); else terrainColor(h, 0, wx, wz, c);
-      const shade = h < 0.5 ? 1 : 0.8 + Math.min(0.3, (heightAt(wx - 30, wz - 30) - h) / -60 * 0.1 + 0.1);
-      const i = (y * R + x) * 4;
-      img.data[i] = c.r * 255 * shade; img.data[i + 1] = c.g * 255 * shade; img.data[i + 2] = c.b * 255 * shade; img.data[i + 3] = 255;
+  const px = WORLD.size / MAP_RES;
+  for (let y = 0; y < MAP_RES; y++) {
+    for (let x = 0; x < MAP_RES; x++) {
+      const wx = -HALF + (x + 0.5) * px, wz = -HALF + (y + 0.5) * px;
+      const h = terrainHeight(wx, wz);
+      const i = (y * MAP_RES + x) * 4;
+      img.data[i + 3] = 255;
+      if (h < 0.5) {
+        const k = Math.min(1, -h / 300);
+        img.data[i] = 50 - k * 25; img.data[i + 1] = 125 - k * 45; img.data[i + 2] = 190 - k * 40;
+        continue;
+      }
+      const hx = terrainHeight(wx + px, wz);
+      terrainColor(h, Math.abs(hx - h) / px, wx, wz, c);
+      const shade = THREE.MathUtils.clamp(1 + ((h - hx) / px) * 1.5, 0.6, 1.25);
+      img.data[i] = c.r * 255 * shade; img.data[i + 1] = c.g * 255 * shade; img.data[i + 2] = c.b * 255 * shade;
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -576,23 +495,33 @@ function drawMap(cv, cx, cz, span, full) {
   const s = W / span;
   const toX = (x) => (x - cx) * s + W / 2;
   const toY = (z) => (z - cz) * s + W / 2;
-  ctx.fillStyle = '#2a73b3';
+  ctx.fillStyle = '#1f5f96';
   ctx.fillRect(0, 0, W, W);
-  const k = mapImg.width / WORLD.size;
-  ctx.drawImage(mapImg, (cx - span / 2 + HALF) * k, (cz - span / 2 + HALF) * k, span * k, span * k, 0, 0, W, W);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(mapImg, toX(-HALF), toY(-HALF), WORLD.size * s, WORLD.size * s);
 
   ctx.font = `bold ${full ? 14 : 11}px system-ui`;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#000a';
+  const text = (t, x, y, color) => { ctx.strokeText(t, x, y); ctx.fillStyle = color; ctx.fillText(t, x, y); };
   for (const a of AIRPORTS) {
-    ctx.fillStyle = '#9fe3ff';
-    ctx.fillRect(toX(a.x) - 3, toY(a.z) - 3, 6, 6);
-    if (full) ctx.fillText(a.name, toX(a.x) + 6, toY(a.z) + 4);
+    const x = toX(a.x), y = toY(a.z);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-a.heading);
+    ctx.fillStyle = save.visited.includes(a.id) ? '#9fe3ff' : '#cfd8df';
+    ctx.fillRect(-2, -Math.max(4, (a.length * s) / 2), 4, Math.max(8, a.length * s));
+    ctx.restore();
+    if (full) text(a.name, x + 7, y + 4, '#9fe3ff');
   }
-  if (full) for (const l of LANDMARKS) { ctx.fillStyle = '#ffe9b0'; ctx.fillText('◆ ' + l.name, toX(l.x) - 5, toY(l.z) + 4); }
+  if (full) {
+    for (const l of LANDMARKS) text('◆ ' + l.name, toX(l.x) - 5, toY(l.z) + 4, '#ffe9b0');
+    for (const c of CITIES) text(c.name, toX(c.x) - 20, toY(c.z) - 8, '#ffffff');
+  }
   for (const { q, g } of givers) {
     if (!g.visible) continue;
-    ctx.fillStyle = '#ffd23f';
-    ctx.fillText('!', toX(q.giver.x) - 2, toY(q.giver.z) + 4);
-    if (full) ctx.fillText(q.title, toX(q.giver.x) + 6, toY(q.giver.z) + 4);
+    text('!', toX(q.giver.x) - 2, toY(q.giver.z) + 4, '#ffd23f');
+    if (full && span < 40000) text(q.title, toX(q.giver.x) + 6, toY(q.giver.z) + 16, '#ffd23f');
   }
   if (quest.active) {
     const p = stepPos(quest.active.steps[quest.step]);
@@ -600,15 +529,22 @@ function drawMap(cv, cx, cz, span, full) {
       ctx.strokeStyle = '#ffc928';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(toX(p.x), toY(p.z), 6, 0, Math.PI * 2);
+      ctx.arc(toX(p.x), toY(p.z), 7, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toX(plane.pos.x), toY(plane.pos.z));
+      ctx.lineTo(toX(p.x), toY(p.z));
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
   for (const r of remotes.values()) {
     ctx.fillStyle = '#ff7ad9';
     ctx.beginPath();
-    ctx.arc(toX(r.mesh.position.x), toY(r.mesh.position.z), 3, 0, Math.PI * 2);
+    ctx.arc(toX(r.mesh.position.x), toY(r.mesh.position.z), full ? 4 : 3, 0, Math.PI * 2);
     ctx.fill();
+    if (full) text(r.name, toX(r.mesh.position.x) + 6, toY(r.mesh.position.z) + 4, '#ff9ae3');
   }
   // avion du joueur
   ctx.save();
@@ -616,22 +552,56 @@ function drawMap(cv, cx, cz, span, full) {
   ctx.rotate(THREE.MathUtils.degToRad(plane.headingDeg));
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, -8); ctx.lineTo(5, 6); ctx.lineTo(0, 3); ctx.lineTo(-5, 6); ctx.closePath();
   ctx.fill(); ctx.stroke();
   ctx.restore();
+  if (full) {
+    const km = span > 40000 ? 10 : span > 15000 ? 5 : 1;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(20, W - 30, km * 1000 * s, 4);
+    text(`${km} km`, 20, W - 38, '#fff');
+  }
 }
+
+const mapView = { cx: 0, cz: 0, span: WORLD.size, drag: null };
+const bigCanvas = $('bigmap-canvas');
+function drawBigMap() { drawMap(bigCanvas, mapView.cx, mapView.cz, mapView.span, true); }
+bigCanvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  mapView.span = THREE.MathUtils.clamp(mapView.span * (e.deltaY > 0 ? 1.2 : 0.83), 3000, WORLD.size * 1.1);
+  drawBigMap();
+}, { passive: false });
+bigCanvas.addEventListener('pointerdown', (e) => { mapView.drag = [e.clientX, e.clientY]; bigCanvas.setPointerCapture(e.pointerId); });
+bigCanvas.addEventListener('pointerup', () => { mapView.drag = null; });
+bigCanvas.addEventListener('pointermove', (e) => {
+  if (!mapView.drag) return;
+  const scale = mapView.span / bigCanvas.clientWidth;
+  mapView.cx -= (e.clientX - mapView.drag[0]) * scale;
+  mapView.cz -= (e.clientY - mapView.drag[1]) * scale;
+  mapView.drag = [e.clientX, e.clientY];
+  drawBigMap();
+});
 
 // ================= Multijoueur =================
 const remotes = new Map();
-const net = { ws: null, id: null, lastSend: 0 };
+const net = { ws: null, id: null, lastSend: 0, retry: 2000 };
 const REMOTE_COLORS = [0xffc4a3, 0xb5e3a1, 0xa3c9ff, 0xf7a3d9, 0xfff19c, 0xc2a3ff];
 
+function wsUrl() {
+  if (MULTIPLAYER_URL) return MULTIPLAYER_URL;
+  if (!location.protocol.startsWith('http')) return null;
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+}
+
 function connect() {
-  if (!location.protocol.startsWith('http')) return;
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  const url = wsUrl();
+  if (!url) return;
+  let ws;
+  try { ws = new WebSocket(url); } catch { return; }
   net.ws = ws;
-  ws.onopen = () => ws.send(JSON.stringify({ t: 'hello', name: save.name }));
+  ws.onopen = () => { net.retry = 2000; ws.send(JSON.stringify({ t: 'hello', name: save.name })); };
   ws.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
@@ -641,8 +611,9 @@ function connect() {
   ws.onclose = () => {
     net.ws = null;
     for (const id of [...remotes.keys()]) removeRemote(id);
-    $('online').textContent = 'Hors ligne';
-    setTimeout(connect, 3000);
+    $('online').textContent = 'Solo (hors ligne)';
+    setTimeout(connect, net.retry);
+    net.retry = Math.min(60000, net.retry * 2);
   };
 }
 
@@ -660,18 +631,19 @@ function syncRemotes(list) {
     let r = remotes.get(p.id);
     if (!r) {
       const mesh = createPlaneMesh(REMOTE_COLORS[p.id % REMOTE_COLORS.length], 0x2a4bd8);
-      const label = makeLabel(p.name, { size: 0.028 });
+      const label = makeLabel(p.name, { size: 0.026 });
       label.position.y = 6;
+      label.visible = settings.showNames;
       mesh.add(label);
       mesh.position.fromArray(p.p);
       mesh.quaternion.fromArray(p.q);
       scene.add(mesh);
-      r = { mesh, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), speed: 0 };
+      r = { mesh, label, name: p.name, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), st: {} };
       remotes.set(p.id, r);
     }
     r.tp.fromArray(p.p);
     r.tq.fromArray(p.q);
-    r.speed = p.s || 0;
+    r.st = { rpm: p.r ?? 0.6, gearPos: p.g ?? 1, flapPos: p.f ?? 0, lights: !!p.l };
   }
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
   $('online').textContent = `🌐 ${remotes.size + 1} pilote${remotes.size ? 's' : ''} en ligne`;
@@ -685,108 +657,182 @@ function netTick(now) {
     t: 'state',
     p: plane.pos.toArray().map(r2),
     q: plane.quat.toArray().map((v) => Math.round(v * 1e4) / 1e4),
-    s: r2(plane.speed),
+    s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0,
   }));
 }
 
-// ================= Boucle =================
+// ================= Caméra / HUD =================
 const camQuat = new THREE.Quaternion();
 const camOffset = new THREE.Vector3();
 const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.09);
-let started = false;
-let last = performance.now();
+const orbitQ = new THREE.Quaternion();
+const orbitE = new THREE.Euler();
+const viewQ = new THREE.Quaternion();
 
 function updateCamera(dt) {
+  if (!orbit.dragging) {
+    orbit.yaw *= Math.exp(-dt * 1.5);
+    orbit.pitch *= Math.exp(-dt * 1.5);
+  }
+  orbitQ.setFromEuler(orbitE.set(-orbit.pitch, orbit.yaw, 0, 'YXZ'));
   if (camMode === 0) {
     camQuat.slerp(plane.quat, 1 - Math.exp(-dt * 4));
-    camOffset.set(0, 4.5, 19).applyQuaternion(camQuat);
+    viewQ.copy(camQuat).multiply(orbitQ);
+    camOffset.set(0, camDist * 0.24, camDist).applyQuaternion(viewQ);
     camera.position.copy(plane.pos).add(camOffset);
-    camera.quaternion.copy(camQuat).multiply(tilt);
+    camera.quaternion.copy(viewQ).multiply(tilt);
   } else {
     camQuat.copy(plane.quat);
     camOffset.set(0, 1.1, -0.9).applyQuaternion(plane.quat);
     camera.position.copy(plane.pos).add(camOffset);
-    camera.quaternion.copy(plane.quat);
+    camera.quaternion.copy(plane.quat).multiply(orbitQ);
   }
   planeMesh.visible = camMode === 0 || plane.crashed;
-  const g = Math.max(0, heightAt(camera.position.x, camera.position.z)) + 1.5;
+  const g = Math.max(0, groundHeight(camera.position.x, camera.position.z)) + 1.5;
   if (camera.position.y < g) camera.position.y = g;
 }
 
+const setSys = (id, cls) => { const el = $(id); el.classList.remove('on', 'warn', 'bad'); if (cls) el.classList.add(cls); };
+let warnKey = '';
+
 function updateHUD() {
-  const agl = plane.pos.y - Math.max(0, heightAt(plane.pos.x, plane.pos.z)) - SPECS.gear;
-  $('spd').textContent = Math.round(plane.speed * 3.6);
-  $('alt').textContent = Math.round(plane.pos.y);
-  $('agl').textContent = Math.max(0, Math.round(agl));
-  $('vs').textContent = (plane.onGround ? 0 : plane.velocity.y).toFixed(1);
+  const av = settings.units === 'aviation';
+  const ground = Math.max(0, groundHeight(plane.pos.x, plane.pos.z));
+  const agl = Math.max(0, plane.pos.y - ground - SPECS.gear);
+  const alt = (m) => Math.round(av ? m * 3.281 : m);
+  $('spd').textContent = Math.round(plane.speed * (av ? 1.944 : 3.6));
+  $('alt').textContent = alt(plane.pos.y);
+  $('agl').textContent = alt(agl);
+  const vs = plane.onGround ? 0 : plane.velocity.y;
+  $('vs').textContent = av ? Math.round(vs * 196.85) : vs.toFixed(1);
   $('hdg').textContent = String(Math.round(plane.headingDeg) % 360).padStart(3, '0');
   $('thr').style.width = `${plane.throttle * 100}%`;
-  $('stall').classList.toggle('hidden', plane.onGround || plane.speed > SPECS.stall * 1.1);
+  $('rpm').style.width = `${plane.rpm * 100}%`;
+  $('fuel').style.width = `${(plane.fuel / SPECS.fuelCapacity) * 100}%`;
+  $('trim').style.left = `${50 + plane.trim * 100}%`;
   $('money').textContent = `${save.money} ₣`;
+
+  setSys('sys-engine', plane.engineOn ? 'on' : plane.engineStart > 0 ? 'warn' : null);
+  const gear = document.querySelector('#sys-gear .gear');
+  gear.className = 'gear ' + (plane.gearBroken ? 'moving' : plane.gearPos > 0.99 ? 'down' : plane.gearPos < 0.01 ? 'up' : 'moving');
+  $('flaps-val').textContent = `${Math.round(plane.flapPos * 10)}°`;
+  setSys('sys-brake', plane.brake ? 'warn' : null);
+  setSys('sys-park', plane.parkingBrake ? 'bad' : null);
+  setSys('sys-lights', plane.lights ? 'on' : null);
+
+  // alarmes
+  const w = [];
+  if (!plane.onGround && !plane.crashed) {
+    if (plane.speed < plane.stallSpeed * 1.12) w.push(['DÉCROCHAGE', '']);
+    if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0) w.push(['TRAIN !', '']);
+    if (plane.gearPos > 0.3 && plane.speed > SPECS.vGear) w.push(['VITESSE TRAIN', 'amber']);
+    if (agl < 60 && plane.velocity.y < -8) w.push(['TERRAIN', '']);
+  }
+  if (plane.flapPos > 0.2 && plane.speed > SPECS.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
+  if (settings.fuel && plane.fuel < SPECS.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < SPECS.fuelCapacity * 0.05 ? '' : 'amber']);
+  const key = w.map((x) => x[0]).join();
+  if (key !== warnKey) {
+    warnKey = key;
+    $('warnings').innerHTML = w.map(([t, c]) => `<span class="${c}">${t}</span>`).join('');
+  }
 }
 
-let mapTimer = 0;
+function updatePlace() {
+  const a = AIRPORTS.find((x) => Math.hypot(x.x - plane.pos.x, x.z - plane.pos.z) < 3000);
+  $('place').textContent = `📍 ${a ? a.name : nearestPlaceName(plane.pos.x, plane.pos.z)}`;
+}
+
+// ================= Boucle =================
+let last = performance.now();
+let mapTimer = 0, labelTimer = 0, placeTimer = 0, stallBeep = 0;
+
+function simulate(dt) {
+  const input = readInput();
+  plane.trim = THREE.MathUtils.clamp(plane.trim + input.trim * dt * 0.25, -0.5, 0.5);
+  plane.update(dt, input, { difficulty: settings.difficulty, fuel: settings.fuel, sensitivity: settings.sensitivity });
+  if (input.refuel && canRefuel()) plane.refuel(dt);
+  // limite de la carte : on renvoie l'avion vers le centre
+  const lim = HALF * 0.97;
+  if (Math.abs(plane.pos.x) > lim || Math.abs(plane.pos.z) > lim) {
+    plane.pos.x = THREE.MathUtils.clamp(plane.pos.x, -lim, lim);
+    plane.pos.z = THREE.MathUtils.clamp(plane.pos.z, -lim, lim);
+    plane.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * dt));
+    toast('Limite de la carte — fais demi-tour !');
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const realDt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  const wallT = Date.now() / 1000; // horloge commune : bateaux et montgolfières identiques pour tous
 
   if (started) {
-    if (!plane.crashed) {
-      plane.update(dt, readInput());
+    if (!paused && !plane.crashed) {
+      const steps = Number(settings.timeScale) || 1;
+      for (let i = 0; i < steps && !plane.crashed; i++) simulate(realDt);
       if (plane.crashed) {
         $('crash-reason').textContent = plane.crashReason;
         $('crash').classList.remove('hidden');
-        beep(110, 0.6);
+        beep(110, 0.6, 0.3);
       }
     }
-    // limite de la carte : on renvoie l'avion vers l'île
-    const lim = HALF * 0.98;
-    if (Math.abs(plane.pos.x) > lim || Math.abs(plane.pos.z) > lim) {
-      plane.pos.x = THREE.MathUtils.clamp(plane.pos.x, -lim, lim);
-      plane.pos.z = THREE.MathUtils.clamp(plane.pos.z, -lim, lim);
-      plane.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * dt));
-      toast('Limite de la carte — fais demi-tour !');
-    }
-    if (plane.landedAt && save.lastAirport !== plane.landedAt.id) {
+    while (plane.events.length) logMsg(plane.events.shift());
+    if (plane.landedAt && (save.lastAirport !== plane.landedAt.id || !save.visited.includes(plane.landedAt.id))) {
       save.lastAirport = plane.landedAt.id;
+      if (!save.visited.includes(plane.landedAt.id)) {
+        save.visited.push(plane.landedAt.id);
+        toast(`Nouvel aéroport découvert : ${plane.landedAt.name}`);
+      }
       persist();
     }
 
     planeMesh.position.copy(plane.pos);
     planeMesh.quaternion.copy(plane.quat);
-    planeMesh.userData.prop.rotation.z += dt * (5 + plane.throttle * 60);
+    animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights }, realDt, wallT);
 
     updateQuest();
     updateGivers();
-    updateCamera(dt);
+    updateCamera(realDt);
     updateHUD();
     netTick(now);
 
-    mapTimer -= dt;
+    mapTimer -= realDt;
     if (mapTimer <= 0) {
       mapTimer = 0.1;
-      drawMap($('minimap'), plane.pos.x, plane.pos.z, 6000, false);
-      if (!$('bigmap').classList.contains('hidden')) drawMap($('bigmap-canvas'), 0, 0, WORLD.size, true);
+      if (settings.minimap) drawMap($('minimap'), plane.pos.x, plane.pos.z, 8000, false);
+      if (!$('bigmap').classList.contains('hidden')) drawBigMap();
     }
+    placeTimer -= realDt;
+    if (placeTimer <= 0) { placeTimer = 1; updatePlace(); }
 
     if (audio) {
-      audio.osc.frequency.value = 45 + plane.throttle * 70 + plane.speed * 0.4;
-      audio.gain.gain.value = plane.crashed ? 0 : 0.03 + plane.throttle * 0.05;
+      const v = settings.volume;
+      audio.osc.frequency.value = 40 + plane.rpm * 90;
+      audio.gain.gain.value = plane.crashed || paused ? 0 : plane.rpm * 0.08 * v;
+      audio.wg.gain.value = paused ? 0 : Math.min(0.12, plane.speed * plane.speed * 0.00003) * v;
+      stallBeep -= realDt;
+      if (warnKey.includes('DÉCROCHAGE') && stallBeep <= 0) { beep(1200, 0.15, 0.08); stallBeep = 0.4; }
     }
   } else {
-    // menu : petite rotation de caméra autour de la base
-    const t = now / 1000 * 0.05;
-    camera.position.set(Math.sin(t) * 1500, 500, Math.cos(t) * 1500);
-    camera.lookAt(0, 100, 0);
+    const t = (now / 1000) * 0.04;
+    const a = airportById(save.lastAirport) || AIRPORTS[0];
+    camera.position.set(a.x + Math.sin(t) * 2500, a.elev + 700, a.z + Math.cos(t) * 2500);
+    camera.lookAt(a.x, a.elev + 100, a.z);
   }
 
+  terrain.update(plane.pos.x, plane.pos.z, camera.position.x, camera.position.z, started ? 5 : 12);
+  decor.update(plane.pos.x, plane.pos.z, started ? 3 : 8);
+  labelTimer -= realDt;
+  if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
+  world.update(realDt, wallT);
+
   // autres joueurs : interpolation douce
-  const k = 1 - Math.exp(-dt * 8);
+  const k = 1 - Math.exp(-realDt * 8);
   for (const r of remotes.values()) {
     r.mesh.position.lerp(r.tp, k);
     r.mesh.quaternion.slerp(r.tq, k);
-    r.mesh.userData.prop.rotation.z += dt * 40;
+    animatePlaneMesh(r.mesh, r.st, realDt, wallT);
   }
 
   renderer.render(scene, camera);
@@ -794,29 +840,40 @@ function frame(now) {
 
 // ================= Démarrage =================
 $('pilot-name').value = save.name;
-setTimeout(() => {
-  buildTerrain();
-  buildAirports();
-  buildTrees();
-  buildCities();
-  buildClouds();
-  buildLandmarks();
+const tick = () => new Promise((res) => setTimeout(res, 20));
+(async () => {
+  applySettings();
+  status('Construction du terrain…');
+  await tick();
+  const a = airportById(save.lastAirport) || AIRPORTS[0];
+  plane.placeOnRunway(a);
+  terrain.buildAround(a.x, a.z, 4);
+  status('Aéroports, villes et monuments…');
+  await tick();
+  world = buildWorldObjects(scene);
+  applySettings('clouds');
   buildGivers();
+  status('Dessin de la carte…');
+  await tick();
   buildMapImage();
-  $('load-status').textContent = 'Carte prête !';
+  status('Prêt !');
   $('start').disabled = false;
   requestAnimationFrame(frame);
-}, 30);
-$('start').disabled = true;
+})();
 
 $('start').onclick = () => {
   save.name = ($('pilot-name').value.trim() || 'Pilote').slice(0, 16);
+  if (!save.visited.includes('alpha')) save.visited.push('alpha');
   persist();
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
+  $('help').classList.add('hidden');
   initAudio();
   respawn();
   started = true;
   connect();
-  toast('Bienvenue ! Les balises jaunes « ! » sont des quêtes.');
+  toast('Bienvenue ! E pour démarrer le moteur, H pour l\'aide.');
 };
+
+// accès console pour le débogage : jp.plane, jp.renderer.info…
+window.jp = { plane, renderer, settings };
