@@ -1,6 +1,6 @@
 // Quêtes de la région : centre (Base Alpha, Capitale, Lac Miroir, Tour Radio, Grand Stade, Colosse, Château)
 import {
-  A, L, city, nextTo, land, touch, reach, drop, ring, ringsAround, terrainFollow, windTurbines,
+  A, L, city, nextTo, land, touch, reach, drop, ring, ringsAround, windTurbines,
 } from './kit.js';
 
 // ----- utilitaires locaux -----
@@ -34,8 +34,8 @@ export default [
       + 'un palier entre 450 et 600 m pendant 20 s, puis un atterrissage complet à Base Alpha.',
     reward: 300,
     steps: [
-      ring(nextTo(A('alpha'), 1000, 500), 250, { text: 'Vent arrière : passe l\'anneau parallèle à la piste' }),
-      ring(nextTo(A('alpha'), 800, -1500), 200, { text: 'Étape de base : passe l\'anneau, puis aligne-toi sur la piste' }),
+      ring(nextTo(A('alpha'), 1000, 300), 250, { text: 'Vent arrière : passe l\'anneau parallèle à la piste' }),
+      ring(nextTo(A('alpha'), 700, -2300), 150, { text: 'Étape de base : passe l\'anneau, puis aligne-toi sur la piste' }),
       touch('alpha', { text: 'Toucher-décoller à Base Alpha : les roues touchent, plein gaz, on repart !' }),
       { type: 'hold', min: 450, max: 600, duration: 20, text: 'Palier : tiens ton altitude entre 450 et 600 m pendant 20 s (le trim est ton ami)' },
       land('alpha', { text: 'Atterrissage complet à Base Alpha. Monique prend des notes…' }),
@@ -74,8 +74,8 @@ export default [
     id: 'centre-facteur-recommande', title: 'Recommandé express', category: 'livraison', airport: 'lac',
     requires: 'centre-facteur-tournee',
     desc: 'Un recommandé urgent pour le maire d\'Alpha-Ville ! Largue-le sur la mairie (moins de 150 m du sol) '
-      + 'puis file te poser à Capitale International. Gaston a promis : 10 minutes, pas une de plus.',
-    reward: 750, timeLimit: 600,
+      + 'puis file te poser à Capitale International. Gaston a promis : 11 minutes, pas une de plus.',
+    reward: 750, timeLimit: 660,
     steps: [
       drop(alphaVille, 200, 'Mairie d\'Alpha-Ville', { maxAgl: 150, spawn: 'flag' }),
       land('capitale', { text: 'Pose-toi à Capitale International avant la fin du chrono' }),
@@ -85,16 +85,18 @@ export default [
     id: 'centre-facteur-fantome', title: 'Une lettre pour le fantôme', category: 'exploration', airport: 'capitale',
     requires: 'centre-facteur-recommande', minRank: 1,
     desc: 'Une lettre adressée « au Fantôme, Château des Brumes » ! Prends Gaston à Base Alpha, largue-la sur le '
-      + 'château (moins de 200 m du sol), reste 40 s près de la montgolfière qui s\'enfuit, puis ramène Gaston.',
+      + 'château (moins de 250 m du sol), suis 40 s la montgolfière qui s\'enfuit, puis ramène Gaston à Base Alpha.',
     reward: 1500,
     steps: [
       land('alpha', { text: 'Passe prendre Gaston à Base Alpha (et fais le plein avec K, ça va grimper !)' }),
-      drop(L('chateau'), 200, 'Château des Brumes (2 520 m)', { maxAgl: 200, spawn: 'flag' }),
+      drop(L('chateau'), 200, 'Château des Brumes (2 520 m)', {
+        maxAgl: 250, spawn: 'flag', text: 'Largue la lettre (X) sur le Château des Brumes, perché à 2 520 m : moins de 250 m du sol !',
+      }),
       {
         type: 'follow', balloon: 1, distance: 800, duration: 40, label: 'le « fantôme » en montgolfière',
         text: 'Le « fantôme » s\'enfuit en montgolfière vers 1 000 m ! Reste à moins de 800 m de lui pendant 40 s',
       },
-      land('alpha', { text: 'C\'était le baron Léon et ses farces… Ramène Gaston à Base Alpha' }),
+      land('alpha', { text: 'Ce « fantôme », c\'était le vieux comte Aldebert et ses farces ! Ramène Gaston à Base Alpha' }),
     ],
   },
 
@@ -117,11 +119,11 @@ export default [
       + '(vers 60-70 m du sol, gare aux pales), puis reviens te poser à Capitale International.',
     reward: 550, bonusTime: 330, bonusReward: 200,
     steps: [
-      ring(alongRow(-600, 0), 100, { text: 'Entrée du slalom : aligne-toi sur la rangée d\'éoliennes' }),
+      ring(alongRow(-250, -220), 80, { text: 'Entrée du slalom : passe au sud de la première éolienne' }),
       ring(alongRow(110, 0), 60, { text: 'Passe entre les deux premières éoliennes' }),
-      ring(alongRow(440, 170), 70),
+      ring(alongRow(440, 220), 70),
       ring(alongRow(770, 0), 60, { text: 'Entre les mâts !' }),
-      ring(alongRow(1100, -170), 70),
+      ring(alongRow(1100, -220), 70),
       ring(alongRow(1430, 0), 60, { text: 'Dernière porte entre les éoliennes' }),
       ring(alongRow(1750, 450), 120, { text: 'Sortie : dégage vers le nord, le relief monte à l\'ouest' }),
       land('capitale'),
@@ -130,7 +132,7 @@ export default [
   {
     id: 'centre-banderole', title: 'Banderole publicitaire', category: 'tourisme', airport: 'alpha',
     desc: '« Mangez des crêpes chez Yvonne ! » Promène la banderole à moins de 150 m au-dessus d\'Alpha-Ville (20 s), '
-      + 'au-dessus des gratte-ciel de la Capitale, puis à moins de 200 m autour du Grand Stade (15 s).',
+      + 'au-dessus des gratte-ciel de la Capitale, à moins de 200 m autour du Grand Stade (15 s) et pose-toi à la Capitale.',
     reward: 600,
     steps: [
       {
@@ -148,8 +150,8 @@ export default [
   {
     id: 'centre-pizza', title: 'Pizza express', category: 'livraison', airport: 'alpha',
     desc: 'Luigi d\'Alpha-Ville livre par avion ! Largue les pizzas aux techniciens de la Tour Radio puis aux ouvriers '
-      + 'du parc éolien (moins de 150 m du sol), et pose-toi à la Capitale. Elles doivent arriver chaudes : 7 min !',
-    reward: 600, timeLimit: 420, bonusTime: 320, bonusReward: 150,
+      + 'du parc éolien (moins de 150 m du sol), et pose-toi à la Capitale. Elles doivent arriver chaudes : 8 min !',
+    reward: 600, timeLimit: 480, bonusTime: 360, bonusReward: 150,
     steps: [
       drop(TECHNICIENS, 150, 'Techniciens de la Tour Radio', { maxAgl: 150, spawn: 'crate' }),
       drop(CHANTIER, 150, 'Ouvriers du parc éolien', { maxAgl: 150, spawn: 'crate' }),
@@ -159,13 +161,13 @@ export default [
   {
     id: 'centre-meeting', title: 'Meeting aérien de la Capitale', category: 'voltige', airport: 'capitale',
     minRank: 2,
-    desc: 'Le grand meeting ! Anneau au-dessus du Grand Stade, 8 s sur le dos, piqué à 290 km/h, chandelle au-dessus '
-      + 'de 900 m, passage à moins de 50 m le long de la piste pendant 8 s, puis atterrissage.',
-    reward: 1100,
+    desc: 'Le grand meeting ! Anneau au-dessus du Grand Stade, 8 s sur le dos, piqué à 290 km/h (train rentré !), '
+      + 'chandelle au-dessus de 900 m, passage à moins de 50 m le long de la piste pendant 8 s, puis atterrissage.',
+    reward: 800,
     steps: [
       ring(L('stade'), 400, { size: 40, text: 'Ouverture du meeting : passe l\'anneau au-dessus du Grand Stade' }),
       { type: 'inverted', duration: 8, text: 'Passage dos devant le public : vole sur le dos pendant 8 s' },
-      { type: 'speed', min: 290, text: 'Piqué ! Atteins 290 km/h (et pense à redresser…)' },
+      { type: 'speed', min: 290, text: 'Piqué ! Atteins 290 km/h, train rentré (G) sinon il sera arraché, et pense à redresser…' },
       { type: 'altitude', min: 900, text: 'Chandelle : remonte au-dessus de 900 m' },
       {
         type: 'low', maxAgl: 50, duration: 8, x: A('capitale').x, z: A('capitale').z, radius: 1300,
@@ -179,7 +181,7 @@ export default [
   {
     id: 'centre-montgolfieres', title: 'La fête des montgolfières', category: 'tourisme', giver: CHAMP_BALLONS,
     desc: 'Le photographe du club veut des clichés : reste à moins de 700 m de la montgolfière de Léon (40 s), puis '
-      + 'à moins de 600 m de celle du baron, vers 2 000 m au-dessus des sommets (40 s), et pose-toi à Base Alpha.',
+      + 'à moins de 600 m de celle du baron, perchée vers 2 000 m parmi les sommets (40 s), et pose-toi à Base Alpha.',
     reward: 700,
     steps: [
       { type: 'follow', balloon: 2, distance: 700, duration: 40, label: 'la montgolfière de Léon' },
@@ -217,5 +219,3 @@ export default [
     ],
   },
 ];
-
-void terrainFollow;

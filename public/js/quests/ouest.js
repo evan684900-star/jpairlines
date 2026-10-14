@@ -35,7 +35,7 @@ export default [
     requires: 'ouest-fete-affiches',
     desc: 'Le cargo qui apporte le feu d\'artifice tourne en rond dans la brume au large ! Reste 60 s à moins de '
       + '600 m de lui (et sous 500 m d\'altitude), balise le chenal en passant les anneaux, puis pose-toi à Port Azur.',
-    reward: 950,
+    reward: 1050,
     steps: [
       { type: 'follow', ship: 6, distance: 600, duration: 60, label: 'le cargo Feu-Follet',
         text: 'Retrouve le cargo Feu-Follet au large et tourne autour de lui (moins de 600 m, sous 500 m d\'altitude) pendant 60 s' },
@@ -46,13 +46,13 @@ export default [
   {
     id: 'ouest-fete-show', title: 'Le grand show de la baie', category: 'voltige', airport: 'azur',
     requires: 'ouest-fete-artifices', minRank: 1,
-    desc: 'Le clou de la fête, c\'est toi ! Anneaux au-dessus de la baie, 6 s sur le dos, piqué à 280 km/h, '
-      + '12 s au ras des vagues (sous 40 m), puis largue la torche (X, sous 100 m) sur la barge du feu d\'artifice.',
-    reward: 1100, bonusTime: 330, bonusReward: 300,
+    desc: 'Le clou de la fête, c\'est toi ! Anneaux sur la baie, 6 s sur le dos, piqué à 280 km/h, 12 s au ras '
+      + 'des vagues (sous 40 m), torche larguée (X, sous 100 m) sur la barge du feu d\'artifice, puis pose-toi à Port Azur.',
+    reward: 1100, bonusTime: 360, bonusReward: 300,
     steps: [
       ...ringsAround(BAIE.x, BAIE.z, 800, 5, 80, Math.PI / 2).map((r) => ({ ...r, text: 'Passe les anneaux devant le public de la baie' })),
       { type: 'inverted', duration: 6, text: 'Le public retient son souffle : vole 6 s sur le dos !' },
-      { type: 'speed', min: 280, text: 'Piqué spectaculaire : atteins 280 km/h (et redresse à temps !)' },
+      { type: 'speed', min: 280, text: 'Piqué spectaculaire : atteins 280 km/h — train rentré (G), sinon il sera arraché !' },
       { type: 'low', maxAgl: 40, duration: 12, x: BAIE.x, z: BAIE.z, radius: 1300, label: 'baie de Port Azur',
         text: 'Rase les vagues de la baie : moins de 40 m pendant 12 s' },
       drop({ x: BAIE.x - 300, z: BAIE.z + 400 }, 120, 'barge du feu d\'artifice', {
@@ -66,8 +66,8 @@ export default [
   // ---------- Sauvetage en mer ----------
   {
     id: 'ouest-sos-plateforme', title: 'Un homme à la mer !', category: 'sauvetage', airport: 'verte',
-    desc: 'Un ouvrier de la plateforme est tombé à l\'eau ! Survole la plateforme, repère son canot (sous 200 m), '
-      + 'largue-lui un kit (X, sous 100 m), guide le cargo de secours 40 s puis pose-toi aux Falaises.',
+    desc: 'Un ouvrier est tombé à l\'eau ! Survole la plateforme (sous 300 m), repère son canot (sous 200 m), '
+      + 'largue-lui un kit (X, sous 100 m), reste 40 s à moins de 600 m du cargo de secours, puis pose-toi aux Falaises.',
     reward: 1200, bonusTime: 880, bonusReward: 300,
     steps: [
       reach(PLATEFORME, 400, PLATEFORME.name, { maxAgl: 300, text: 'Survole la Plateforme Pétrolière (sous 300 m) : l\'équipe t\'indique où il est tombé' }),
@@ -114,7 +114,7 @@ export default [
       { type: 'follow', balloon: 8, distance: 400, duration: 30, label: 'la montgolfière Citron',
         text: 'Photo n°2 : reste 30 s à moins de 400 m de la montgolfière Citron, au sud-est' },
       { type: 'follow', balloon: 13, distance: 400, duration: 30, label: 'la montgolfière Arc-en-ciel',
-        text: 'Photo n°3 : la montgolfière Arc-en-ciel survole les collines — reste au-dessus de 1 150 m, à moins de 400 m d\'elle, pendant 30 s' },
+        text: 'Photo n°3 : l\'Arc-en-ciel frôle les collines — vole entre 1 200 et 1 350 m, à moins de 400 m d\'elle, pendant 30 s' },
       land('falaises', { text: 'Rapporte les photos aux Falaises' }),
     ],
   },
@@ -123,7 +123,7 @@ export default [
   {
     id: 'ouest-bal-fantome', title: 'Le bal du fantôme', category: 'livraison', giver: { x: CHATEAU.x, z: CHATEAU.z },
     minRank: 1,
-    desc: 'Le fantôme du château donne un bal ! Rapporte des bougies de Port Azur, largue-les (X) sur le château '
+    desc: 'Le fantôme du château donne un bal ! Pose-toi à Port Azur chercher des bougies, largue-les (X) sur le château '
       + '(moins de 200 m au-dessus), passe les anneaux autour des tours puis vole 5 s sur le dos pour l\'amuser.',
     reward: 1200,
     steps: [
@@ -132,7 +132,8 @@ export default [
         maxAgl: 200, spawn: 'flag',
         text: 'Remonte au château (2 500 m !) et largue les bougies (X) à moins de 200 m au-dessus de la cour',
       }),
-      ...terrainFollow(ringsAround(CHATEAU.x, CHATEAU.z, 700, 4, 150, Math.PI / 4), 150)
+      // une valse de 6 anneaux autour du piton, juste sous les remparts (au moins 2 450 m)
+      ...terrainFollow(ringsAround(CHATEAU.x, CHATEAU.z, 800, 6, 150, Math.PI / 2).map((r) => ({ ...r, alt: 2450 })), 150)
         .map((r) => ({ ...r, text: 'Valse autour des tours : passe dans l\'anneau' })),
       { type: 'inverted', duration: 5, text: 'Le fantôme adore les acrobaties : vole 5 s sur le dos !' },
     ],
