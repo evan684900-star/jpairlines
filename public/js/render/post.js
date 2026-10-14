@@ -121,7 +121,7 @@ const RAYBLUR_FS = /* glsl */`
 const CINEMA_FS = /* glsl */`
   uniform sampler2D tDiffuse, tRays, tMask;
   uniform vec2 sunUv; uniform float sunOn; uniform vec3 sunColor; uniform float aspect;
-  uniform float rays, flare, chroma, speed, vignette, grain, rain, flash, time, exposure;
+  uniform float rays, flare, chroma, speed, vignette, grain, rain, flash, time, exposure, saturation;
   varying vec2 vUv;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
@@ -203,6 +203,9 @@ const CINEMA_FS = /* glsl */`
     col += vec3(0.75, 0.8, 1.0) * flash / max(exposure, 0.1) * 0.22;
     // verrière mouillée : un peu plus floue et plus claire
     col = mix(col, col * 1.05 + 0.02 / max(exposure, 0.1), clamp(dr.z, 0.0, 1.0) * 0.3);
+    // étalonnage : couleurs un peu plus franches
+    float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
+    col = max(mix(vec3(lum), col, saturation), 0.0);
     // vignette et grain
     col *= 1.0 - vignette * smoothstep(0.15, 0.75, edge * 2.0);
     col *= 1.0 + (hash(vUv * 1000.0 + time) - 0.5) * grain;
@@ -370,7 +373,7 @@ export class PostFX {
       tDiffuse: { value: null }, tRays: { value: this.scenePass.raysRT.texture }, tMask: { value: this.scenePass.maskRT.texture },
       sunUv: { value: new THREE.Vector2() }, sunOn: { value: 0 }, sunColor: { value: new THREE.Color() }, aspect: { value: 1 },
       rays: { value: 0 }, flare: { value: 0 }, chroma: { value: 0 }, speed: { value: 0 }, vignette: { value: ART.vignette },
-      grain: { value: ART.grain }, rain: { value: 0 }, flash: { value: 0 }, time: { value: 0 }, exposure: { value: 1 },
+      grain: { value: ART.grain }, saturation: { value: ART.saturation }, rain: { value: 0 }, flash: { value: 0 }, time: { value: 0 }, exposure: { value: 1 },
     });
     this.output = new OutputPass();
     this.smaa = new SMAAPass(1, 1);
@@ -433,7 +436,7 @@ export class PostFX {
     u.flash.value = fx.flash || 0;
     u.time.value = this.time;
     u.exposure.value = exposure;
-    this.bloom.threshold = 1.5 / exposure;
+    this.bloom.threshold = ART.bloomThreshold / exposure;
     this.composer.render(dt);
   }
 }

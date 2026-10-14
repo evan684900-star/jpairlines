@@ -54,6 +54,44 @@ Sans serveur multijoueur, le jeu fonctionne quand même en solo.
 **Décollage :** `E` (moteur), `P` (desserrer le frein), volets 10°, plein gaz, garder l'axe au palonnier ; vers 100 km/h tirer doucement pour lever la roue avant (≈ 285 m de roulage), monter vers 130 km/h, puis rentrer le train et les volets.
 **Atterrissage :** train sorti sous 210 km/h, volets sous 165 km/h, approche vers 120 km/h en descendant de 3 à 4 m/s, ailes à plat ; arrondi juste au-dessus de la piste pour toucher à moins de 4 m/s (3 m/s en réaliste), puis freiner.
 
+## Rendu graphique
+
+Tout est généré par le code (aucune image ni modèle à télécharger) avec **three.js 0.160** :
+
+- **Ciel** : diffusion atmosphérique (Rayleigh/Mie), soleil et lune qui suivent l'heure, étoiles, cycle jour/nuit sur 24 h ;
+  brume en hauteur plus dense dans les vallées, plus chaude face au soleil.
+- **Nuages** : cumulus éclairés comme des volumes (le côté soleil est clair, les bords s'illuminent à contre-jour),
+  qui dérivent avec le vent, couche de stratus que l'on peut survoler, voile de cirrus ; leurs **ombres** défilent sur le sol.
+- **Terrain** : herbe et terre avec cartes de normales, roche triplanaire sur les pentes, neige calculée au pixel,
+  variations de couleur à plusieurs échelles, vallées assombries, sol mouillé sous la pluie.
+- **Eau** : matériau PBR (reflets du ciel et du soleil), vagues de Gerstner, turquoise près des côtes, transparence, écume sur les plages.
+- **Nuit** : balisage des pistes, phares tournants des aéroports, lampadaires et fenêtres allumées, phare d'atterrissage de l'avion.
+- **Post-traitement** : occlusion ambiante (SSAO), halo (bloom), rayons du soleil, reflets d'objectif, aberration chromatique,
+  distorsion de vitesse, gouttes sur la verrière, vignette, tone mapping ACES, anticrénelage MSAA ou SMAA.
+- **Avion** : peinture vernie, chrome, vitres transparentes, habitacle avec planche de bord animée, pilote, gouvernes, train,
+  volets, hélice, feux avec halos. Caméras **poursuite, cockpit, orbite libre, spectateur** (`C`) avec transitions fluides.
+- **Effets** : fumée et flamme au démarrage, échappement, poussière au roulage, fumée de pneus au toucher, crash,
+  tourbillons de condensation en bout d'aile, tremblements de caméra.
+- **Météo** (visuelle, ne change pas le vol) : grand beau, nuageux, couvert, pluie, orage avec éclairs et tonnerre, brouillard ;
+  en mode « changeante », elle change toutes les 20 min et elle est la même pour tous les joueurs.
+- **HUD « glass cockpit »** : horizon artificiel, bandes de vitesse et d'altitude, variomètre, cap, moteur et carburant ;
+  polices B612 (celles des cockpits Airbus), icônes Lucide.
+- **Sons** synthétisés en direct (Web Audio) : moteur, démarreur, vent, pluie, tonnerre, train, volets, décrochage.
+
+### Réglages (`Échap` → Paramètres)
+
+| Réglage | Effet |
+|---|---|
+| Qualité Bas / Moyen / Élevé / Ultra | résolution, ombres, nombre de nuages, finesse de l'eau, particules, MSAA |
+| Résolution adaptative | baisse la résolution si le jeu passe sous 60 images/s, la remonte ensuite |
+| Effets visuels | ombres, post-traitement, bloom, SSAO, rayons et reflets du soleil, aberration chromatique, tremblements, particules |
+| Heure | fixe, cycle jour/nuit de 24 min (le même pour tous) ou heure de l'ordinateur |
+| Météo | changeante ou fixe |
+| Compteur FPS, volume, couper le son | aussi le bouton haut-parleur du HUD |
+
+Le système « réduire les animations » coupe automatiquement les tremblements, la distorsion et les animations de l'interface.
+Le post-traitement n'est chargé que s'il est activé.
+
 ## Physique de vol
 
 L'avion est simulé comme un vrai avion léger (type Cessna 172), en corps rigide à 6 degrés de liberté :
@@ -109,10 +147,13 @@ public/js/config.js   adresse du serveur multijoueur
 public/js/world.js    relief, aéroports, lieux, bateaux, montgolfières (déterministe)
 public/js/terrain.js  terrain par morceaux (niveaux de détail)
 public/js/decor.js    arbres et villages autour du joueur
-public/js/objects.js  aéroports, villes, monuments, bateaux, nuages
+public/js/objects.js  aéroports, villes, monuments, bateaux, éoliennes
 public/js/plane.js    physique de vol (6 degrés de liberté)
-public/js/planeModel.js modèle 3D de l'avion
-public/js/graphics.js ciel, eau, nuages, textures procédurales
+public/js/planeModel.js modèle 3D de l'avion (matériaux PBR, habitacle)
+public/js/render/     rendu : config (qualité), renderer (orchestration), sky, clouds, weather,
+                      materials (terrain, bâtiments), water, post (post-traitement), effects, cameras,
+                      shared (brume, ombres des nuages), textures, heightmap
+public/js/ui/         instruments (PFD, planche de bord), audio (sons), icons (Lucide)
 public/js/quests/     quêtes par région (kit.js = format, engine.js = moteur)
 public/js/settings.js paramètres
 public/js/main.js     boucle de jeu, caméra, HUD, carburant, réseau

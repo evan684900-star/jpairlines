@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD, AIRPORTS, CITIES, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
 import { createBuildingMaterial } from './render/materials.js';
+import { injectShared } from './render/shared.js';
 
 const CH = WORLD.chunk;
 
@@ -83,12 +84,39 @@ const TREE_GEOS = {
   ]), 0, 6),
   rock: finish(mergeColored([[jitter(new THREE.DodecahedronGeometry(2.5, 1), 0.9).scale(1.3, 0.7, 1), 0x7d776f]]), -1, 2),
 };
+// versions simplifiées pour les arbres lointains (niveau de détail)
+const TREE_GEOS_FAR = {
+  conifer: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.3, 0.45, 4, 4).translate(0, 2, 0), TRUNK],
+    [new THREE.ConeGeometry(3.4, 13, 6, 1).translate(0, 9, 0), 0x264630],
+  ]), 2, 16),
+  broadleaf: finish(mergeColored([
+    [new THREE.CylinderGeometry(0.35, 0.5, 5, 4).translate(0, 2.5, 0), TRUNK],
+    [new THREE.IcosahedronGeometry(3.8, 0).scale(1.1, 0.95, 1.1).translate(0, 7.8, 0), 0x41622c],
+  ]), 3, 11),
+  palm: TREE_GEOS.palm,
+  cactus: TREE_GEOS.cactus,
+  rock: TREE_GEOS.rock,
+};
 const HOUSE_WALL = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
 const HOUSE_ROOF = new THREE.ConeGeometry(0.78, 0.55, 4).rotateY(Math.PI / 4).translate(0, 1.27, 0);
 const WALL_COLORS = [0xe9e1cf, 0xdccbb0, 0xcdbb9c, 0xf0ebe0, 0xc4ad8a, 0xd8c4b4];
 const ROOF_COLORS = [0x8e3b2a, 0x733226, 0x4a403c, 0x9a4a2c, 0x5a463c];
 
 const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
+// les arbres ondulent doucement dans le vent (le haut bouge, le pied reste fixe)
+treeMat.onBeforeCompile = (shader) => {
+  injectShared(shader);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float jpTime;')
+    .replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 jpBase = instanceMatrix[3].xyz;
+        float jpSway = max(0.0, position.y - 2.0) * 0.012;
+        transformed.x += sin(jpTime * 1.3 + jpBase.x * 0.05 + jpBase.z * 0.03) * jpSway;
+        transformed.z += cos(jpTime * 1.1 + jpBase.z * 0.05) * jpSway * 0.7;
+      #endif`);
+};
 const wallMat = createBuildingMaterial({ floor: 2.9, bay: 2.6, glass: 0.45 });
 const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75 });
 
@@ -154,6 +182,7 @@ function buildChunkDecor(ci, cj, density) {
   for (const [type, mats] of Object.entries(lists)) {
     if (!mats.length) continue;
     const im = new THREE.InstancedMesh(TREE_GEOS[type], treeMat, mats.length);
+    im.userData.tree = type;
     im.castShadow = true;
     im.receiveShadow = true;
     mats.forEach((mm, i) => {
@@ -204,10 +233,17 @@ export class Decor {
     g.traverse((o) => o.isInstancedMesh && o.dispose());
   }
 
+  // niveau de détail : arbres complets près du joueur, simplifiés plus loin
+  applyLod(g, i, j) {
+    const far = Math.max(Math.abs(i - this.center[0]), Math.abs(j - this.center[1])) > 1;
+    for (const o of g.children) if (o.userData.tree) o.geometry = (far ? TREE_GEOS_FAR : TREE_GEOS)[o.userData.tree];
+  }
+
   update(x, z, budgetMs = 4) {
     const ci = Math.floor(x / CH), cj = Math.floor(z / CH);
     if (!this.center || this.center[0] !== ci || this.center[1] !== cj) {
       this.center = [ci, cj];
+      for (const [key, g] of this.groups) { const [i, j] = key.split(',').map(Number); this.applyLod(g, i, j); }
       const R = this.radius;
       for (const [key, g] of this.groups) {
         const [i, j] = key.split(',').map(Number);
@@ -229,6 +265,7 @@ export class Decor {
       const g = buildChunkDecor(job.i, job.j, this.density);
       this.scene.add(g);
       this.groups.set(job.key, g);
+      this.applyLod(g, job.i, job.j);
     }
   }
 }

@@ -251,8 +251,10 @@ export class Instruments {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(Math.round(value)), x + w / 2, cy + 1);
     ctx.font = `600 ${Math.round(h * 0.04)}px ${FONT}`;
+    ctx.fillStyle = 'rgba(5,8,12,0.85)';
+    roundRect(ctx, x + 3, y + h - 20, w - 6, 17, 4); ctx.fill();
     ctx.fillStyle = C.cyan;
-    ctx.fillText(label, x + w / 2, y + h - 10);
+    ctx.fillText(label, x + w / 2, y + h - 11);
   }
 
   // ---------- moteur et systèmes ----------

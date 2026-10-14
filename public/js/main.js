@@ -683,7 +683,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status('Prêt !', 100);
   $('start').disabled = false;
   requestAnimationFrame(frame);
-  setTimeout(() => { $('loader').classList.add('done'); $('menu').classList.remove('hidden'); $('pilot-name').focus(); }, 350);
+  setTimeout(() => { $('loader').classList.add('done'); if (!started) { $('menu').classList.remove('hidden'); $('pilot-name').focus(); } }, 350);
   setTimeout(() => $('loader').remove(), 1400);
 })();
 

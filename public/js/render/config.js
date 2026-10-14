@@ -7,25 +7,25 @@ export const QUALITY_PRESETS = {
   low: {
     label: 'Bas',
     pixelRatio: 0.75, shadowMap: 1024, shadowRange: 350, msaa: 0,
-    cloudDensity: 0.45, waterRings: 24, particleDensity: 0.35, treeLod: 1, aoScale: 0.5,
+    cloudDensity: 0.45, waterRings: 24, particleDensity: 0.35,
     effects: { shadows: false, post: false, bloom: false, ao: false, godrays: false, chroma: false, motionFx: true, particles: true },
   },
   medium: {
     label: 'Moyen',
     pixelRatio: 1, shadowMap: 2048, shadowRange: 500, msaa: 0,
-    cloudDensity: 0.7, waterRings: 40, particleDensity: 0.6, treeLod: 1, aoScale: 0.5,
+    cloudDensity: 0.7, waterRings: 40, particleDensity: 0.6,
     effects: { shadows: true, post: true, bloom: true, ao: false, godrays: true, chroma: false, motionFx: true, particles: true },
   },
   high: {
     label: 'Élevé',
     pixelRatio: 1.5, shadowMap: 4096, shadowRange: 650, msaa: 4,
-    cloudDensity: 1, waterRings: 56, particleDensity: 1, treeLod: 2, aoScale: 0.5,
+    cloudDensity: 1, waterRings: 56, particleDensity: 1,
     effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true },
   },
   ultra: {
     label: 'Ultra',
     pixelRatio: 2, shadowMap: 4096, shadowRange: 900, msaa: 4,
-    cloudDensity: 1.35, waterRings: 72, particleDensity: 1.4, treeLod: 3, aoScale: 1,
+    cloudDensity: 1.35, waterRings: 72, particleDensity: 1.4,
     effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true },
   },
 };
@@ -41,13 +41,13 @@ export const ART = {
   exposureNight: 1.15,
   bloomStrength: 0.32,
   bloomRadius: 0.55,
-  bloomThreshold: 0.92,
+  bloomThreshold: 1.5, // seuil du halo, rapporté à l'exposition
   chromaStrength: 0.0028,
   vignette: 0.32,
   grain: 0.025,
+  saturation: 1.12,
   godraysStrength: 0.55,
   flareStrength: 0.6,
-  fogHeight: 450, // hauteur caractéristique de la brume (m)
   cloudBase: 1500,
   cloudTop: 3100,
   cirrusAlt: 8500,

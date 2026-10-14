@@ -184,7 +184,8 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
   #eis { display: none; }
   #flightdeck { padding: 6px; left: 8px; bottom: 8px; }
   #minimap { width: 118px; height: 118px; right: 8px; bottom: 8px; }
-  #toolbar { right: 8px; bottom: 134px; }
+  #toolbar { right: 8px; bottom: 134px; flex-direction: column; }
+  .tool small { display: none; }
   #systems { left: 50%; right: auto; transform: translateX(-50%) scale(0.8); transform-origin: top center; top: 92px; bottom: auto; }
   #topbar { max-width: 100%; left: 8px; right: 8px; top: 8px; font-size: 0.85em; }
   #quest-box { top: auto; bottom: 214px; right: 8px; max-width: 60%; font-size: 0.9em; }
