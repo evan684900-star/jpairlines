@@ -28,7 +28,7 @@ function autopilot(p, t) {
   const a = attitude(p);
   const inp = { pitch: 0, roll: 0, yaw: 0, throttle: 0, brake: false };
   if (t.pitch !== undefined) inp.pitch = clamp((t.pitch - a.pitch) * 4 - p.omega.x * 1.5, -1, 1);
-  if (t.bank !== undefined) inp.roll = clamp((t.bank - a.bank) * 3 + p.omega.z * 0.8, -1, 1);
+  if (t.bank !== undefined) inp.roll = clamp(wrap(t.bank - a.bank) * 3 + p.omega.z * 0.8, -1, 1);
   if (t.hdg !== undefined) inp.yaw = clamp(wrap(t.hdg - a.hdg) * 4 + p.omega.y * 1.5, -1, 1);
   if (t.elevator !== undefined) inp.pitch = t.elevator;
   if (t.throttle !== undefined) inp.throttle = clamp((t.throttle - p.throttle) * 20, -1, 1);

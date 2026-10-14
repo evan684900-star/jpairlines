@@ -54,7 +54,7 @@ export default [
     id: 'defi-champ-qualif', title: 'Coupe des Quatre Vents : qualifs', category: 'course', airport: 'nord',
     desc: 'Gégé, le commentateur, t\'a inscrit à la Coupe ! Slalom de 6 anneaux à 100 m du sol, toucher-décoller '
       + 'à Station Glacier, palier entre 400 et 550 m pendant 20 s, puis retour à Cap Nord.',
-    reward: 750, bonusTime: 720, bonusReward: 150,
+    reward: 750, bonusTime: 760, bonusReward: 150,
     steps: [
       ...slalom(7500, -22500, -500, -24500, 6, 250, 100),
       touch('glacier', { text: 'Toucher-décoller sur l\'herbe de Station Glacier : les roues touchent, plein gaz !' }),
@@ -86,7 +86,7 @@ export default [
   {
     id: 'defi-champ-volcan', title: 'Coupe : Grand Prix du Volcan', category: 'course', airport: 'volcan',
     requires: 'defi-champ-precision', minRank: 2,
-    timeLimit: 1000, bonusTime: 720, bonusReward: 300,
+    timeLimit: 1000, bonusTime: 760, bonusReward: 300,
     desc: 'Manche 3, contre Hector, le triple champion : tour de l\'île du Volcan par 10 anneaux à 55 m au-dessus '
       + 'des vagues, 20 s à moins de 30 m de l\'eau, puis pose-toi à Base du Volcan. 16 min 40 maximum !',
     reward: 1500,
@@ -101,9 +101,9 @@ export default [
   {
     id: 'defi-champ-finale', title: 'Coupe : la Grande Finale', category: 'defi', airport: 'capitale',
     requires: 'defi-champ-volcan', minRank: 3,
-    timeLimit: 1500, bonusTime: 1080, bonusReward: 600,
+    timeLimit: 1740, bonusTime: 1300, bonusReward: 600,
     desc: 'Finale ! Tour Radio, slalom à 70 m du sol, toucher à Lac Miroir, 1 500 m, 12 s sur le dos, piqué à 310 km/h, '
-      + 'palier 700-800 m (20 s), ballon largué sur le Stade (< 150 m), passage à < 30 m et posé à la Capitale. 25 min !',
+      + 'palier 700-800 m (20 s), ballon largué sur le Stade (< 150 m), passage à < 30 m et posé à la Capitale. 29 min !',
     reward: 3200,
     steps: [
       ringAlt(L('tour'), 1000, { size: 40, text: 'Ouverture : passe l\'anneau au-dessus de la Tour Radio (1 000 m)' }),
@@ -141,15 +141,15 @@ export default [
   },
   {
     id: 'defi-traversee', title: 'La grande traversée', category: 'defi', airport: 'verte',
-    minRank: 2, timeLimit: 2100, bonusTime: 1600, bonusReward: 500,
+    minRank: 2, timeLimit: 2200, bonusTime: 1650, bonusReward: 500,
     desc: 'Traverse la carte d\'ouest en est : borne Ouest en mer, côte nord, escale obligatoire à Station Glacier '
-      + 'pour le plein (K), Phare du Nord, borne Est, puis Port-Levant. 35 min maximum, fais le plein avant de partir !',
+      + 'pour le plein (moteur coupé, K), Phare du Nord, borne Est, puis Port-Levant. 36 min 40 maximum !',
     reward: 2300,
     steps: [
       ring(P(-27000, -24000), 80, { size: 50, text: 'Rejoins la borne Ouest, en mer au large de la côte nord-ouest' }),
       ring(P(-20500, -24800), 80, { size: 40 }),
       ring(P(-13000, -25500), 150, { size: 40, text: 'Passe l\'anneau au-dessus de la côte' }),
-      land('glacier', { text: 'Escale technique à Station Glacier : arrête-toi et fais le plein (K) !' }),
+      land('glacier', { text: 'Escale technique à Station Glacier : arrête-toi, coupe le moteur (E) et fais le plein (K) !' }),
       ring(P(4000, -28000), 150, { size: 40 }),
       ring(PHARE_N, 200, { size: 40, text: 'Salue le gardien : anneau au-dessus du Phare du Nord' }),
       ring(P(19000, -26000), 100, { size: 40 }),
@@ -167,7 +167,7 @@ export default [
       ...arc(PHARE_S, 600, 0, 180, 5, 120),
       reach(PHARE_O, 800, 'Phare de l\'Ouest', { text: 'Cap au nord-ouest : rejoins le Phare de l\'Ouest (le massif sur la route culmine à 1 900 m, la côte est plus sûre)' }),
       ...arc(PHARE_O, 600, 45, 225, 5, 120),
-      land('azur', { text: 'Escale à Port Azur : arrête-toi et refais le plein (K). Le Phare du Nord est à 44 km, derrière des sommets de 2 000 m' }),
+      land('azur', { text: 'Escale à Port Azur : arrête-toi, coupe le moteur (E) et refais le plein (K). Le Phare du Nord est à 44 km, derrière des sommets de 2 000 m' }),
       ...arc(PHARE_N, 600, 225, 405, 5, 120),
       land('nord', { text: 'Pose-toi à Cap Nord : les trois gardiens te saluent !' }),
     ],

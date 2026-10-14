@@ -114,6 +114,20 @@ function checkStep(file, q, st, i) {
       if (!num(st.distance) || st.distance < 300 || st.distance > 2000) err(file, q, `${where} : distance hors de [300, 2000]`);
       if (!num(st.duration) || st.duration < 10 || st.duration > 120) err(file, q, `${where} : duration hors de [10, 120]`);
       if (!st.label) err(file, q, `${where} : label manquant`);
+      // une montgolfière qui frôle le relief mène au crash
+      if (hasBalloon && BALLOONS[st.balloon]) {
+        const b = BALLOONS[st.balloon];
+        let maxG = 0;
+        for (let k = 0; k < 24; k++) {
+          const a = (k / 24) * Math.PI * 2;
+          for (const rr of [b.radius - st.distance, b.radius, b.radius + st.distance]) {
+            maxG = Math.max(maxG, ground(b.x + Math.cos(a) * Math.max(0, rr), b.z + Math.sin(a) * Math.max(0, rr)));
+          }
+        }
+        // le joueur peut voler jusqu'à 500 m au-dessus/au-dessous du ballon : il faut une altitude sûre dans cette fenêtre
+        if (maxG + 150 > b.alt + 450) err(file, q, `${where} : aucune altitude sûre pour suivre la montgolfière ${st.balloon} (vol à ${Math.round(b.alt)} m, relief à ${Math.round(maxG)} m)`);
+        else if (maxG + 150 > b.alt - 25) warn(file, q, `${where} : relief à ${Math.round(maxG)} m sous la montgolfière ${st.balloon} (${Math.round(b.alt)} m) : le joueur doit rester au-dessus d'elle — le texte doit le dire`);
+      }
       break;
     }
   }

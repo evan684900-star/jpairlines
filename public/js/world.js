@@ -303,6 +303,15 @@ export const BALLOONS = (() => {
     const c = findFlat((r() - 0.5) * 50000, (r() - 0.5) * 50000, 6000);
     out.push({ x: c.x, z: c.z, alt: c.y + 300 + r() * 600, radius: 300 + r() * 900, phase: r() * 6.28, speed: 0.01 + r() * 0.01, color: Math.floor(r() * 6) });
   }
+  // une montgolfière vole toujours au moins 250 m au-dessus du relief de tout son circuit
+  for (const b of out) {
+    let relief = 0;
+    for (let k = 0; k < 36; k++) {
+      const a = (k / 36) * Math.PI * 2;
+      for (const rr of [0, b.radius * 0.5, b.radius, b.radius + 300]) relief = Math.max(relief, terrainHeight(b.x + Math.cos(a) * rr, b.z + Math.sin(a) * rr));
+    }
+    b.alt = Math.max(b.alt, relief + 250);
+  }
   return out;
 })();
 
@@ -315,6 +324,23 @@ export const WIND_FARMS = (() => {
   }
   return out;
 })();
+
+// Éoliennes réellement construites d'un parc : sur la terre ferme, loin des aéroports et des villes,
+// et jamais dans l'axe d'approche d'une piste. Utilisé par l'affichage ET par les quêtes.
+export function turbinePositions(farmIndex) {
+  const f = WIND_FARMS[farmIndex];
+  if (!f) return [];
+  const out = [];
+  for (let i = 0; i < f.n; i++) {
+    const x = f.x + Math.cos(f.heading) * (i - f.n / 2) * 220, z = f.z + Math.sin(f.heading) * (i - f.n / 2) * 220;
+    if (terrainHeight(x, z) < 5) continue;
+    if (AIRPORTS.some((a) => Math.hypot(x - a.x, z - a.z) < a.length / 2 + a.pad + 500)) continue;
+    if (CITIES.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius + 200)) continue;
+    if (AIRPORTS.some((a) => { const { u, v } = runwayLocal(a, x, z); return Math.abs(u) < 450 && Math.abs(v) < a.length / 2 + 3500; })) continue;
+    out.push({ x, z });
+  }
+  return out;
+}
 
 // ---------- Positions des objets mobiles (horloge commune t en secondes) ----------
 // Tous les joueurs voient les bateaux et montgolfières au même endroit.

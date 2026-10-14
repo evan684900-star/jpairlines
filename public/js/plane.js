@@ -297,8 +297,9 @@ export class Plane {
     let dr = this.ctrl.yaw;
     const airborne = !this.onGround;
     if (airborne) {
-      if (diff.wingLeveler && Math.abs(input.roll) < 0.1) {
-        const bank = Math.atan2(-_right.y, _up.y); // > 0 = incliné à droite
+      const bank = Math.atan2(-_right.y, _up.y); // > 0 = incliné à droite
+      // le stabilisateur de roulis se désengage au-delà de 60° (voltige, vol sur le dos)
+      if (diff.wingLeveler && Math.abs(input.roll) < 0.1 && Math.abs(bank) < 1.05) {
         da += clamp(-bank * 1.2 * diff.wingLeveler - pr * 0.3, -0.6, 0.6);
       }
       if (diff.autoCoord && Math.abs(input.yaw) < 0.1) dr += clamp(beta * 6 * diff.autoCoord, -1, 1);

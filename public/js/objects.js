@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   WORLD, AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
-  terrainHeight, groundHeight, rng, shipPosition, balloonPosition,
+  terrainHeight, groundHeight, rng, shipPosition, balloonPosition, turbinePositions,
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
@@ -428,11 +428,8 @@ function buildWindFarms(scene, anim) {
   const towerGeo = new THREE.CylinderGeometry(1.2, 2.2, 80, 8).translate(0, 40, 0);
   const white = lambert(0xf2f4f6);
   const bladeGeo = new THREE.BoxGeometry(1.4, 36, 0.4).translate(0, 18, 0);
-  for (const f of WIND_FARMS) {
-    for (let i = 0; i < f.n; i++) {
-      const x = f.x + Math.cos(f.heading) * (i - f.n / 2) * 220, z = f.z + Math.sin(f.heading) * (i - f.n / 2) * 220;
-      const h = terrainHeight(x, z);
-      if (h < 5 || nearInfrastructure(x, z)) continue;
+  WIND_FARMS.forEach((f, fi) => {
+    turbinePositions(fi).forEach(({ x, z }, i) => {
       const g = new THREE.Group();
       g.position.set(x, groundHeight(x, z) - 1, z);
       g.add(new THREE.Mesh(towerGeo, white));
@@ -450,13 +447,8 @@ function buildWindFarms(scene, anim) {
       scene.add(g);
       const sp = 0.8 + (i % 3) * 0.1;
       anim.push((dt) => { rotor.rotation.z += dt * sp; });
-    }
-  }
-}
-
-function nearInfrastructure(x, z) {
-  return AIRPORTS.some((a) => Math.hypot(x - a.x, z - a.z) < a.length / 2 + a.pad + 500)
-    || CITIES.some((c) => Math.hypot(x - c.x, z - c.z) < c.radius + 200);
+    });
+  });
 }
 
 // ---------- Construction globale ----------

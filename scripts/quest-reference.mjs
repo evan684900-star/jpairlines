@@ -17,8 +17,8 @@ if (Number.isFinite(qx)) {
   process.exit(0);
 }
 console.log(`Carte : de ${-HALF} à ${HALF} m en x et z. Nord = -z, Est = +x. Mer = altitude < 0.`);
-console.log('\nAÉROPORTS (id, nom, type, x, z, altitude, cap de piste en degrés, longueur)');
-for (const a of AIRPORTS) console.log(`  ${a.id.padEnd(9)} ${a.name.padEnd(24)} ${a.type.padEnd(13)} x=${r(a.x)} z=${r(a.z)} alt=${a.elev} cap=${r((a.heading * 180) / Math.PI)} L=${a.length}`);
+console.log('\nAÉROPORTS (id, nom, type, x, z, altitude, orientation de la piste au compas (les deux sens), longueur)');
+for (const a of AIRPORTS) console.log(`  ${a.id.padEnd(9)} ${a.name.padEnd(24)} ${a.type.padEnd(13)} x=${r(a.x)} z=${r(a.z)} alt=${a.elev} piste=${String(Math.round(((180 - (a.heading * 180) / Math.PI) % 360 + 360) % 360)).padStart(3, '0')}°/${String(Math.round(((360 - (a.heading * 180) / Math.PI) % 360 + 360) % 360)).padStart(3, '0')}° L=${a.length}`);
 console.log('\nLIEUX (id, nom, type, x, z, altitude du sol)');
 for (const l of LANDMARKS) console.log(`  ${l.id.padEnd(12)} ${l.name.padEnd(24)} ${l.type.padEnd(11)} x=${r(l.x)} z=${r(l.z)} sol=${r(terrainHeight(l.x, l.z))}`);
 console.log('\nVILLES (nom, x, z, rayon)');

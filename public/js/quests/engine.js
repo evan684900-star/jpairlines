@@ -2,7 +2,7 @@
 // missions de transport du jour et rangs de pilote.
 import * as THREE from 'three';
 import {
-  AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, terrainHeight, airportById, onRunway, shipPosition, balloonPosition, rng,
+  AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, terrainHeight, airportById, shipPosition, balloonPosition, rng, runwayLocal,
 } from '../world.js';
 import { QUESTS } from './index.js';
 import { CATEGORIES, RANKS, nextTo } from './kit.js';
@@ -136,6 +136,7 @@ const ringNextMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: 
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.3, depthWrite: false, fog: false, toneMapped: false });
 const giverMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.28, depthWrite: false, fog: false, toneMapped: false });
 const targetMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+const aimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false });
 
 export class QuestSystem {
   // ctx : { scene, plane, getSave, persist, toast, beep, logMsg, setPaused }
@@ -344,7 +345,7 @@ export class QuestSystem {
       case 'land': return `Pose-toi et arrête-toi à ${airportById(st.airport).name}`;
       case 'touch': return `Toucher-décoller à ${airportById(st.airport).name} (touche la piste puis remets les gaz)`;
       case 'reach': return `Rejoins : ${st.label}${st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : ''}${st.minAgl ? ` (au moins ${st.minAgl} m au-dessus du sol)` : ''}`;
-      case 'drop': return `Largue le colis (X) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''}`;
+      case 'drop': return `Largue le colis (X) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''} · vise avec la croix blanche`;
       case 'altitude': return `Monte au-dessus de ${st.min} m`;
       case 'speed': return `Atteins ${kmh(st.min)}`;
       case 'low': return `Vole à moins de ${st.maxAgl} m du sol pendant ${st.duration} s${st.label ? ` (${st.label})` : ''}`;
@@ -381,6 +382,14 @@ export class QuestSystem {
       if (st.type === 'drop') {
         const tgt = this.add(new THREE.Mesh(new THREE.RingGeometry(st.radius * 0.85, st.radius, 48).rotateX(-Math.PI / 2), targetMat));
         tgt.position.set(p.x, p.y + 1.5, p.z);
+        // croix de visée : point d'impact prévu du colis
+        const cross = new THREE.Group();
+        for (const r of [0, Math.PI / 2]) {
+          const bar = new THREE.Mesh(new THREE.PlaneGeometry(40, 6).rotateX(-Math.PI / 2).rotateY(r + Math.PI / 4), aimMat);
+          cross.add(bar);
+        }
+        cross.visible = false;
+        A.aimMarker = this.add(cross);
       }
     }
     if (st.spawn && p) {
@@ -449,17 +458,35 @@ export class QuestSystem {
       case 'ring': done = pos.distanceTo(p) < (st.size || 30) + 4; break;
       case 'land': done = !A.needAirborne && plane.landedAt?.id === st.airport; break;
       case 'touch': {
-        if (!A.needAirborne && plane.onGround && onRunway(pos.x, pos.z)?.id === st.airport) A.touched = true;
-        done = A.touched && (airborne || plane.landedAt?.id === st.airport);
+        // il faut toucher la piste elle-même (pas le parking), puis redécoller
+        if (!A.needAirborne && plane.onGround) {
+          const a = airportById(st.airport);
+          const { u, v } = runwayLocal(a, pos.x, pos.z);
+          if (Math.abs(u) < a.width / 2 + 5 && Math.abs(v) < a.length / 2 + 20) A.touched = true;
+        }
+        done = A.touched && airborne && agl > 5;
+        if (A.touched && !airborne) progress = 0.5;
         break;
       }
       case 'reach': done = hd < st.radius && (!st.maxAgl || agl < st.maxAgl) && (!st.minAgl || agl > st.minAgl); break;
       case 'drop': {
+        // le colis est jugé là où il touche le sol (trajectoire balistique), comme en vrai
+        A.aimTimer = (A.aimTimer || 0) - dt;
+        if (A.aimTimer <= 0 || this.dropRequested) {
+          A.aimTimer = 0.15;
+          A.impact = this.predictImpact();
+          if (A.aimMarker) {
+            A.aimMarker.visible = airborne && Math.hypot(A.impact.x - p.x, A.impact.z - p.z) < 3000;
+            A.aimMarker.position.set(A.impact.x, A.impact.y + 1.2, A.impact.z);
+          }
+        }
         if (this.dropRequested) {
           this.dropRequested = false;
           this.spawnDrop();
-          if (hd < st.radius && (!st.maxAgl || agl < st.maxAgl)) done = true;
-          else this.logMsg(hd >= st.radius ? `Raté ! La cible est à ${fmtDist(hd)}` : `Trop haut ! Descends sous ${st.maxAgl} m`);
+          const miss = Math.hypot(A.impact.x - p.x, A.impact.z - p.z);
+          if (st.maxAgl && agl >= st.maxAgl) this.logMsg(`Trop haut ! Descends sous ${st.maxAgl} m du sol`);
+          else if (miss < st.radius) done = true;
+          else this.logMsg(`Raté ! Le colis tombe à ${fmtDist(miss)} de la cible`);
         }
         break;
       }
@@ -515,6 +542,21 @@ export class QuestSystem {
     } else bar.classList.add('hidden');
 
     if (done) this.completeStep();
+  }
+
+  // trajectoire du colis : même dynamique que updateDrops (gravité + freinage de l'air)
+  predictImpact() {
+    const pos = this.plane.pos.clone().add(new THREE.Vector3(0, -1.5, 0));
+    const vel = this.plane.velocity.clone().multiplyScalar(0.9);
+    const h = 0.05;
+    for (let i = 0; i < 1200; i++) {
+      vel.y -= 9.81 * h;
+      vel.multiplyScalar(1 - 0.15 * h);
+      pos.addScaledVector(vel, h);
+      const g = ground(pos.x, pos.z);
+      if (pos.y < g + 0.7) { pos.y = g; break; }
+    }
+    return pos;
   }
 
   spawnDrop() {

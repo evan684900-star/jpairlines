@@ -23,7 +23,8 @@
 // land     { type:'land', airport }                   se poser et s'arrêter sur la piste
 // touch    { type:'touch', airport }                  toucher-décoller : toucher la piste puis redécoller sans s'arrêter
 // reach    { type:'reach', x, z, radius, label, maxAgl?, minAgl? }   passer dans une zone
-// drop     { type:'drop', x, z, radius, label, maxAgl? }             larguer un colis (touche X) dans une zone
+// drop     { type:'drop', x, z, radius, label, maxAgl? }             larguer un colis (touche X) : réussi si le colis TOMBE dans
+//                                                      la zone (trajectoire balistique : il faut lâcher ~150-250 m avant)
 // altitude { type:'altitude', min }                   monter au-dessus de min mètres (altitude absolue)
 // speed    { type:'speed', min }                      atteindre min km/h (≈245 km/h en palier, plus en piqué)
 // low      { type:'low', maxAgl, duration, label?, x?, z?, radius? }  voler à moins de maxAgl m du sol pendant duration s
@@ -38,7 +39,7 @@
 
 import {
   AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO, HALF,
-  airportById, landmarkById, terrainHeight, runwayPoint, findCoast, findSea, findPeak, findFlat,
+  airportById, landmarkById, terrainHeight, runwayPoint, findCoast, findSea, findPeak, findFlat, turbinePositions,
 } from '../world.js';
 
 export { AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO, HALF, terrainHeight, findCoast, findSea, findPeak, findFlat };
@@ -185,15 +186,10 @@ export function terrainFollow(rings, clearance = 150, maxSlope = 0.25) {
   });
 }
 
-// Positions des éoliennes d'un parc (index dans WIND_FARMS), seulement celles sur la terre ferme.
+// Positions des éoliennes d'un parc (index dans WIND_FARMS) réellement visibles dans le jeu :
+// sur la terre ferme, loin des aéroports, des villes et des axes d'approche (même règle que l'affichage).
 // Hauteur : mât 80 m + pales 36 m → passer à côté, ou au-dessus de 150 m.
 export function windTurbines(farmIndex) {
-  const f = WIND_FARMS[farmIndex];
-  if (!f) throw new Error(`Parc éolien inconnu : ${farmIndex}`);
-  const out = [];
-  for (let i = 0; i < f.n; i++) {
-    const x = f.x + Math.cos(f.heading) * (i - f.n / 2) * 220, z = f.z + Math.sin(f.heading) * (i - f.n / 2) * 220;
-    if (terrainHeight(x, z) >= 5) out.push({ x, z });
-  }
-  return out;
+  if (!WIND_FARMS[farmIndex]) throw new Error(`Parc éolien inconnu : ${farmIndex}`);
+  return turbinePositions(farmIndex);
 }
