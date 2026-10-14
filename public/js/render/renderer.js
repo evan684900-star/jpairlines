@@ -1,7 +1,7 @@
 // Chef d'orchestre du rendu : moteur WebGL, scène, ciel, nuages, météo, heure, post-traitement,
 // résolution adaptative. Ne touche jamais à la simulation : il lit seulement l'état de l'avion.
 import * as THREE from 'three';
-import { installShaderExtensions, U } from './shared.js';
+import { installShaderExtensions, U, NIGHT_GLOWS } from './shared.js';
 import { renderConfig, ART, LAYERS } from './config.js';
 import { buildTextures } from './textures.js';
 import { buildWorldHeightTexture } from './heightmap.js';
@@ -147,6 +147,8 @@ export class GameRenderer {
     U.jpWet.value += ((w.rain > 0.2 ? 1 : 0) - U.jpWet.value) * Math.min(1, dt * (w.rain > 0.2 ? 0.05 : 0.01));
     this.water?.update(dt, this.camera, w, this.weather.windDir, this.terrain.version);
     this.renderer.toneMappingExposure = this.atmo.exposure;
+    const glow = Math.min(1, Math.max(0, (this.atmo.night - 0.3) / 0.5)) + w.darken * 0.4;
+    for (const m of NIGHT_GLOWS) m.opacity = Math.min(1, glow);
     this.atmo.follow(focus, this.camera.position, this.camera.far);
     return w;
   }

@@ -6,7 +6,7 @@ import {
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
 import { createBuildingMaterial } from './render/materials.js';
-import { TEX } from './render/textures.js';
+import { TEX, glowPoints } from './render/textures.js';
 
 const lambert = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, ...extra });
 
@@ -127,7 +127,7 @@ function createAirliner(color) {
 
 const TERMINAL_MAT = createBuildingMaterial({ floor: 4.5, bay: 4, glass: 0.95 });
 
-function buildAirport(scene, a, r) {
+function buildAirport(scene, a, r, anim) {
   const g = new THREE.Group();
   g.position.set(a.x, a.elev, a.z);
   g.rotation.y = a.heading; // axe local X = travers (u), axe local Z = piste (v)
@@ -181,6 +181,11 @@ function buildAirport(scene, a, r) {
   const cab = new THREE.Mesh(new THREE.CylinderGeometry(7, 6, 6, 8), glass);
   cab.position.set(bx - 20, towerH + 3, apronLen / 2 + 20);
   g.add(tw, cab);
+  // phare tournant de l'aéroport (vert/blanc) sur la tour, visible la nuit
+  const beacon = glowPoints([0, 0, 0], 0xffffff, 14);
+  beacon.position.set(bx - 20, towerH + 8, apronLen / 2 + 20);
+  g.add(beacon);
+  anim.push((dt, t) => { beacon.material.color.setHex(Math.floor(t * 0.8) % 2 ? 0x3dff7a : 0xffffff).multiplyScalar(4); beacon.visible = t % 1.25 < 0.25; });
   // pompe à essence
   const pump = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 6), lambert(0xd83a2e));
   pump.position.set(a.width / 2 + 100, 2, -40);
@@ -193,23 +198,28 @@ function buildAirport(scene, a, r) {
   const sock = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4, 8).rotateZ(Math.PI / 2), lambert(0xff7a1a));
   sock.position.set(-a.width / 2 - 28, 7.5, -a.length / 2 + 150);
   g.add(pole, sock);
-  // balisage lumineux le long de la piste
-  if (!grass) {
+  // balisage lumineux : bords de piste (blanc chaud), seuils (vert), halos visibles la nuit
+  {
     const lampGeo = new THREE.BoxGeometry(0.8, 0.5, 0.8);
     const n = Math.floor(a.length / 60);
-    const lamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: 0xfff1a8 }), n * 2);
+    const lamps = new THREE.InstancedMesh(lampGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff1a8).multiplyScalar(2) }), n * 2);
     const m = new THREE.Matrix4();
+    const edge = [], ends = [];
     for (let i = 0; i < n; i++) {
       const v = -a.length / 2 + 30 + i * 60;
       lamps.setMatrixAt(i * 2, m.makeTranslation(a.width / 2 + 3, 0.4, v));
       lamps.setMatrixAt(i * 2 + 1, m.makeTranslation(-a.width / 2 - 3, 0.4, v));
+      edge.push(a.width / 2 + 3, 1.6, v, -a.width / 2 - 3, 1.6, v);
     }
-    g.add(lamps);
+    for (const v of [-a.length / 2 - 2, a.length / 2 + 2]) {
+      for (let k = 0; k <= 8; k++) ends.push(-a.width / 2 + (k / 8) * a.width, 1.6, v);
+    }
+    g.add(lamps, glowPoints(edge, 0xffe2a6, 3.2), glowPoints(ends, 0x3dff7a, 3.2));
   }
   // petits avions garés
   const nParked = a.type === 'strip' ? 1 : 3;
   for (let i = 0; i < nParked; i++) {
-    const p = createPlaneMesh([0xf2d24b, 0x8fd0ff, 0xffffff, 0xff9b8f][Math.floor(r() * 4)], 0x2a4bd8);
+    const p = createPlaneMesh([0xf2d24b, 0x8fd0ff, 0xffffff, 0xff9b8f][Math.floor(r() * 4)], 0x2a4bd8, { detail: false });
     p.position.set(a.width / 2 + 40, 1.55, -apronLen / 2 + 130 + i * 20);
     p.rotation.y = -Math.PI / 2;
     g.add(p);
@@ -231,6 +241,7 @@ function buildCities(scene) {
   const col = new THREE.Color();
   const r = rng(7);
   let n = 0;
+  const lamps = [];
   for (const c of CITIES) {
     const grid = 60;
     const angle = r() * Math.PI;
@@ -248,12 +259,16 @@ function buildCities(scene) {
       mesh.setMatrixAt(n, m);
       mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
       n++;
+      // lampadaires dans la rue voisine
+      const lx = gx + grid / 2, lz = gz + grid / 2;
+      const wx = c.x + lx * Math.cos(angle) - lz * Math.sin(angle), wz = c.z + lx * Math.sin(angle) + lz * Math.cos(angle);
+      lamps.push(wx, groundHeight(wx, wz) + 7, wz);
     }
     addLabel(scene, c.name, c.x, terrainHeight(c.x, c.z) + 300, c.z, 18000, { color: '#ffffff', size: 0.027 });
   }
   mesh.count = n;
   mesh.computeBoundingSphere();
-  scene.add(mesh);
+  scene.add(mesh, glowPoints(lamps, 0xffb060, 9));
 }
 
 // ---------- Points d'intérêt ----------
@@ -456,7 +471,7 @@ function buildWindFarms(scene, anim) {
 export function buildWorldObjects(scene) {
   const anim = [];
   const r = rng(4242);
-  for (const a of AIRPORTS) buildAirport(scene, a, r);
+  for (const a of AIRPORTS) buildAirport(scene, a, r, anim);
   buildCities(scene);
   for (const l of LANDMARKS) buildLandmark(scene, l, anim);
   buildShips(scene, anim);

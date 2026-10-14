@@ -20,6 +20,10 @@ export const U = {
   jpCloudShadow: { value: 0.75 },
 };
 
+// Matériaux de halos lumineux qui ne s'allument que la nuit (balisage, lampadaires…) :
+// le moteur de rendu règle leur opacité selon la nuit
+export const NIGHT_GLOWS = new Set();
+
 // Ajoute les uniforms partagés à un shader (à appeler dans un onBeforeCompile personnalisé)
 export function injectShared(shader) {
   Object.assign(shader.uniforms, U);

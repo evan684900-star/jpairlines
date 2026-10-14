@@ -9,6 +9,7 @@ import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm, FUEL_SCALE } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
 import { GameRenderer } from './render/renderer.js';
+import { CameraRig } from './render/cameras.js';
 import { QuestSystem } from './quests/engine.js';
 
 const $ = (id) => document.getElementById(id);
@@ -42,7 +43,7 @@ function applySettings(key) {
 
 // ================= Joueur =================
 const plane = new Plane();
-const planeMesh = createPlaneMesh();
+const planeMesh = createPlaneMesh(undefined, undefined, { landingLight: true });
 scene.add(planeMesh);
 
 // ================= Sauvegarde =================
@@ -149,9 +150,8 @@ function beep(freq, dur, vol = 0.15) {
 
 // ================= Entrées =================
 const keys = new Set();
-let camMode = 0;
-let camDist = 19;
-const orbit = { yaw: 0, pitch: 0, dragging: false };
+const rig = new CameraRig(camera);
+const orbit = rig.orbit;
 let paused = false;
 let started = false;
 
@@ -180,7 +180,7 @@ addEventListener('keydown', (e) => {
   if (k === 'j' && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (k === 'h') $('help').classList.toggle('hidden');
   if (paused) return;
-  if (k === 'c') camMode = (camMode + 1) % 2;
+  if (k === 'c') { rig.next(); toast(`Caméra : ${rig.modeName}`); }
   if (k === 'r') respawn();
   if (k === 'enter' && quests?.canOpenBoard()) quests.openBoard();
   if (k === 'x') quests?.requestDrop();
@@ -203,7 +203,7 @@ canvas.addEventListener('pointermove', (e) => {
   orbit.yaw -= e.movementX * 0.006;
   orbit.pitch = THREE.MathUtils.clamp(orbit.pitch - e.movementY * 0.004, -0.6, 1.2);
 });
-canvas.addEventListener('wheel', (e) => { camDist = THREE.MathUtils.clamp(camDist * (e.deltaY > 0 ? 1.12 : 0.89), 9, 120); }, { passive: true });
+canvas.addEventListener('wheel', (e) => { rig.dist = THREE.MathUtils.clamp(rig.dist * (e.deltaY > 0 ? 1.12 : 0.89), 9, 120); }, { passive: true });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
@@ -261,7 +261,7 @@ function respawn(airport, teleport = false) {
   const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : SPECS.fuelCapacity;
   plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
   plane.fuel = keepFuel;
-  camQuat.copy(plane.quat);
+  rig.reset(plane);
   $('crash').classList.add('hidden');
   if (far) {
     terrain.buildAround(plane.pos.x, plane.pos.z, 3);
@@ -496,37 +496,7 @@ function netTick(now) {
   }));
 }
 
-// ================= Caméra / HUD =================
-const camQuat = new THREE.Quaternion();
-const camOffset = new THREE.Vector3();
-const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.09);
-const orbitQ = new THREE.Quaternion();
-const orbitE = new THREE.Euler();
-const viewQ = new THREE.Quaternion();
-
-function updateCamera(dt) {
-  if (!orbit.dragging) {
-    orbit.yaw *= Math.exp(-dt * 1.5);
-    orbit.pitch *= Math.exp(-dt * 1.5);
-  }
-  orbitQ.setFromEuler(orbitE.set(-orbit.pitch, orbit.yaw, 0, 'YXZ'));
-  if (camMode === 0) {
-    camQuat.slerp(plane.quat, 1 - Math.exp(-dt * 4));
-    viewQ.copy(camQuat).multiply(orbitQ);
-    camOffset.set(0, camDist * 0.24, camDist).applyQuaternion(viewQ);
-    camera.position.copy(plane.pos).add(camOffset);
-    camera.quaternion.copy(viewQ).multiply(tilt);
-  } else {
-    camQuat.copy(plane.quat);
-    camOffset.set(0, 1.1, -0.9).applyQuaternion(plane.quat);
-    camera.position.copy(plane.pos).add(camOffset);
-    camera.quaternion.copy(plane.quat).multiply(orbitQ);
-  }
-  planeMesh.visible = camMode === 0 || plane.crashed;
-  const g = Math.max(0, groundHeight(camera.position.x, camera.position.z)) + 1.5;
-  if (camera.position.y < g) camera.position.y = g;
-}
-
+// ================= HUD =================
 const setSys = (id, cls) => { const el = $(id); el.classList.remove('on', 'warn', 'bad'); if (cls) el.classList.add(cls); };
 let warnKey = '';
 
@@ -631,10 +601,10 @@ function frame(now) {
 
     planeMesh.position.copy(plane.pos);
     planeMesh.quaternion.copy(plane.quat);
-    animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights }, realDt, wallT);
+    animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
     updatePrompt();
-    updateCamera(realDt);
+    rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: 0 });
     updateHUD();
     netTick(now);
 
@@ -730,4 +700,4 @@ $('start').onclick = () => {
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, gfx, camera, quests: () => quests };
+window.jp = { plane, renderer, settings, gfx, camera, rig, planeMesh, quests: () => quests };

@@ -123,12 +123,13 @@ export function createBuildingMaterial({ floor = 3.4, bay = 3.2, glass = 0.55 } 
     injectShared(shader);
     injectWorld(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nfloat jpWin;\nfloat jpHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
+      .replace('#include <common>', '#include <common>\nuniform float jpNight;\nfloat jpWin;\nfloat jpLit;\nfloat jpHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
       .replace('#include <color_fragment>', /* glsl */`
         #include <color_fragment>
         {
           vec3 n = normalize(vWNormal);
           jpWin = 0.0;
+          jpLit = 0.0;
           if (n.y > 0.7) {
             diffuseColor.rgb *= 0.55; // toit
           } else if (abs(n.y) < 0.3) {
@@ -139,13 +140,19 @@ export function createBuildingMaterial({ floor = 3.4, bay = 3.2, glass = 0.55 } 
             float rnd = jpHash(floor(cell) + floor(vWPos.xz / 50.0));
             w *= step(${(1 - glass).toFixed(2)}, rnd + 0.4);
             jpWin = w;
+            // la nuit, une partie des fenêtres s'allume (couleurs chaudes variées)
+            jpLit = w * step(0.45, jpHash(floor(cell) * 1.7 + 3.1));
             vec3 glassCol = mix(vec3(0.07, 0.09, 0.12), vec3(0.32, 0.38, 0.45), rnd);
             diffuseColor.rgb = mix(diffuseColor.rgb * (0.92 + rnd * 0.1), glassCol, w);
           }
         }
       `)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.08, jpWin);')
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.6, jpWin);');
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.6, jpWin);')
+      .replace('#include <emissivemap_fragment>', /* glsl */`
+        #include <emissivemap_fragment>
+        totalEmissiveRadiance += jpLit * smoothstep(0.35, 0.9, jpNight) * mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), jpHash(vWPos.xz * 0.37)) * 3.0;
+      `);
   };
   return mat;
 }

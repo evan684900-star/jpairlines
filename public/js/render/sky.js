@@ -26,7 +26,7 @@ function makeStars(count = 4200) {
     if (i % 3 === 0) v.set(r() * 2 - 1, (r() - 0.5) * 0.18, r() * 2 - 1).applyAxisAngle(new THREE.Vector3(1, 0, 0.3).normalize(), 1.1);
     v.normalize();
     pos.set([v.x, v.y, v.z], i * 3);
-    mag[i] = Math.pow(r(), 6) * 3 + 0.4;
+    mag[i] = Math.pow(r(), 8) * 2.5 + 0.25;
     tint[i] = r();
   }
   const g = new THREE.BufferGeometry();
@@ -47,7 +47,7 @@ function makeStars(count = 4200) {
         float tw = 0.75 + 0.25 * sin(time * (1.5 + tint * 4.0) + tint * 60.0);
         vB = mag * tw * smoothstep(-0.05, 0.25, position.y);
         vT = tint;
-        gl_PointSize = (1.2 + mag * 0.9) * pr;
+        gl_PointSize = (1.0 + mag * 0.6) * pr;
       }`,
     fragmentShader: /* glsl */`
       uniform float opacity; varying float vB; varying float vT;
@@ -55,7 +55,7 @@ function makeStars(count = 4200) {
         vec2 c = gl_PointCoord - 0.5;
         float a = smoothstep(0.5, 0.0, length(c));
         vec3 col = mix(vec3(0.75, 0.82, 1.0), vec3(1.0, 0.86, 0.7), vT);
-        gl_FragColor = vec4(col * vB * a * opacity * 2.5, 1.0);
+        gl_FragColor = vec4(col * vB * a * opacity * 0.9, 1.0);
       }`,
   });
   const p = new THREE.Points(g, m);

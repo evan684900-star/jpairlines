@@ -2,6 +2,7 @@
 // détails du sol, roche, eau, bouffées de nuages.
 import * as THREE from 'three';
 import { rng } from '../world.js';
+import { NIGHT_GLOWS } from './shared.js';
 
 const fade = (t) => t * t * (3 - 2 * t);
 
@@ -96,7 +97,37 @@ export function buildTextures() {
   TEX.cloudVeil = dataTexture(S, contrast(veil, 1.3), contrast(wisp, 1.2), veil);
   // bouffée de nuage simple (fumée, poussière…) et atlas de bouffées éclairables
   TEX.puff = puffTexture();
+  TEX.glow = glowTexture();
   TEX.cloudAtlas = cloudAtlas();
+}
+
+// halo d'une lampe (balisage, lampadaires, feux)
+function glowTexture() {
+  const S = 64, cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const ctx = cv.getContext('2d');
+  const gr = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  gr.addColorStop(0, 'rgba(255,255,255,1)');
+  gr.addColorStop(0.12, 'rgba(255,255,255,0.75)');
+  gr.addColorStop(0.35, 'rgba(255,255,255,0.18)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gr;
+  ctx.fillRect(0, 0, S, S);
+  return new THREE.CanvasTexture(cv);
+}
+
+// nuage de points lumineux (halos), allumés la nuit seulement
+export function glowPoints(positions, color, size) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const m = new THREE.PointsMaterial({
+    map: TEX.glow, color: new THREE.Color(color).multiplyScalar(2.5), size, sizeAttenuation: true,
+    transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  NIGHT_GLOWS.add(m);
+  const pts = new THREE.Points(g, m);
+  pts.renderOrder = 4;
+  return pts;
 }
 
 function puffTexture() {
