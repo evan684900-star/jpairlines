@@ -38,6 +38,7 @@
       <div><span class="lbl">SOL</span><b id="agl">0</b> <small class="u-alt2">m</small></div>
       <div><span class="lbl">VARIO</span><b id="vs">0</b> <small id="u-vs">m/s</small></div>
       <div><span class="lbl">CAP</span><b id="hdg">000</b>°</div>
+      <div><span class="lbl">FACTEUR</span><b id="gload">1.0</b> g</div>
       <div class="bar-row"><span class="lbl">GAZ</span><div class="bar"><div id="thr"></div></div></div>
       <div class="bar-row"><span class="lbl">RÉGIME</span><div class="bar"><div id="rpm" class="rpm"></div></div></div>
       <div class="bar-row"><span class="lbl">CARBURANT</span><div class="bar"><div id="fuel" class="fuel"></div></div></div>
@@ -130,7 +131,7 @@
       <tr><td><kbd>Espace</kbd></td><td>Freins (maintenir)</td></tr>
       <tr><td><kbd>P</kbd></td><td>Frein de parking</td></tr>
       <tr><td><kbd>L</kbd></td><td>Feux de navigation</td></tr>
-      <tr><td><kbd>K</kbd></td><td>Faire le plein (arrêté dans un aéroport)</td></tr>
+      <tr><td><kbd>K</kbd> (maintenir)</td><td>Faire le plein : arrêté dans un aéroport, moteur coupé (1 ₣ le litre)</td></tr>
       <tr><th colspan="2">Jeu</th></tr>
       <tr><td><kbd>Entrée</kbd></td><td>Tableau des missions (près d'une balise « ! » ou arrêté dans un aéroport)</td></tr>
       <tr><td><kbd>X</kbd></td><td>Larguer un colis (missions de largage)</td></tr>
@@ -139,8 +140,9 @@
       <tr><td><kbd>R</kbd></td><td>Réapparaître au dernier aéroport</td></tr>
       <tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr>
     </table>
-    <p><b>Décollage :</b> <kbd>E</kbd> moteur, <kbd>P</kbd> desserrer le frein, volets 10° (<kbd>F</kbd>), plein gaz, à ~90 km/h tirer doucement (<kbd>↓</kbd>), puis rentrer le train (<kbd>G</kbd>) et les volets (<kbd>V</kbd>).</p>
-    <p><b>Atterrissage :</b> réduire les gaz, sortir le train sous 210 km/h et les volets sous 165 km/h, descendre doucement (moins de 7 m/s), ailes à plat, puis freiner jusqu'à l'arrêt.</p>
+    <p><b>Décollage :</b> <kbd>E</kbd> moteur, <kbd>P</kbd> desserrer le frein, volets 10° (<kbd>F</kbd>), plein gaz, garder l'axe au palonnier ; vers 100 km/h tirer doucement (<kbd>↓</kbd>) pour lever la roue avant, l'avion décolle tout seul. Monter vers 130 km/h, puis rentrer le train (<kbd>G</kbd>) et les volets (<kbd>V</kbd>).</p>
+    <p><b>Atterrissage :</b> réduire les gaz, train sorti sous 210 km/h, volets sous 165 km/h, approche à ~120 km/h en descendant de 3 à 4 m/s, ailes à plat. Juste au-dessus de la piste, cabrer un peu (arrondi) pour toucher doucement (moins de 4 m/s en normal), puis freiner.</p>
+    <p><b>Physique :</b> l'avion vole vraiment (portance, traînée, inertie) : il tourne en s'inclinant, décroche vers 90 km/h (75 km/h volets sortis), monte moins bien en altitude, et accélère en piqué. Le trim (<kbd>T</kbd>/<kbd>B</kbd>) règle la vitesse à laquelle il vole « tout seul ».</p>
   </template>
 
   <div id="crash" class="overlay hidden">

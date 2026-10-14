@@ -6,7 +6,7 @@ import { Plane, createPlaneMesh, animatePlaneMesh, SPECS, DIFFICULTY } from './p
 import { Terrain, terrainColor } from './terrain.js';
 import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
-import { settings, buildSettingsForm } from './settings.js';
+import { settings, buildSettingsForm, FUEL_SCALE } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
 import { buildTextures, Atmosphere } from './graphics.js';
 import { QuestSystem } from './quests/engine.js';
@@ -83,15 +83,22 @@ let quests = null; // créé après le chargement du monde
 
 function updatePrompt() {
   const pr = $('prompt');
-  let html = quests ? quests.prompt() : '';
-  if (plane.crashed) html = '';
-  else if (!html && canRefuel() && plane.fuel < SPECS.fuelCapacity - 0.5) {
-    html = `⛽ Maintiens <kbd>K</kbd> pour faire le plein (${Math.round(plane.fuel)} / ${SPECS.fuelCapacity} L)`;
-  } else if (!html && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
-    html = 'Appuie sur <kbd>E</kbd> pour démarrer le moteur · <kbd>H</kbd> commandes';
-  } else if (!html && plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
-    html = 'Le frein de parking est serré : appuie sur <kbd>P</kbd>';
+  const lines = [];
+  if (!plane.crashed) {
+    const q = quests ? quests.prompt() : '';
+    if (q) lines.push(q);
+    if (atAirportStopped() && plane.fuel < SPECS.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
+      lines.push(canRefuel()
+        ? `⛽ Maintiens <kbd>K</kbd> pour faire le plein : ${Math.round(plane.fuel)} / ${SPECS.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
+        : '⛽ Coupe le moteur (<kbd>E</kbd>) pour faire le plein');
+    }
+    if (!lines.length && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
+      lines.push('Appuie sur <kbd>E</kbd> pour démarrer le moteur · <kbd>H</kbd> commandes');
+    } else if (!lines.length && plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
+      lines.push('Le frein de parking est serré : appuie sur <kbd>P</kbd>');
+    }
   }
+  const html = lines.join('<br>');
   if (pr.innerHTML !== html) pr.innerHTML = html;
   pr.classList.toggle('hidden', !html);
 }
@@ -239,8 +246,37 @@ function readInput() {
   };
 }
 
-function canRefuel() {
+// Carburant : on fait le plein arrêté dans un aéroport, moteur coupé, en payant 1 ₣ le litre.
+// Si on n'a pas d'argent, l'aéroport offre du carburant de secours jusqu'à 40 L.
+const FUEL_PRICE = 1;
+const EMERGENCY_FUEL = 40;
+function atAirportStopped() {
   return plane.onGround && plane.speed < 1 && !plane.crashed && !!plane.landedAt;
+}
+function canRefuel() {
+  return atAirportStopped() && !plane.engineOn && plane.engineStart <= 0;
+}
+let fuelPaid = 0, lastFuelMsg = 0, lastFuelSave = 0;
+function doRefuel(dt) {
+  const free = save.money < FUEL_PRICE && plane.fuel < EMERGENCY_FUEL;
+  if (!free && save.money < FUEL_PRICE) {
+    if (performance.now() - lastFuelMsg > 3000) { lastFuelMsg = performance.now(); logMsg('Plus assez d\'argent pour le carburant !'); }
+    return;
+  }
+  const before = plane.fuel;
+  const added = plane.refuel(dt);
+  if (!added) return;
+  if (free) {
+    plane.fuel = Math.min(plane.fuel, Math.max(before, EMERGENCY_FUEL));
+    return;
+  }
+  fuelPaid += added * FUEL_PRICE;
+  const whole = Math.floor(fuelPaid);
+  if (whole > 0) {
+    save.money = Math.max(0, save.money - whole);
+    fuelPaid -= whole;
+    if (performance.now() - lastFuelSave > 1000) { lastFuelSave = performance.now(); persist(); }
+  }
 }
 
 function respawn(airport, teleport = false) {
@@ -524,7 +560,8 @@ function updateHUD() {
   const ground = Math.max(0, groundHeight(plane.pos.x, plane.pos.z));
   const agl = Math.max(0, plane.pos.y - ground - SPECS.gear);
   const alt = (m) => Math.round(av ? m * 3.281 : m);
-  $('spd').textContent = Math.round(plane.speed * (av ? 1.944 : 3.6));
+  $('spd').textContent = Math.round(plane.ias * (av ? 1.944 : 3.6)); // vitesse indiquée (comme un anémomètre)
+  $('gload').textContent = plane.gLoad.toFixed(1);
   $('alt').textContent = alt(plane.pos.y);
   $('agl').textContent = alt(agl);
   const vs = plane.onGround ? 0 : plane.velocity.y;
@@ -547,13 +584,15 @@ function updateHUD() {
   // alarmes
   const w = [];
   if (!plane.onGround && !plane.crashed) {
-    if (plane.speed < plane.stallSpeed * 1.12) w.push(['DÉCROCHAGE', '']);
+    if (plane.stallWarning) w.push(['DÉCROCHAGE', '']);
     if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0) w.push(['TRAIN !', '']);
-    if (plane.gearPos > 0.3 && plane.speed > SPECS.vGear) w.push(['VITESSE TRAIN', 'amber']);
+    if (plane.gearPos > 0.3 && plane.ias > SPECS.vGear) w.push(['VITESSE TRAIN', 'amber']);
+    if (plane.ias > SPECS.vne) w.push(['SURVITESSE', '']);
+    if (Math.abs(plane.gLoad) > 4) w.push([`${plane.gLoad.toFixed(1)} G`, 'amber']);
     if (agl < 60 && plane.velocity.y < -8) w.push(['TERRAIN', '']);
   }
-  if (plane.flapPos > 0.2 && plane.speed > SPECS.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
-  if (settings.fuel && plane.fuel < SPECS.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < SPECS.fuelCapacity * 0.05 ? '' : 'amber']);
+  if (plane.flapPos > 0.2 && plane.ias > SPECS.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
+  if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < SPECS.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < SPECS.fuelCapacity * 0.05 ? '' : 'amber']);
   const key = w.map((x) => x[0]).join();
   if (key !== warnKey) {
     warnKey = key;
@@ -573,14 +612,14 @@ let mapTimer = 0, labelTimer = 0, placeTimer = 0, stallBeep = 0;
 function simulate(dt) {
   const input = readInput();
   plane.trim = THREE.MathUtils.clamp(plane.trim + input.trim * dt * 0.25, -0.5, 0.5);
-  plane.update(dt, input, { difficulty: settings.difficulty, fuel: settings.fuel, sensitivity: settings.sensitivity });
-  if (input.refuel && canRefuel()) plane.refuel(dt);
+  plane.update(dt, input, { difficulty: settings.difficulty, fuelScale: FUEL_SCALE[settings.fuelMode] ?? 4, sensitivity: settings.sensitivity });
+  if (input.refuel && canRefuel()) doRefuel(dt);
   // limite de la carte : on renvoie l'avion vers le centre
   const lim = HALF * 0.97;
   if (Math.abs(plane.pos.x) > lim || Math.abs(plane.pos.z) > lim) {
     plane.pos.x = THREE.MathUtils.clamp(plane.pos.x, -lim, lim);
     plane.pos.z = THREE.MathUtils.clamp(plane.pos.z, -lim, lim);
-    plane.quat.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI * dt));
+    plane.rotateHeading(Math.PI * dt);
     toast('Limite de la carte — fais demi-tour !');
   }
 }

@@ -23,12 +23,22 @@ function spirale(cx, cz, radius, count, turns, alt0, alt1, phase = 0, extra = {}
   return out;
 }
 
+// Arc d'anneaux autour d'un point c, de a0 à a1 degrés (0 = est, 90 = sud, 180 = ouest, 270 = nord)
+function arc(c, radius, a0, a1, count, agl, extra = {}) {
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const t = ((a0 + ((a1 - a0) * i) / (count - 1)) * Math.PI) / 180;
+    out.push(ring(P(c.x + Math.cos(t) * radius, c.z + Math.sin(t) * radius), agl, extra));
+  }
+  return out;
+}
+
 // ----- lieux -----
 const PHARE_O = L('phare'), PHARE_N = L('phare-nord'), PHARE_S = L('phare-sud');
 const PLAGE_FALAISES = P(-16600, -1100); // plage au nord de la piste des Falaises (~10 m)
 const BOUEE_FALAISES = P(-17900, -3300); // en mer, au large du bout de piste ouest
 const CAMP_VOLCANO = P(24500, 10500); // camp des volcanologues, flanc nord de l'île (~260 m)
-const PRE_BALLONS = P(21912, -421); // pré d'envol des montgolfières, à l'ouest de Port-Levant
+const PRE_BALLONS = P(22300, -2300); // pré d'envol des montgolfières, sur les hauteurs à l'ouest de Port-Levant
 
 // Grand sauvetage en mer du Nord-Est
 const NAUFRAGE = P(28000, -19000); // dernière position connue du voilier Goéland
@@ -109,7 +119,7 @@ export default [
       low(30, 10, 'Passage d\'honneur : moins de 30 m au-dessus de la piste de la Capitale pendant 10 s', {
         x: A('capitale').x, z: A('capitale').z, radius: 1400,
       }),
-      land('capitale', { text: 'Pose-toi à Capitale International : l\'Hélice d\'Or est à toi !' }),
+      land('capitale', { text: 'Pose-toi à Capitale International : l\'Hélice d\'Or est à toi, Hector te tire son chapeau !' }),
     ],
   },
 
@@ -150,15 +160,15 @@ export default [
   {
     id: 'defi-tour-phares', title: 'Le tour des phares', category: 'defi', airport: 'corail',
     minRank: 1, bonusTime: 1750, bonusReward: 400,
-    desc: 'Fais le tour des trois phares par 4 anneaux à 120 m : Phare du Sud, Phare de l\'Ouest, escale à Port Azur '
-      + 'pour le plein, Phare du Nord, puis pose-toi à Cap Nord. Plus de 90 km : prévois ton carburant !',
+    desc: 'Contourne les trois phares côté mer par 5 anneaux à 120 m : Phare du Sud, Phare de l\'Ouest, escale à Port '
+      + 'Azur pour le plein, Phare du Nord, puis pose-toi à Cap Nord. Près de 90 km : gère ton carburant !',
     reward: 2400,
     steps: [
-      ...ringsAround(PHARE_S.x, PHARE_S.z, 600, 4, 120, 0),
+      ...arc(PHARE_S, 600, 0, 180, 5, 120),
       reach(PHARE_O, 800, 'Phare de l\'Ouest', { text: 'Cap au nord-ouest : rejoins le Phare de l\'Ouest (le massif sur la route culmine à 1 900 m, la côte est plus sûre)' }),
-      ...ringsAround(PHARE_O.x, PHARE_O.z, 600, 4, 120, 0),
+      ...arc(PHARE_O, 600, 45, 225, 5, 120),
       land('azur', { text: 'Escale à Port Azur : arrête-toi et refais le plein (K). Le Phare du Nord est à 44 km, derrière des sommets de 2 000 m' }),
-      ...ringsAround(PHARE_N.x, PHARE_N.z, 600, 4, 120, (3 * Math.PI) / 4),
+      ...arc(PHARE_N, 600, 225, 405, 5, 120),
       land('nord', { text: 'Pose-toi à Cap Nord : les trois gardiens te saluent !' }),
     ],
   },
@@ -205,11 +215,11 @@ export default [
   },
   {
     id: 'defi-rase-vagues', title: 'Au ras des vagues', category: 'course', airport: 'palmes',
-    desc: 'Escorte 30 s le cargo Bonne-Mère (< 500 m), rase l\'eau à moins de 30 m pendant 90 s, slalom de 6 anneaux '
+    desc: 'Escorte 30 s le cargo Saint-Christophe (< 500 m), rase l\'eau à moins de 30 m pendant 90 s, slalom de 6 anneaux '
       + 'à 45 m, 30 s sous 40 m autour du Phare du Sud, puis pose-toi à Île Corail. Interdit de mouiller les roues !',
     reward: 1200,
     steps: [
-      { type: 'follow', ship: 3, distance: 500, duration: 30, label: 'le cargo Bonne-Mère', text: 'Escorte le cargo Bonne-Mère : reste à moins de 500 m de lui pendant 30 s' },
+      { type: 'follow', ship: 3, distance: 500, duration: 30, label: 'le cargo Saint-Christophe', text: 'Escorte le cargo Saint-Christophe : reste à moins de 500 m de lui (et sous 500 m d\'altitude) pendant 30 s' },
       low(30, 90, 'Rase-vagues : moins de 30 m au-dessus de l\'eau pendant 90 s, sans remonter !'),
       ...slalom(-1500, 25500, 5500, 21000, 6, 200, 45),
       low(40, 30, 'Tourne autour du Phare du Sud à moins de 40 m du sol pendant 30 s', { x: PHARE_S.x, z: PHARE_S.z, radius: 1500 }),
@@ -223,7 +233,7 @@ export default [
       + 'perchée de Mont Givre, puis pose-toi à Lac Miroir. Bonus si tu boucles tout en moins de 20 min.',
     reward: 1300,
     steps: [
-      touch('azur', { text: 'Toucher-décoller à Port Azur (attention aux éoliennes au sud de la piste des Dunes au décollage)' }),
+      touch('azur', { text: 'Premier toucher-décoller à Port Azur, juste au nord-ouest des Dunes : le chrono tourne !' }),
       touch('falaises', { text: 'Toucher-décoller aux Falaises : longe la côte, la piste en herbe ne fait que 950 m' }),
       touch('verte', { text: 'Toucher-décoller à Vallée Verte, plus au nord le long de la côte' }),
       touch('givre', { text: 'Toucher-décoller à Mont Givre : piste perchée à 555 m, une crête de 1 000 m la précède' }),
@@ -246,7 +256,7 @@ export default [
         : r)),
       { type: 'inverted', duration: 15, text: 'Le dragon se retourne : 15 s sur le dos au-dessus du cratère' },
       { type: 'speed', min: 320, text: 'Le dragon plonge : piqué à 320 km/h (train rentré, G !)' },
-      hold(1000, 1100, 25, 'Rétablis-toi : palier entre 1 000 et 1 100 m pendant 25 s'),
+      hold(1000, 1100, 25, 'Rétablis-toi : palier entre 1 000 et 1 100 m pendant 25 s, au-dessus de la mer et loin du cône'),
       land('volcan', { text: 'Pose-toi à Base du Volcan, les volcanologues ont tout filmé' }),
     ],
   },

@@ -11,7 +11,7 @@ export const SCHEMA = [
   { key: 'timeOfDay', label: 'Heure de la journée', type: 'range', def: 10.5, min: 6, max: 20, step: 0.5, unit: ' h' },
   { section: 'Simulation' },
   { key: 'difficulty', label: 'Difficulté', type: 'select', def: 'normal', options: [['easy', 'Facile (moteur auto, crash rare)'], ['normal', 'Normale'], ['realistic', 'Réaliste (pas d\'aide)']] },
-  { key: 'fuel', label: 'Consommation de carburant', type: 'check', def: true },
+  { key: 'fuelMode', label: 'Consommation de carburant', type: 'select', def: 'fast', options: [['fast', 'Accélérée ×4 (recommandé)'], ['real', 'Réaliste (×1)'], ['off', 'Désactivée']] },
   { key: 'timeScale', label: 'Accélération du temps', type: 'select', def: '1', options: [['1', '×1'], ['2', '×2'], ['4', '×4']] },
   { section: 'Commandes' },
   { key: 'sensitivity', label: 'Sensibilité du manche', type: 'range', def: 1, min: 0.4, max: 1.6, step: 0.1, unit: '×' },
@@ -26,6 +26,9 @@ export const SCHEMA = [
 const KEY = 'jpairlines-settings';
 export const settings = Object.fromEntries(SCHEMA.filter((s) => s.key).map((s) => [s.key, s.def]));
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY)) || {}); } catch { /* pas de sauvegarde */ }
+if (settings.fuel === false) settings.fuelMode = 'off'; // ancien réglage
+delete settings.fuel;
+export const FUEL_SCALE = { fast: 4, real: 1, off: 0 };
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(settings)); } catch { /* stockage indisponible */ } };
 
 // Construit le formulaire ; onChange(key) est appelé à chaque modification
