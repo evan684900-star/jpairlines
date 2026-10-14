@@ -222,10 +222,10 @@ function search(x, z, R, step, test, score) {
   return best || { x, z, y: terrainHeight(x, z) };
 }
 const nearWater = (x, z, r) => [[r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dz]) => terrainHeight(x + dx, z + dz) < -3);
-const findCoast = (x, z, R = 6000) => search(x, z, R, 200, (px, pz, h) => h > 4 && h < 40 && nearWater(px, pz, 250));
-const findSea = (x, z, depth, R = 8000) => search(x, z, R, 400, (px, pz, h) => h < -depth);
-const findPeak = (x, z, R) => search(x, z, R, 250, () => true, (px, pz, h) => h);
-const findFlat = (x, z, R, minH = 10) => search(x, z, R, 250, (px, pz, h) =>
+export const findCoast = (x, z, R = 6000) => search(x, z, R, 200, (px, pz, h) => h > 4 && h < 40 && nearWater(px, pz, 250));
+export const findSea = (x, z, depth, R = 8000) => search(x, z, R, 400, (px, pz, h) => h < -depth);
+export const findPeak = (x, z, R) => search(x, z, R, 250, () => true, (px, pz, h) => h);
+export const findFlat = (x, z, R, minH = 10) => search(x, z, R, 250, (px, pz, h) =>
   h > minH && Math.abs(terrainHeight(px + 150, pz) - h) < 8 && Math.abs(terrainHeight(px, pz + 150) - h) < 8);
 
 // Point culminant de toute la carte (hors volcan)
@@ -257,7 +257,7 @@ export const LANDMARKS = [
 ];
 export const landmarkById = (id) => LANDMARKS.find((l) => l.id === id);
 
-function pick(a, du, dv) {
+export function pick(a, du, dv) {
   const [x, z] = runwayPoint(a.x, a.z, a.heading, du, dv);
   return { x, z };
 }
@@ -316,147 +316,13 @@ export const WIND_FARMS = (() => {
   return out;
 })();
 
-// ---------- Quêtes ----------
-// Chaque quête a un « donneur » (balise jaune) placé quelque part sur la carte.
-// Types d'objectifs : ring (anneau), land (atterrir à un aéroport),
-// reach (approcher un point), altitude (atteindre une altitude).
-const A = airportById;
-const L = landmarkById;
-const nextTo = (a, u = 110, v = 0) => pick(a, u, v);
-
-function ringsAround(cx, cz, radius, count, agl, phase = 0) {
-  const out = [];
-  for (let i = 0; i < count; i++) {
-    const t = phase + (i / count) * Math.PI * 2;
-    out.push({ type: 'ring', x: cx + Math.cos(t) * radius, z: cz + Math.sin(t) * radius, agl });
-  }
-  return out;
+// ---------- Positions des objets mobiles (horloge commune t en secondes) ----------
+// Tous les joueurs voient les bateaux et montgolfières au même endroit.
+export function shipPosition(s, t) {
+  const a = s.phase + (s.dir * s.speed * t) / s.radius;
+  return { x: s.x + Math.cos(a) * s.radius, y: 0, z: s.z + Math.sin(a) * s.radius, angle: a };
 }
-function ringsLine(x1, z1, x2, z2, count, agl) {
-  const out = [];
-  for (let i = 1; i <= count; i++) {
-    const t = i / count;
-    out.push({ type: 'ring', x: x1 + (x2 - x1) * t, z: z1 + (z2 - z1) * t, agl });
-  }
-  return out;
+export function balloonPosition(b, t) {
+  const a = b.phase + t * b.speed;
+  return { x: b.x + Math.cos(a) * b.radius, y: b.alt + Math.sin(t * 0.2 + b.phase) * 25, z: b.z + Math.sin(a) * b.radius };
 }
-
-export const QUESTS = [
-  {
-    id: 'premier-vol', title: 'Premier vol', giver: nextTo(A('alpha'), 100, A('alpha').length / 2 - 250),
-    desc: 'Démarre le moteur (E), décolle, passe les 4 anneaux autour de la base puis reviens te poser.',
-    reward: 200,
-    steps: [...ringsAround(A('alpha').x, A('alpha').z, 1800, 4, 200, 0), { type: 'land', airport: 'alpha' }],
-  },
-  {
-    id: 'courrier', title: 'Courrier pour la Capitale', giver: nextTo(A('alpha'), 100, A('alpha').length / 2 - 450),
-    desc: 'Le facteur est malade ! Apporte le courrier à Capitale International.',
-    reward: 350, requires: 'premier-vol',
-    steps: [{ type: 'land', airport: 'capitale' }],
-  },
-  {
-    id: 'tour-radio', title: 'Inspection de l\'antenne', giver: nextTo(A('capitale'), 140, -600),
-    desc: 'Fais deux tours de la Tour Radio pour vérifier l\'antenne.',
-    reward: 300,
-    steps: [...ringsAround(L('tour').x, L('tour').z, 600, 5, 250), ...ringsAround(L('tour').x, L('tour').z, 600, 5, 250)],
-  },
-  {
-    id: 'stade', title: 'Survol du match', giver: nextTo(A('capitale'), 140, -300),
-    desc: 'Une banderole publicitaire doit survoler le Grand Stade à basse altitude (moins de 200 m).',
-    reward: 350,
-    steps: [{ type: 'reach', x: L('stade').x, z: L('stade').z, radius: 300, maxAgl: 200, label: 'Grand Stade' }, { type: 'land', airport: 'capitale' }],
-  },
-  {
-    id: 'phare', title: 'Le tour du phare', giver: nextTo(A('azur'), 120, 0),
-    desc: 'Les touristes veulent des photos : fais le tour du Phare de l\'Ouest en passant les anneaux.',
-    reward: 450,
-    steps: ringsAround(L('phare').x, L('phare').z, 700, 6, 120),
-  },
-  {
-    id: 'haute-altitude', title: 'Tête dans les nuages', giver: nextTo(A('givre'), 90, 0),
-    desc: 'Monte au-dessus de 3 000 m d\'altitude pour mesurer la température.',
-    reward: 500,
-    steps: [{ type: 'altitude', min: 3000 }],
-  },
-  {
-    id: 'sommet', title: 'Drapeau sur le Toit du Monde', giver: nextTo(A('givre'), 90, -200),
-    desc: 'Survole le plus haut sommet de la carte à moins de 300 m.',
-    reward: 600,
-    steps: [{ type: 'reach', x: L('sommet').x, z: L('sommet').z, radius: 300, label: L('sommet').name }],
-  },
-  {
-    id: 'observatoire', title: 'Livraison de télescope', giver: nextTo(A('glacier'), 90, 0),
-    desc: 'Récupère la lentille à Mont Givre, survole l\'Observatoire, puis reviens à Station Glacier.',
-    reward: 750,
-    steps: [{ type: 'land', airport: 'givre' }, { type: 'reach', x: L('observatoire').x, z: L('observatoire').z, radius: 400, label: 'Observatoire' }, { type: 'land', airport: 'glacier' }],
-  },
-  {
-    id: 'phare-nord', title: 'Ravitailler le gardien', giver: nextTo(A('nord'), 120, 0),
-    desc: 'Le gardien du Phare du Nord attend ses vivres : survole le phare à basse altitude.',
-    reward: 400,
-    steps: [{ type: 'reach', x: L('phare-nord').x, z: L('phare-nord').z, radius: 300, maxAgl: 200, label: 'Phare du Nord' }, { type: 'land', airport: 'nord' }],
-  },
-  {
-    id: 'epave', title: 'Recherche de l\'épave', giver: nextTo(A('levant'), 140, 0),
-    desc: 'Un bateau a coulé au large. Va repérer l\'épave en volant bas.',
-    reward: 450,
-    steps: [{ type: 'reach', x: L('epave').x, z: L('epave').z, radius: 300, maxAgl: 250, label: 'L\'Épave' }],
-  },
-  {
-    id: 'volcan', title: 'Mesures volcaniques', giver: nextTo(A('levant'), 140, 400),
-    desc: 'Les scientifiques ont besoin de mesures : fais le tour du cratère puis pose-toi à la Base du Volcan.',
-    reward: 800,
-    steps: [...ringsAround(VOLCANO.x, VOLCANO.z, 1400, 6, 0).map((s) => ({ ...s, alt: VOLCANO.h + 200 })), { type: 'land', airport: 'volcan' }],
-  },
-  {
-    id: 'pyramides', title: 'Le secret des pyramides', giver: nextTo(A('dunes'), 120, 0),
-    desc: 'Des archéologues veulent des photos aériennes : passe les anneaux autour des pyramides.',
-    reward: 500,
-    steps: ringsAround(L('pyramides').x, L('pyramides').z, 500, 6, 100),
-  },
-  {
-    id: 'arche', title: 'Slalom de l\'arche', giver: nextTo(A('verte'), 120, 0),
-    desc: 'Passe sous la Grande Arche puis enchaîne les anneaux au ras de l\'eau.',
-    reward: 700,
-    steps: [
-      { type: 'ring', x: L('arche').x, z: L('arche').z, agl: 60, size: 45 },
-      ...ringsAround(L('arche').x, L('arche').z - 1500, 1100, 5, 60, Math.PI / 2),
-    ],
-  },
-  {
-    id: 'plateforme', title: 'Relève de l\'équipe', giver: nextTo(A('falaises'), 90, 0),
-    desc: 'Survole la Plateforme Pétrolière pour larguer le courrier de l\'équipage.',
-    reward: 550,
-    steps: [{ type: 'reach', x: L('plateforme').x, z: L('plateforme').z, radius: 250, maxAgl: 200, label: 'Plateforme' }, { type: 'land', airport: 'falaises' }],
-  },
-  {
-    id: 'chateau', title: 'Le fantôme du château', giver: nextTo(A('verte'), 120, 300),
-    desc: 'On raconte qu\'un fantôme hante le Château des Brumes. Va voir de plus près (moins de 150 m).',
-    reward: 450,
-    steps: [{ type: 'reach', x: L('chateau').x, z: L('chateau').z, radius: 250, maxAgl: 150, label: 'Château' }],
-  },
-  {
-    id: 'colosse', title: 'Course du Colosse', giver: nextTo(A('alpha'), 100, -A('alpha').length / 2 + 300),
-    desc: 'Course d\'anneaux entre Base Alpha et le Colosse, puis retour à la base.',
-    reward: 450, requires: 'premier-vol',
-    steps: [...ringsLine(A('alpha').x, A('alpha').z, L('colosse').x, L('colosse').z, 7, 150), { type: 'land', airport: 'alpha' }],
-  },
-  {
-    id: 'palmes', title: 'Vacances aux Palmes', giver: nextTo(A('corail'), 90, 0),
-    desc: 'Emmène des touristes de l\'Île Corail à l\'Archipel des Palmes.',
-    reward: 500,
-    steps: [{ type: 'land', airport: 'palmes' }],
-  },
-  {
-    id: 'medecin', title: 'Médecin volant', giver: nextTo(A('lac'), 90, 0),
-    desc: 'Urgence ! Emmène le médecin à Cap Nord puis à Mont Givre.',
-    reward: 650,
-    steps: [{ type: 'land', airport: 'nord' }, { type: 'land', airport: 'givre' }],
-  },
-  {
-    id: 'tour-monde', title: 'Le grand tour', giver: nextTo(A('alpha'), 100, -A('alpha').length / 2 + 500),
-    desc: 'Pose-toi dans 8 aéroports aux quatre coins de la carte. La quête ultime !',
-    reward: 4000, requires: 'courrier',
-    steps: ['azur', 'dunes', 'palmes', 'corail', 'volcan', 'levant', 'nord', 'glacier'].filter(A).map((id) => ({ type: 'land', airport: id })),
-  },
-];

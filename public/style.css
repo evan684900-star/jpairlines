@@ -94,3 +94,19 @@ button:disabled { opacity: 0.5; cursor: wait; }
   #minimap { width: 120px; height: 120px; }
   #systems { bottom: auto; top: 54px; transform: translateX(-50%) scale(0.85); }
 }
+
+#quest-progress { margin-top: 6px; height: 6px; }
+#quest-progress > div { background: #f5b532; }
+#journal-rank .bar { height: 8px; margin: 6px 0; }
+#journal-rank .bar > div { background: #f5b532; }
+#quest-list h3, #board-list h3 { margin: 16px 0 4px; color: #f5d06a; }
+#quest-list ul, #board-list ul { list-style: none; padding: 0; margin: 0; }
+#board-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 10px; margin: 6px 0; background: #ffffff10; border-radius: 6px; }
+#board-list li.done { opacity: 0.55; }
+#board-list li button { flex: none; font-size: 0.9em; padding: 8px 14px; }
+#board-list .r, #quest-list .r { color: #f5d06a; }
+#quest-list .r { float: right; }
+#board-list .extra { color: #ffcf7a; }
+.tag { flex: none; font-size: 0.85em; color: #b9c9d8; max-width: 45%; text-align: right; }
+.tag.done { color: #8fe39a; }
+.tag.lock { color: #ffb4a8; }

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   WORLD, AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
-  terrainHeight, groundHeight, rng,
+  terrainHeight, groundHeight, rng, shipPosition, balloonPosition,
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
@@ -399,9 +399,9 @@ function buildShips(scene, anim) {
     }
     scene.add(g);
     anim.push((dt, t) => {
-      const a = s.phase + (s.dir * s.speed * t) / s.radius;
-      g.position.set(s.x + Math.cos(a) * s.radius, 0, s.z + Math.sin(a) * s.radius);
-      g.rotation.y = s.dir > 0 ? Math.PI - a : -a;
+      const p = shipPosition(s, t);
+      g.position.set(p.x, 0, p.z);
+      g.rotation.y = s.dir > 0 ? Math.PI - p.angle : -p.angle;
     });
   }
 }
@@ -418,8 +418,8 @@ function buildBalloons(scene, anim) {
     g.add(env, stripes, basket);
     scene.add(g);
     anim.push((dt, t) => {
-      const a = b.phase + t * b.speed;
-      g.position.set(b.x + Math.cos(a) * b.radius, b.alt + Math.sin(t * 0.2 + b.phase) * 25, b.z + Math.sin(a) * b.radius);
+      const p = balloonPosition(b, t);
+      g.position.set(p.x, p.y, p.z);
     });
   }
 }

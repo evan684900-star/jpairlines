@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, HALF, AIRPORTS, LANDMARKS, QUESTS, CITIES, terrainHeight, groundHeight, airportById,
+  WORLD, HALF, AIRPORTS, LANDMARKS, CITIES, terrainHeight, groundHeight, airportById,
 } from './world.js';
 import { Plane, createPlaneMesh, animatePlaneMesh, SPECS, DIFFICULTY } from './plane.js';
 import { Terrain, terrainColor } from './terrain.js';
@@ -9,6 +9,7 @@ import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
 import { buildTextures, Atmosphere } from './graphics.js';
+import { QuestSystem } from './quests/engine.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => { $('load-status').textContent = t; };
@@ -78,184 +79,21 @@ if (!Array.isArray(save.visited)) save.visited = ['alpha'];
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* stockage indisponible */ } };
 
 // ================= Quêtes =================
-const ringGeo = new THREE.TorusGeometry(1, 0.07, 8, 32);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0xffc928, fog: false });
-const ringNextMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, fog: false });
-const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.35, depthWrite: false, fog: false });
+let quests = null; // créé après le chargement du monde
 
-const quest = { active: null, step: 0, objects: [] };
-const givers = [];
-
-function stepPos(st) {
-  if (st.type === 'land') {
-    const a = airportById(st.airport);
-    return new THREE.Vector3(a.x, a.elev, a.z);
-  }
-  if (st.type === 'ring') return new THREE.Vector3(st.x, st.alt ?? Math.max(0, terrainHeight(st.x, st.z)) + st.agl, st.z);
-  if (st.type === 'reach') return new THREE.Vector3(st.x, Math.max(0, terrainHeight(st.x, st.z)), st.z);
-  return null;
-}
-
-function stepText(st) {
-  if (st.type === 'ring') return 'Passe dans l\'anneau jaune';
-  if (st.type === 'land') return `Pose-toi et arrête-toi à ${airportById(st.airport).name}`;
-  if (st.type === 'reach') return `Rejoins : ${st.label}` + (st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : '');
-  if (st.type === 'altitude') return `Monte au-dessus de ${st.min} m`;
-  return '';
-}
-
-const questAvailable = (q) => !save.completed.includes(q.id) && (!q.requires || save.completed.includes(q.requires));
-
-function buildGivers() {
-  for (const q of QUESTS) {
-    const y = Math.max(0, terrainHeight(q.giver.x, q.giver.z));
-    const g = new THREE.Group();
-    g.position.set(q.giver.x, y, q.giver.z);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 500, 16, 1, true), beamMat);
-    beam.position.y = 250;
-    const label = makeLabel('! ' + q.title, { color: '#ffd23f', size: 0.03, depthTest: false });
-    label.position.y = 520;
-    g.add(beam, label);
-    scene.add(g);
-    givers.push({ q, g, label });
-  }
-  refreshGivers();
-}
-
-function refreshGivers() {
-  for (const { q, g } of givers) g.visible = questAvailable(q) && quest.active !== q;
-}
-
-function clearQuestObjects() {
-  for (const o of quest.objects) scene.remove(o);
-  quest.objects = [];
-}
-
-function showStep() {
-  clearQuestObjects();
-  const q = quest.active;
-  if (!q) return;
-  const st = q.steps[quest.step];
-  const p = stepPos(st);
-  if (st.type === 'ring') {
-    const prev = quest.step > 0 ? stepPos(q.steps[quest.step - 1]) : plane.pos.clone();
-    for (let k = 0; k < 2; k++) {
-      const s2 = q.steps[quest.step + k];
-      if (!s2 || s2.type !== 'ring') break;
-      const r = new THREE.Mesh(ringGeo, k === 0 ? ringMat : ringNextMat);
-      r.scale.setScalar(s2.size || 30);
-      r.position.copy(stepPos(s2));
-      r.lookAt(k === 0 ? (prev || p) : p);
-      scene.add(r);
-      quest.objects.push(r);
-    }
-  } else if (p) {
-    const rad = st.radius || 80;
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 4000, 24, 1, true), beamMat);
-    beam.position.set(p.x, p.y + 2000, p.z);
-    scene.add(beam);
-    quest.objects.push(beam);
-  }
-  $('quest-box').classList.remove('hidden');
-  $('quest-title').textContent = `${q.title} (${quest.step + 1}/${q.steps.length})`;
-  $('quest-step').textContent = stepText(st);
-}
-
-function startQuest(q) {
-  quest.active = q;
-  quest.step = 0;
-  refreshGivers();
-  showStep();
-  toast(`Nouvelle quête : ${q.title}`);
-}
-
-function stopQuest() {
-  clearQuestObjects();
-  quest.active = null;
-  $('quest-box').classList.add('hidden');
-  $('arrow').classList.add('hidden');
-  refreshGivers();
-}
-
-function completeStep() {
-  const q = quest.active;
-  quest.step++;
-  if (quest.step >= q.steps.length) {
-    save.money += q.reward;
-    if (!save.completed.includes(q.id)) save.completed.push(q.id);
-    persist();
-    stopQuest();
-    toast(`✅ ${q.title} terminée ! +${q.reward} ₣`);
-    beep(880, 0.25);
-  } else {
-    beep(660, 0.12);
-    showStep();
-  }
-}
-
-function updateQuest() {
-  const q = quest.active;
-  if (!q) return;
-  const st = q.steps[quest.step];
-  const p = stepPos(st);
-  const agl = plane.pos.y - Math.max(0, terrainHeight(plane.pos.x, plane.pos.z));
-  let done = false;
-  if (st.type === 'ring') done = plane.pos.distanceTo(p) < (st.size || 30) + 4;
-  else if (st.type === 'land') done = plane.landedAt?.id === st.airport;
-  else if (st.type === 'reach') done = Math.hypot(plane.pos.x - p.x, plane.pos.z - p.z) < st.radius && (!st.maxAgl || agl < st.maxAgl);
-  else if (st.type === 'altitude') done = plane.pos.y >= st.min;
-
-  if (p) {
-    const dx = p.x - plane.pos.x, dz = p.z - plane.pos.z;
-    const rel = THREE.MathUtils.radToDeg(Math.atan2(dx, -dz)) - plane.headingDeg;
-    $('arrow').classList.remove('hidden');
-    $('arrow').style.transform = `rotate(${rel}deg)`;
-    const d = Math.hypot(dx, dz);
-    $('quest-dist').textContent = d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`;
-  } else {
-    $('arrow').classList.add('hidden');
-    $('quest-dist').textContent = `Altitude : ${Math.round(plane.pos.y)} / ${st.min} m`;
-  }
-  if (done) completeStep();
-}
-
-let nearGiver = null;
-function updateGivers() {
-  nearGiver = null;
-  for (const { q, g, label } of givers) {
-    if (!g.visible) continue;
-    const d = Math.hypot(plane.pos.x - g.position.x, plane.pos.z - g.position.z);
-    label.visible = d < 12000;
-    if (d < 300 && plane.pos.y - g.position.y < 600) nearGiver = q;
-  }
+function updatePrompt() {
   const pr = $('prompt');
-  let html = '';
+  let html = quests ? quests.prompt() : '';
   if (plane.crashed) html = '';
-  else if (nearGiver) {
-    html = `<b>${nearGiver.title}</b> — ${nearGiver.desc}<br>Récompense : ${nearGiver.reward} ₣ · <kbd>Entrée</kbd> pour accepter`
-      + (quest.active ? '<br><small>(remplace la quête en cours)</small>' : '');
-  } else if (canRefuel() && plane.fuel < SPECS.fuelCapacity - 0.5) {
+  else if (!html && canRefuel() && plane.fuel < SPECS.fuelCapacity - 0.5) {
     html = `⛽ Maintiens <kbd>K</kbd> pour faire le plein (${Math.round(plane.fuel)} / ${SPECS.fuelCapacity} L)`;
-  } else if (plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
+  } else if (!html && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
     html = 'Appuie sur <kbd>E</kbd> pour démarrer le moteur · <kbd>H</kbd> commandes';
-  } else if (plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
+  } else if (!html && plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
     html = 'Le frein de parking est serré : appuie sur <kbd>P</kbd>';
   }
-  pr.innerHTML = html;
+  if (pr.innerHTML !== html) pr.innerHTML = html;
   pr.classList.toggle('hidden', !html);
-}
-
-function renderJournal() {
-  const ul = $('quest-list');
-  ul.innerHTML = '';
-  for (const q of QUESTS) {
-    const li = document.createElement('li');
-    const done = save.completed.includes(q.id);
-    li.className = done ? 'done' : quest.active === q ? 'active' : '';
-    const icon = done ? '✅ ' : quest.active === q ? '▶ ' : questAvailable(q) ? '❗ ' : '🔒 ';
-    li.innerHTML = `<span class="r">${q.reward} ₣</span><b>${icon}${q.title}</b> <small>· ${nearestPlaceName(q.giver.x, q.giver.z)}</small><br><small>${q.desc}</small>`;
-    ul.appendChild(li);
-  }
 }
 
 function nearestPlaceName(x, z) {
@@ -335,7 +173,7 @@ const orbit = { yaw: 0, pitch: 0, dragging: false };
 let paused = false;
 let started = false;
 
-const OVERLAYS = ['journal', 'pause', 'help', 'bigmap'];
+const OVERLAYS = ['journal', 'pause', 'help', 'bigmap', 'board'];
 const overlayOpen = () => OVERLAYS.some((id) => !$(id).classList.contains('hidden'));
 function closeOverlays() {
   for (const id of OVERLAYS) $(id).classList.add('hidden');
@@ -357,12 +195,13 @@ addEventListener('keydown', (e) => {
     const nowHidden = $('bigmap').classList.toggle('hidden');
     if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); }
   }
-  if (k === 'j') { renderJournal(); $('journal').classList.toggle('hidden'); }
+  if (k === 'j' && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (k === 'h') $('help').classList.toggle('hidden');
   if (paused) return;
   if (k === 'c') camMode = (camMode + 1) % 2;
   if (k === 'r') respawn();
-  if (k === 'enter' && nearGiver) startQuest(nearGiver);
+  if (k === 'enter' && quests?.canOpenBoard()) quests.openBoard();
+  if (k === 'x') quests?.requestDrop();
   if (plane.crashed) return;
   if (k === 'e') plane.toggleEngine();
   if (k === 'f') plane.setFlaps(1);
@@ -404,8 +243,9 @@ function canRefuel() {
   return plane.onGround && plane.speed < 1 && !plane.crashed && !!plane.landedAt;
 }
 
-function respawn(airport) {
+function respawn(airport, teleport = false) {
   const a = airport || airportById(save.lastAirport) || AIRPORTS[0];
+  quests?.onRespawn(plane.crashed, teleport);
   const far = plane.pos.distanceTo(new THREE.Vector3(a.x, a.elev, a.z)) > 4000;
   const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : SPECS.fuelCapacity;
   plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
@@ -440,7 +280,7 @@ $('reset-progress').onclick = () => {
   if (!confirm('Effacer argent, quêtes et aéroports visités ?')) return;
   save = { name: save.name, money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'] };
   persist();
-  stopQuest();
+  quests.reset();
   toast('Progression effacée');
 };
 
@@ -454,14 +294,15 @@ function renderAirportList() {
     if (known) {
       const b = document.createElement('button');
       b.textContent = 'Y aller';
-      b.onclick = () => { respawn(a); save.lastAirport = a.id; persist(); closeOverlays(); };
+      b.onclick = () => { respawn(a, true); save.lastAirport = a.id; persist(); closeOverlays(); };
       li.appendChild(b);
     }
     ul.appendChild(li);
   }
 }
 
-$('abandon').onclick = () => { stopQuest(); renderJournal(); };
+$('abandon').onclick = () => { quests.abandon(); quests.renderJournal(); };
+$('board-close').onclick = () => quests.closeBoard();
 
 // ================= Cartes =================
 const MAP_RES = 512;
@@ -521,27 +362,7 @@ function drawMap(cv, cx, cz, span, full) {
     for (const l of LANDMARKS) text('◆ ' + l.name, toX(l.x) - 5, toY(l.z) + 4, '#ffe9b0');
     for (const c of CITIES) text(c.name, toX(c.x) - 20, toY(c.z) - 8, '#ffffff');
   }
-  for (const { q, g } of givers) {
-    if (!g.visible) continue;
-    text('!', toX(q.giver.x) - 2, toY(q.giver.z) + 4, '#ffd23f');
-    if (full && span < 40000) text(q.title, toX(q.giver.x) + 6, toY(q.giver.z) + 16, '#ffd23f');
-  }
-  if (quest.active) {
-    const p = stepPos(quest.active.steps[quest.step]);
-    if (p) {
-      ctx.strokeStyle = '#ffc928';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(toX(p.x), toY(p.z), 7, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(toX(plane.pos.x), toY(plane.pos.z));
-      ctx.lineTo(toX(p.x), toY(p.z));
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
+  quests?.drawMap(ctx, toX, toY, full, span, text);
   for (const r of remotes.values()) {
     ctx.fillStyle = '#ff7ad9';
     ctx.beginPath();
@@ -774,12 +595,14 @@ function frame(now) {
     if (!paused && !plane.crashed) {
       const steps = Number(settings.timeScale) || 1;
       for (let i = 0; i < steps && !plane.crashed; i++) simulate(realDt);
+      quests.update(realDt * steps, wallT);
       if (plane.crashed) {
         $('crash-reason').textContent = plane.crashReason;
         $('crash').classList.remove('hidden');
         beep(110, 0.6, 0.3);
+        quests.onCrash();
       }
-    }
+    } else quests.update(0, wallT);
     while (plane.events.length) logMsg(plane.events.shift());
     if (plane.landedAt && (save.lastAirport !== plane.landedAt.id || !save.visited.includes(plane.landedAt.id))) {
       save.lastAirport = plane.landedAt.id;
@@ -794,8 +617,7 @@ function frame(now) {
     planeMesh.quaternion.copy(plane.quat);
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights }, realDt, wallT);
 
-    updateQuest();
-    updateGivers();
+    updatePrompt();
     updateCamera(realDt);
     updateHUD();
     netTick(now);
@@ -873,7 +695,10 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   await tick();
   world = buildWorldObjects(scene);
   applySettings('clouds');
-  buildGivers();
+  quests = new QuestSystem({
+    scene, plane, getSave: () => save, persist, toast, beep, logMsg,
+    setPaused: (v) => { paused = v; },
+  });
   status('Dessin de la carte…');
   await tick();
   buildMapImage();
@@ -897,4 +722,4 @@ $('start').onclick = () => {
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings };
+window.jp = { plane, renderer, settings, quests: () => quests };

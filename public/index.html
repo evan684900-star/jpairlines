@@ -58,6 +58,7 @@
       <div id="quest-title"></div>
       <div id="quest-step"></div>
       <div id="quest-dist"></div>
+      <div id="quest-progress" class="bar hidden"><div></div></div>
     </div>
     <div id="arrow" class="hidden">▲</div>
     <div id="prompt" class="hidden"></div>
@@ -76,9 +77,19 @@
   <div id="journal" class="overlay hidden">
     <div class="panel wide">
       <h2>Journal de quêtes</h2>
-      <p class="sub">Va aux balises jaunes <b>!</b> et appuie sur <kbd>Entrée</kbd> pour accepter une quête.</p>
-      <ul id="quest-list"></ul>
+      <div id="journal-rank"></div>
+      <p class="sub">Va aux balises jaunes <b>!</b> ou arrête-toi dans un aéroport, puis appuie sur <kbd>Entrée</kbd> pour ouvrir le tableau des missions.</p>
+      <div id="quest-list"></div>
       <button id="abandon">Abandonner la quête en cours</button>
+    </div>
+  </div>
+
+  <div id="board" class="overlay hidden">
+    <div class="panel wide">
+      <h2 id="board-title">Tableau des missions</h2>
+      <p class="sub" id="board-rank"></p>
+      <div id="board-list"></div>
+      <button id="board-close" class="secondary">Fermer</button>
     </div>
   </div>
 
@@ -121,7 +132,8 @@
       <tr><td><kbd>L</kbd></td><td>Feux de navigation</td></tr>
       <tr><td><kbd>K</kbd></td><td>Faire le plein (arrêté dans un aéroport)</td></tr>
       <tr><th colspan="2">Jeu</th></tr>
-      <tr><td><kbd>Entrée</kbd></td><td>Accepter une quête (près d'une balise « ! »)</td></tr>
+      <tr><td><kbd>Entrée</kbd></td><td>Tableau des missions (près d'une balise « ! » ou arrêté dans un aéroport)</td></tr>
+      <tr><td><kbd>X</kbd></td><td>Larguer un colis (missions de largage)</td></tr>
       <tr><td><kbd>J</kbd> · <kbd>M</kbd></td><td>Journal de quêtes · grande carte</td></tr>
       <tr><td><kbd>C</kbd> · molette · clic-glisser</td><td>Caméra · zoom · tourner autour de l'avion</td></tr>
       <tr><td><kbd>R</kbd></td><td>Réapparaître au dernier aéroport</td></tr>
