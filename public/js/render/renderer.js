@@ -9,9 +9,11 @@ import { Atmosphere } from './sky.js';
 import { Clouds } from './clouds.js';
 import { Weather } from './weather.js';
 import { Water } from './water.js';
+import { Effects } from './effects.js';
 
 installShaderExtensions();
 
+const _c = new THREE.Color();
 const WIND_DRIFT = new THREE.Vector2(4.2, 1.6); // dérive des nuages (m/s), identique pour tous les joueurs
 
 export class GameRenderer {
@@ -30,6 +32,9 @@ export class GameRenderer {
     buildTextures();
     this.worldHeight = buildWorldHeightTexture(256);
     this.atmo = new Atmosphere(this.renderer, this.scene);
+    this.effects = new Effects(this.scene);
+    this.weatherState = null;
+    this.fxLight = new THREE.Color();
     this.weather = new Weather();
     this.clouds = null;
     this.cfg = null;
@@ -121,6 +126,7 @@ export class GameRenderer {
   update(dt, wallT, settings, focus) {
     U.jpTime.value = wallT % 3600;
     const w = this.weather.update(dt, settings.weather, wallT);
+    this.weatherState = w;
     // ciel : recalcul seulement si la météo a sensiblement changé
     const aw = this.appliedWeather;
     if (!aw || Math.abs(aw.turbidity - w.turbidity) > 0.04 || Math.abs(aw.darken - w.darken) > 0.04) {
@@ -151,6 +157,17 @@ export class GameRenderer {
     for (const m of NIGHT_GLOWS) m.opacity = Math.min(1, glow);
     this.atmo.follow(focus, this.camera.position, this.camera.far);
     return w;
+  }
+
+  // effets liés à l'avion (fumée, poussière, traînées, pluie, éclairs) ; renvoie les événements (son, caméra)
+  updateEffects(dt, plane, mesh) {
+    const a = this.atmo;
+    this.fxLight.copy(a.sun.color).multiplyScalar(a.sun.intensity * 0.2 * Math.max(0.2, a.lightDir.y + 0.3))
+      .add(_c.copy(a.hemi.color).multiplyScalar(a.hemi.intensity * 1.6));
+    return this.effects.update(dt, plane, mesh, {
+      camera: this.camera, weather: this.weatherState, cfg: this.cfg, light: this.fxLight,
+      density: this.cfg.particles ? this.cfg.particleDensity : 0,
+    });
   }
 
   // les objets non tonemappés (marqueurs de quêtes, étiquettes) vont sur leur propre calque

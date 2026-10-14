@@ -67,6 +67,9 @@ const COMPOSE_FS = /* glsl */`
   varying vec2 vUv;
   void main() {
     vec4 col = texture2D(tColor, vUv);
+    // garde-fou : une valeur invalide (NaN, infini) serait étalée sur tout l'écran par le bloom
+    if (any(isnan(col)) || any(isinf(col))) col = vec4(0.0, 0.0, 0.0, 1.0);
+    col = min(col, vec4(30000.0));
     if (useAO > 0.5) {
       float d0 = texture2D(tDepth, vUv).x;
       float sum = 0.0, w = 0.0;
@@ -197,7 +200,7 @@ const CINEMA_FS = /* glsl */`
       }
     }
     // éclair d'orage
-    col += vec3(0.75, 0.8, 1.0) * flash / max(exposure, 0.1) * 0.6;
+    col += vec3(0.75, 0.8, 1.0) * flash / max(exposure, 0.1) * 0.22;
     // verrière mouillée : un peu plus floue et plus claire
     col = mix(col, col * 1.05 + 0.02 / max(exposure, 0.1), clamp(dr.z, 0.0, 1.0) * 0.3);
     // vignette et grain

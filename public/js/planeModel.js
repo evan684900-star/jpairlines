@@ -126,8 +126,8 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
   const chrome = new THREE.MeshStandardMaterial({ color: 0xe8ebee, roughness: 0.08, metalness: 1 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.92 });
   const glassMat = new THREE.MeshPhysicalMaterial({
-    color: 0x2a3a48, roughness: 0.03, metalness: 0, transparent: true, opacity: 0.32, side: THREE.DoubleSide,
-    depthWrite: false, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 1.6,
+    color: 0x2a3a48, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
+    depthWrite: false, clearcoat: 0.4, clearcoatRoughness: 0.05, envMapIntensity: 0.7,
   });
   const cabin = new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.85, metalness: 0 });
   const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(0x1d3f7a);

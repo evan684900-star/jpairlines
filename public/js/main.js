@@ -10,6 +10,7 @@ import { settings, buildSettingsForm, FUEL_SCALE } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
 import { GameRenderer } from './render/renderer.js';
 import { CameraRig } from './render/cameras.js';
+import { SoundEngine } from './ui/audio.js';
 import { QuestSystem } from './quests/engine.js';
 
 const $ = (id) => document.getElementById(id);
@@ -30,6 +31,7 @@ function applySettings(key) {
   if (!key || key === 'viewDist') terrain.setViewDistance(settings.viewDist * 1000);
   if (!key || key === 'trees' || key === 'decoDist') decor.setOptions({ density: settings.trees, radius: settings.decoDist });
   if (!key || key === 'showFps') $('fps').classList.toggle('hidden', !settings.showFps);
+  if (!key || key === 'volume' || key === 'muted') sound?.setVolume(settings.volume, settings.muted);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
   if (!key || key === 'units') {
@@ -106,47 +108,12 @@ function logMsg(msg) {
   setTimeout(() => { d.style.opacity = 0; setTimeout(() => d.remove(), 1000); }, 4000);
 }
 
-let audio = null;
+// sons : créés au premier clic (les navigateurs l'exigent)
+let sound = null;
 function initAudio() {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 400;
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    // bruit du vent
-    const noise = ctx.createBufferSource();
-    const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    noise.buffer = buf;
-    noise.loop = true;
-    const wf = ctx.createBiquadFilter();
-    wf.type = 'bandpass';
-    wf.frequency.value = 600;
-    const wg = ctx.createGain();
-    wg.gain.value = 0;
-    osc.connect(filter).connect(gain).connect(ctx.destination);
-    noise.connect(wf).connect(wg).connect(ctx.destination);
-    osc.start();
-    noise.start();
-    audio = { ctx, osc, gain, wg };
-  } catch { audio = null; }
+  try { sound = new SoundEngine(); sound.setVolume(settings.volume, settings.muted); } catch { sound = null; }
 }
-function beep(freq, dur, vol = 0.15) {
-  if (!audio) return;
-  const o = audio.ctx.createOscillator();
-  const g = audio.ctx.createGain();
-  o.frequency.value = freq;
-  g.gain.setValueAtTime(Math.max(0.0001, vol * settings.volume * 2), audio.ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.0001, audio.ctx.currentTime + dur);
-  o.connect(g).connect(audio.ctx.destination);
-  o.start();
-  o.stop(audio.ctx.currentTime + dur);
-}
+function beep(freq, dur, vol = 0.15) { sound?.beep(freq, dur, vol); }
 
 // ================= Entrées =================
 const keys = new Set();
@@ -552,7 +519,7 @@ function updatePlace() {
 
 // ================= Boucle =================
 let last = performance.now();
-let mapTimer = 0, labelTimer = 0, placeTimer = 0, stallBeep = 0;
+let mapTimer = 0, labelTimer = 0, placeTimer = 0;
 
 function simulate(dt) {
   const input = readInput();
@@ -569,7 +536,28 @@ function simulate(dt) {
   }
 }
 
-let fpsTimer = 0;
+let fpsTimer = 0, inCockpit = false;
+
+// vibrations ressenties : moteur et roulage au sol, alarme de décrochage (tremblement), survitesse, turbulence
+function shakeAmount() {
+  if (plane.crashed) return 0;
+  const w = gfx.weatherState;
+  let s = 0;
+  if (plane.onGround) s += plane.rpm * 0.25 + Math.min(1, plane.speed / 30) * 0.5;
+  else s += plane.rpm * 0.08;
+  if (plane.stallWarning) s += 0.9;
+  if (plane.ias > SPECS.vne * 0.85) s += (plane.ias - SPECS.vne * 0.85) / (SPECS.vne * 0.15);
+  if (!plane.onGround && w) s += w.storm * 0.5 + w.rain * 0.15;
+  return Math.min(1.5, s);
+}
+
+function handleFxEvents(events) {
+  for (const e of events) {
+    if (e.type === 'touchdown') { rig.kick(0.25 + e.strength * 0.5); sound?.touchdown(e.strength); }
+    if (e.type === 'crash') { rig.kick(1.5); sound?.crash(); }
+    if (e.type === 'thunder') sound?.thunder(e.delay, e.strength);
+  }
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const rawDt = (now - last) / 1000;
@@ -604,7 +592,7 @@ function frame(now) {
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
     updatePrompt();
-    rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: 0 });
+    inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
     updateHUD();
     netTick(now);
 
@@ -617,14 +605,7 @@ function frame(now) {
     placeTimer -= realDt;
     if (placeTimer <= 0) { placeTimer = 1; updatePlace(); }
 
-    if (audio) {
-      const v = settings.volume;
-      audio.osc.frequency.value = 40 + plane.rpm * 90;
-      audio.gain.gain.value = plane.crashed || paused ? 0 : plane.rpm * 0.08 * v;
-      audio.wg.gain.value = paused ? 0 : Math.min(0.12, plane.speed * plane.speed * 0.00003) * v;
-      stallBeep -= realDt;
-      if (warnKey.includes('DÉCROCHAGE') && stallBeep <= 0) { beep(1200, 0.15, 0.08); stallBeep = 0.4; }
-    }
+    sound?.update(realDt, plane, inCockpit ? 'cockpit' : 'outside', camera.position.distanceTo(plane.pos), gfx.weatherState, paused);
   } else {
     const t = (now / 1000) * 0.04;
     const a = airportById(save.lastAirport) || AIRPORTS[0];
@@ -638,6 +619,7 @@ function frame(now) {
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
   gfx.update(realDt, wallT, settings, started ? plane.pos : camera.position);
+  if (started) handleFxEvents(gfx.updateEffects(paused ? 0 : realDt, plane, planeMesh));
 
   // autres joueurs : interpolation douce
   const k = 1 - Math.exp(-realDt * 8);
@@ -647,7 +629,11 @@ function frame(now) {
     animatePlaneMesh(r.mesh, r.st, realDt, wallT);
   }
 
-  gfx.render(rawDt, { speed: started ? THREE.MathUtils.clamp((plane.ias - 60) / 30, 0, 1) : 0 });
+  gfx.render(rawDt, {
+    speed: started ? THREE.MathUtils.clamp((plane.ias - 62) / 30, 0, 1) : 0,
+    rain: inCockpit ? Math.min(1, gfx.weatherState.rain) : 0,
+    flash: gfx.effects.flash,
+  });
   fpsTimer -= rawDt;
   if (settings.showFps && fpsTimer <= 0) {
     fpsTimer = 0.5;
