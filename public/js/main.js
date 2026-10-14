@@ -20,6 +20,7 @@ const { renderer, scene, camera } = gfx;
 
 
 const terrain = new Terrain(scene);
+gfx.attachTerrain(terrain);
 const decor = new Decor(scene);
 let world = null;
 
@@ -661,13 +662,12 @@ function frame(now) {
     camera.lookAt(a.x, a.elev + 100, a.z);
   }
 
-  terrain.update(plane.pos.x, plane.pos.z, camera.position.x, camera.position.z, started ? 5 : 12);
+  terrain.update(plane.pos.x, plane.pos.z, started ? 5 : 12);
   decor.update(plane.pos.x, plane.pos.z, started ? 3 : 8);
   labelTimer -= realDt;
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
   gfx.update(realDt, wallT, settings, started ? plane.pos : camera.position);
-  updateWater(wallT);
 
   // autres joueurs : interpolation douce
   const k = 1 - Math.exp(-realDt * 8);
@@ -685,15 +685,6 @@ function frame(now) {
   }
 }
 
-function updateWater(t) {
-  const atmo = gfx.atmo;
-  const w = terrain.water.material.uniforms;
-  w.time.value = t % 10000;
-  w.sunDir.value.copy(atmo.lightDir);
-  w.sunColor.value.copy(atmo.sun.color).multiplyScalar(atmo.sun.intensity * 0.35);
-  w.skyZenith.value.copy(atmo.zenith);
-  w.skyHorizon.value.copy(atmo.horizon);
-}
 
 // ================= Démarrage =================
 $('pilot-name').value = save.name;

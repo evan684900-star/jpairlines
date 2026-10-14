@@ -8,6 +8,7 @@ import { buildWorldHeightTexture } from './heightmap.js';
 import { Atmosphere } from './sky.js';
 import { Clouds } from './clouds.js';
 import { Weather } from './weather.js';
+import { Water } from './water.js';
 
 installShaderExtensions();
 
@@ -41,6 +42,12 @@ export class GameRenderer {
     this.resScale = 1;
     this.adaptTimer = 0;
     addEventListener('resize', () => this.resize());
+  }
+
+  // l'eau a besoin du terrain (photo du relief pour la profondeur)
+  attachTerrain(terrain) {
+    this.terrain = terrain;
+    this.water = new Water(this.renderer, this.scene, this.worldHeight, this.cfg?.waterRings ?? 56);
   }
 
   // à appeler une fois les textures prêtes (nuages : quelques centaines de ms)
@@ -85,6 +92,7 @@ export class GameRenderer {
       this.buildClouds();
       this.clouds.group.visible = settings.clouds;
     }
+    if (this.water && prev && prev.waterRings !== cfg.waterRings) this.water.setRings(cfg.waterRings);
     if (cfg.post) this.loadPost();
     this.post?.configure(cfg);
   }
@@ -135,6 +143,7 @@ export class GameRenderer {
     U.jpFogHeight.value = w.hazeH;
     U.jpFogHeightDensity.value = w.haze;
     U.jpWet.value += ((w.rain > 0.2 ? 1 : 0) - U.jpWet.value) * Math.min(1, dt * (w.rain > 0.2 ? 0.05 : 0.01));
+    this.water?.update(dt, this.camera, w, this.weather.windDir, this.terrain.version);
     this.renderer.toneMappingExposure = this.atmo.exposure;
     this.atmo.follow(focus, this.camera.position, this.camera.far);
     return w;

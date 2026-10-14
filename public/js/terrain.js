@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import { WORLD, HALF, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
 import { createTerrainMaterial } from './render/materials.js';
-import { createWaterMaterial } from './render/water.js';
-import { TEX } from './render/textures.js';
 
 const CH = WORLD.chunk;
+export const TERRAIN_LAYER = 1; // calque utilisé pour photographier le relief (profondeur de l'eau)
 const LOD_SEGMENTS = [80, 40, 20, 10]; // 25 m, 50 m, 100 m, 200 m
 const MAX_INDEX = Math.ceil(HALF / CH) + 2;
 
@@ -21,7 +20,9 @@ const mix = (a, b, t) => a + (b - a) * t;
 
 const tmpRock = new THREE.Color(), tmpSnow = new THREE.Color();
 
-export function terrainColor(h, slope, x, z, out) {
+// info (optionnel) : reçoit l'altitude de la limite des neiges ; la neige est alors laissée au shader (calcul au pixel)
+export function terrainColor(h, slope, x, z, out, info = null) {
+  if (info) info.snow = 1e5;
   if (h < -1) {
     const k = Math.min(1, -h / 60);
     return out.setRGB(mix(0.74, 0.16, k), mix(0.68, 0.26, k), mix(0.52, 0.28, k), SRGB);
@@ -33,6 +34,7 @@ export function terrainColor(h, slope, x, z, out) {
   // transitions progressives vers la roche puis la neige (pas de saut d'un sommet à l'autre)
   const snow = snowLine(temp) + (n - 0.5) * 300;
   const rockF = Math.max(smoothstep(0.6, 0.95, slope), smoothstep(snow - 450, snow - 150, h));
+  if (info) { info.snow = snow; if (rockF > 0) out.lerp(tmpRock.setRGB(0.47 + n * 0.08, 0.44 + n * 0.07, 0.4 + n * 0.06, SRGB), rockF * 0.6); return out; }
   const snowF = smoothstep(snow - 120, snow + 80, h) * (1 - smoothstep(0.8, 1.25, slope));
   if (rockF > 0) out.lerp(tmpRock.setRGB(0.47 + n * 0.08, 0.44 + n * 0.07, 0.4 + n * 0.06, SRGB), rockF);
   if (snowF > 0) out.lerp(tmpSnow.setRGB(0.84, 0.86, 0.9, SRGB), snowF);
@@ -67,6 +69,14 @@ function lowlandColor(h, slope, x, z, temp, dry, n, out) {
   return out.setRGB(r, gg, b, SRGB);
 }
 
+// Occlusion de relief : compare la hauteur à la moyenne alentour (à 90 m)
+const AO_R = 90;
+function reliefShade(x, z, h) {
+  if (h < 0) return 1;
+  const avg = (terrainHeight(x + AO_R, z) + terrainHeight(x - AO_R, z) + terrainHeight(x, z + AO_R) + terrainHeight(x, z - AO_R)) / 4;
+  return Math.min(1.12, Math.max(0.62, 1 - (avg - h) / 90));
+}
+
 // ---------- Construction d'un morceau ----------
 function buildChunkGeometry(ci, cj, seg) {
   const step = CH / seg;
@@ -78,7 +88,8 @@ function buildChunkGeometry(ci, cj, seg) {
   }
   const vCount = N * N + 4 * N;
   const pos = new Float32Array(vCount * 3), nor = new Float32Array(vCount * 3), col = new Float32Array(vCount * 3);
-  const c = new THREE.Color();
+  const snowAlt = new Float32Array(vCount);
+  const c = new THREE.Color(), info = {};
   for (let j = 0; j < N; j++) {
     for (let i = 0; i < N; i++) {
       const v = j * N + i;
@@ -89,8 +100,12 @@ function buildChunkGeometry(ci, cj, seg) {
       const nx = hL - hR, ny = 2 * step, nz = hD - hU;
       const len = Math.hypot(nx, ny, nz);
       nor[v * 3] = nx / len; nor[v * 3 + 1] = ny / len; nor[v * 3 + 2] = nz / len;
-      terrainColor(h, Math.hypot(nx, nz) / (2 * step), x0 + i * step, z0 + j * step, c);
-      col[v * 3] = c.r; col[v * 3 + 1] = c.g; col[v * 3 + 2] = c.b;
+      const wx = x0 + i * step, wz = z0 + j * step;
+      terrainColor(h, Math.hypot(nx, nz) / (2 * step), wx, wz, c, info);
+      snowAlt[v] = info.snow;
+      // relief accentué : fonds de vallée assombris, crêtes éclaircies (même échelle quel que soit le niveau de détail)
+      const ao = reliefShade(wx, wz, h);
+      col[v * 3] = c.r * ao; col[v * 3 + 1] = c.g * ao; col[v * 3 + 2] = c.b * ao;
     }
   }
   const idx = [];
@@ -114,6 +129,7 @@ function buildChunkGeometry(ci, cj, seg) {
     for (const e of edge) {
       pos[v * 3] = pos[e * 3]; pos[v * 3 + 1] = pos[e * 3 + 1] - skirt; pos[v * 3 + 2] = pos[e * 3 + 2];
       for (let k = 0; k < 3; k++) { nor[v * 3 + k] = nor[e * 3 + k]; col[v * 3 + k] = col[e * 3 + k]; }
+      snowAlt[v] = snowAlt[e];
       v++;
     }
     for (let k = 0; k < N - 1; k++) {
@@ -125,6 +141,7 @@ function buildChunkGeometry(ci, cj, seg) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('snowAlt', new THREE.BufferAttribute(snowAlt, 1));
   geo.setIndex(idx);
   geo.computeBoundingSphere();
   return geo;
@@ -139,17 +156,11 @@ export class Terrain {
     this.queue = [];
     this.center = null;
     this.radius = 10;
-
-    this.water = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), createWaterMaterial());
-    this.water.material.uniforms.tNormal.value = TEX.waterNormal;
-    this.water.position.y = 0.4;
-    this.water.renderOrder = 1;
-    scene.add(this.water);
+    this.version = 0; // incrémenté à chaque morceau construit (pour la carte des rivages)
   }
 
   setViewDistance(meters) {
     this.radius = Math.max(3, Math.ceil(meters / CH));
-    this.water.scale.set(meters * 3, 1, meters * 3);
     this.center = null;
   }
 
@@ -190,24 +201,25 @@ export class Terrain {
       old.mesh.geometry.dispose();
       old.mesh.geometry = geo;
       old.lod = job.lod;
+      this.version++;
       return;
     }
     const mesh = new THREE.Mesh(geo, this.material);
     mesh.receiveShadow = true;
+    mesh.layers.enable(TERRAIN_LAYER);
     mesh.position.set(job.i * CH, 0, job.j * CH);
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     this.scene.add(mesh);
     this.chunks.set(job.key, { mesh, lod: job.lod });
+    this.version++;
   }
 
-  update(x, z, camX, camZ, budgetMs = 6) {
+  update(x, z, budgetMs = 6) {
     const ci = Math.floor(x / CH), cj = Math.floor(z / CH);
     if (!this.center || this.center[0] !== ci || this.center[1] !== cj) this.plan(ci, cj);
     const t0 = performance.now();
     while (this.queue.length && performance.now() - t0 < budgetMs) this.build(this.queue.shift());
-    this.water.position.x = Math.round(camX / 100) * 100;
-    this.water.position.z = Math.round(camZ / 100) * 100;
   }
 
   // construit d'un coup ce qui est autour du joueur (au démarrage / téléportation)
