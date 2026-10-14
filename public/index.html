@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JP Airlines</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22%3E%3Cpath fill=%22%23f5b532%22 d=%22M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z%22/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
   <script type="importmap">
@@ -14,40 +17,46 @@
   <canvas id="game"></canvas>
   <div id="fps" class="hidden"></div>
 
-  <!-- Écran de départ -->
-  <div id="menu" class="overlay">
-    <div class="panel">
-      <h1>✈ JP Airlines</h1>
-      <p class="sub">Un monde de 80 × 80 km, tous les pilotes ensemble.</p>
-      <label>Nom de pilote <input id="pilot-name" maxlength="16" placeholder="Pilote" /></label>
-      <button id="start" disabled>Décoller</button>
-      <button id="open-help" class="secondary">Commandes</button>
-      <p id="load-status" class="sub">Génération du monde…</p>
+  <!-- Chargement -->
+  <div id="loader">
+    <div class="loader-inner">
+      <div class="logo"><i data-icon="plane" data-size="46"></i></div>
+      <h1 class="brand">JP<span>AIRLINES</span></h1>
+      <div class="progress"><div id="load-bar"></div></div>
+      <p id="load-status">Génération du monde…</p>
+    </div>
+  </div>
+
+  <!-- Menu principal (le monde tourne en fond) -->
+  <div id="menu" class="overlay menu-overlay hidden">
+    <div class="panel glass hero">
+      <div class="logo small"><i data-icon="plane" data-size="30"></i></div>
+      <h1 class="brand">JP<span>AIRLINES</span></h1>
+      <p class="sub">Un monde de 80 × 80 km, tous les pilotes dans le même ciel.</p>
+      <label class="field">Nom de pilote <input id="pilot-name" maxlength="16" placeholder="Pilote" autocomplete="off" /></label>
+      <div class="actions">
+        <button id="start" disabled><i data-icon="plane-takeoff"></i> Décoller</button>
+        <button id="open-help" class="secondary"><i data-icon="circle-help"></i> Commandes</button>
+      </div>
+      <p class="hint">Astuce : <kbd>C</kbd> change de caméra (poursuite, cockpit, orbite, spectateur) · <kbd>Échap</kbd> paramètres et qualité graphique</p>
     </div>
   </div>
 
   <!-- HUD -->
   <div id="hud" class="hidden">
     <div id="topbar">
-      <span id="money">0 ₣</span>
-      <span id="online">Solo</span>
-      <span id="place"></span>
+      <span class="chip" id="money"></span>
+      <span class="chip"><i data-icon="globe" data-size="15"></i><b id="online">Solo</b></span>
+      <span class="chip"><i data-icon="map-pin" data-size="15"></i><b id="place"></b></span>
+      <span class="chip" id="weather-chip"><i data-icon="sun" data-size="15"></i><b id="weather-name"></b></span>
     </div>
 
-    <div id="instruments">
-      <div><span class="lbl">VITESSE</span><b id="spd">0</b> <small id="u-spd">km/h</small></div>
-      <div><span class="lbl">ALTITUDE</span><b id="alt">0</b> <small id="u-alt">m</small></div>
-      <div><span class="lbl">SOL</span><b id="agl">0</b> <small class="u-alt2">m</small></div>
-      <div><span class="lbl">VARIO</span><b id="vs">0</b> <small id="u-vs">m/s</small></div>
-      <div><span class="lbl">CAP</span><b id="hdg">000</b>°</div>
-      <div><span class="lbl">FACTEUR</span><b id="gload">1.0</b> g</div>
-      <div class="bar-row"><span class="lbl">GAZ</span><div class="bar"><div id="thr"></div></div></div>
-      <div class="bar-row"><span class="lbl">RÉGIME</span><div class="bar"><div id="rpm" class="rpm"></div></div></div>
-      <div class="bar-row"><span class="lbl">CARBURANT</span><div class="bar"><div id="fuel" class="fuel"></div></div></div>
-      <div class="bar-row"><span class="lbl">TRIM</span><div class="bar trim"><div id="trim"></div></div></div>
+    <div id="flightdeck" class="glass">
+      <canvas id="pfd"></canvas>
+      <canvas id="eis"></canvas>
     </div>
 
-    <div id="systems">
+    <div id="systems" class="glass">
       <div class="sys" id="sys-engine"><i></i>MOTEUR</div>
       <div class="sys" id="sys-gear"><span class="gear"><i></i><i></i><i></i></span>TRAIN</div>
       <div class="sys" id="sys-flaps"><b id="flaps-val">0°</b>VOLETS</div>
@@ -56,15 +65,23 @@
       <div class="sys" id="sys-lights"><i></i>FEUX</div>
     </div>
 
+    <div id="toolbar" class="glass">
+      <button class="tool" id="btn-camera" title="Changer de caméra (C)"><i data-icon="camera"></i><small id="cam-name">Poursuite</small></button>
+      <button class="tool" id="btn-map" title="Carte (M)"><i data-icon="map"></i></button>
+      <button class="tool" id="btn-journal" title="Journal de quêtes (J)"><i data-icon="book-open"></i></button>
+      <button class="tool" id="btn-mute" title="Couper / remettre le son"><i data-icon="volume-2"></i></button>
+      <button class="tool" id="btn-pause" title="Pause et paramètres (Échap)"><i data-icon="settings"></i></button>
+    </div>
+
     <div id="warnings"></div>
-    <div id="quest-box" class="hidden">
+    <div id="quest-box" class="glass hidden">
       <div id="quest-title"></div>
       <div id="quest-step"></div>
       <div id="quest-dist"></div>
       <div id="quest-progress" class="bar hidden"><div></div></div>
     </div>
     <div id="arrow" class="hidden">▲</div>
-    <div id="prompt" class="hidden"></div>
+    <div id="prompt" class="glass hidden"></div>
     <div id="toast"></div>
     <div id="log"></div>
     <canvas id="minimap" width="200" height="200"></canvas>
@@ -78,7 +95,7 @@
   </div>
 
   <div id="journal" class="overlay hidden">
-    <div class="panel wide">
+    <div class="panel glass wide">
       <h2>Journal de quêtes</h2>
       <div id="journal-rank"></div>
       <p class="sub">Va aux balises jaunes <b>!</b> ou arrête-toi dans un aéroport, puis appuie sur <kbd>Entrée</kbd> pour ouvrir le tableau des missions.</p>
@@ -88,7 +105,7 @@
   </div>
 
   <div id="board" class="overlay hidden">
-    <div class="panel wide">
+    <div class="panel glass wide">
       <h2 id="board-title">Tableau des missions</h2>
       <p class="sub" id="board-rank"></p>
       <div id="board-list"></div>
@@ -97,7 +114,7 @@
   </div>
 
   <div id="pause" class="overlay hidden">
-    <div class="panel wide">
+    <div class="panel glass wide">
       <h2>Pause</h2>
       <div class="tabs">
         <button data-tab="tab-settings" class="tab active">Paramètres</button>
@@ -112,11 +129,11 @@
         <ul id="airport-list"></ul>
       </div>
       <div id="tab-help" class="tab-body hidden"></div>
-      <button id="resume">Reprendre</button>
+      <button id="resume"><i data-icon="play"></i> Reprendre</button>
     </div>
   </div>
 
-  <div id="help" class="overlay hidden"><div class="panel wide"><h2>Commandes</h2><div class="help-content"></div><button class="close-help">Fermer</button></div></div>
+  <div id="help" class="overlay hidden"><div class="panel glass wide"><h2>Commandes</h2><div class="help-content"></div><button class="close-help">Fermer</button></div></div>
 
   <template id="help-template">
     <table class="keys">
@@ -138,7 +155,7 @@
       <tr><td><kbd>Entrée</kbd></td><td>Tableau des missions (près d'une balise « ! » ou arrêté dans un aéroport)</td></tr>
       <tr><td><kbd>X</kbd></td><td>Larguer un colis (missions de largage)</td></tr>
       <tr><td><kbd>J</kbd> · <kbd>M</kbd></td><td>Journal de quêtes · grande carte</td></tr>
-      <tr><td><kbd>C</kbd> · molette · clic-glisser</td><td>Caméra · zoom · tourner autour de l'avion</td></tr>
+      <tr><td><kbd>C</kbd> · molette · clic-glisser</td><td>Caméra (poursuite, cockpit, orbite libre, spectateur) · zoom · tourner autour de l'avion</td></tr>
       <tr><td><kbd>R</kbd></td><td>Réapparaître au dernier aéroport</td></tr>
       <tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr>
     </table>
@@ -148,8 +165,8 @@
   </template>
 
   <div id="crash" class="overlay hidden">
-    <div class="panel">
-      <h2>💥 Crash !</h2>
+    <div class="panel glass">
+      <h2 class="crash-title">Crash !</h2>
       <p id="crash-reason"></p>
       <p>Appuie sur <kbd>R</kbd> pour repartir du dernier aéroport.</p>
     </div>

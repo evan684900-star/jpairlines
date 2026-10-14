@@ -6,15 +6,18 @@ import { Plane, createPlaneMesh, animatePlaneMesh, SPECS, DIFFICULTY } from './p
 import { Terrain, terrainColor } from './terrain.js';
 import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
-import { settings, buildSettingsForm, FUEL_SCALE } from './settings.js';
+import { settings, buildSettingsForm, saveSettings, FUEL_SCALE } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
 import { GameRenderer } from './render/renderer.js';
 import { CameraRig } from './render/cameras.js';
 import { SoundEngine } from './ui/audio.js';
+import { Instruments } from './ui/instruments.js';
+import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
 
 const $ = (id) => document.getElementById(id);
-const status = (t) => { $('load-status').textContent = t; };
+const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
+hydrateIcons();
 
 // ================= Rendu =================
 const gfx = new GameRenderer($('game'));
@@ -34,13 +37,8 @@ function applySettings(key) {
   if (!key || key === 'volume' || key === 'muted') sound?.setVolume(settings.volume, settings.muted);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
-  if (!key || key === 'units') {
-    const av = settings.units === 'aviation';
-    $('u-spd').textContent = av ? 'kt' : 'km/h';
-    $('u-alt').textContent = av ? 'ft' : 'm';
-    document.querySelector('.u-alt2').textContent = av ? 'ft' : 'm';
-    $('u-vs').textContent = av ? 'ft/min' : 'm/s';
-  }
+  if (!key || key === 'muted') $('btn-mute').innerHTML = icon(settings.muted ? 'volume-x' : 'volume-2');
+  $('btn-mute').classList.toggle('off', settings.muted);
 }
 
 // ================= Joueur =================
@@ -235,6 +233,20 @@ function respawn(airport, teleport = false) {
     decor.update(plane.pos.x, plane.pos.z, 50);
   }
 }
+
+// ================= Barre d'outils (souris / tactile) =================
+const press = (key) => { dispatchEvent(new KeyboardEvent('keydown', { key })); dispatchEvent(new KeyboardEvent('keyup', { key })); };
+$('btn-camera').onclick = () => press('c');
+$('btn-map').onclick = () => press('m');
+$('btn-journal').onclick = () => press('j');
+$('btn-pause').onclick = () => openPause();
+$('btn-mute').onclick = () => {
+  settings.muted = !settings.muted;
+  saveSettings();
+  applySettings('muted');
+  buildSettingsForm($('settings-form'), applySettings);
+};
+for (const b of document.querySelectorAll('#toolbar button')) b.addEventListener('mousedown', (e) => e.preventDefault());
 
 // ================= Pause / paramètres / voyage =================
 function openPause() {
@@ -448,7 +460,7 @@ function syncRemotes(list) {
     r.st = { rpm: p.r ?? 0.6, gearPos: p.g ?? 1, flapPos: p.f ?? 0, lights: !!p.l };
   }
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
-  $('online').textContent = `🌐 ${remotes.size + 1} pilote${remotes.size ? 's' : ''} en ligne`;
+  $('online').textContent = `${remotes.size + 1} pilote${remotes.size ? 's' : ''} en ligne`;
 }
 
 function netTick(now) {
@@ -467,23 +479,18 @@ function netTick(now) {
 const setSys = (id, cls) => { const el = $(id); el.classList.remove('on', 'warn', 'bad'); if (cls) el.classList.add(cls); };
 let warnKey = '';
 
-function updateHUD() {
-  const av = settings.units === 'aviation';
+const instruments = new Instruments($('pfd'), $('eis'));
+const panelMat = planeMesh.userData.panel.material;
+panelMat.map = panelMat.emissiveMap = instruments.panelTexture;
+panelMat.needsUpdate = true;
+
+function updateHUD(dt) {
   const ground = Math.max(0, groundHeight(plane.pos.x, plane.pos.z));
   const agl = Math.max(0, plane.pos.y - ground - SPECS.gear);
-  const alt = (m) => Math.round(av ? m * 3.281 : m);
-  $('spd').textContent = Math.round(plane.ias * (av ? 1.944 : 3.6)); // vitesse indiquée (comme un anémomètre)
-  $('gload').textContent = plane.gLoad.toFixed(1);
-  $('alt').textContent = alt(plane.pos.y);
-  $('agl').textContent = alt(agl);
-  const vs = plane.onGround ? 0 : plane.velocity.y;
-  $('vs').textContent = av ? Math.round(vs * 196.85) : vs.toFixed(1);
-  $('hdg').textContent = String(Math.round(plane.headingDeg) % 360).padStart(3, '0');
-  $('thr').style.width = `${plane.throttle * 100}%`;
-  $('rpm').style.width = `${plane.rpm * 100}%`;
-  $('fuel').style.width = `${(plane.fuel / SPECS.fuelCapacity) * 100}%`;
-  $('trim').style.left = `${50 + plane.trim * 100}%`;
+  instruments.update(dt, plane, settings.units, inCockpit, agl);
+  panelMat.emissiveIntensity = 0.15 + gfx.atmo.night * 0.55; // éclairage de la planche de bord la nuit
   $('money').textContent = `${save.money} ₣`;
+  $('cam-name').textContent = rig.modeName;
 
   setSys('sys-engine', plane.engineOn ? 'on' : plane.engineStart > 0 ? 'warn' : null);
   const gear = document.querySelector('#sys-gear .gear');
@@ -512,9 +519,16 @@ function updateHUD() {
   }
 }
 
+function updateWeatherChip() {
+  const w = gfx.weather;
+  const night = gfx.atmo.night > 0.6;
+  const ic = w.target === 'rain' || w.target === 'storm' ? 'cloud-rain' : night ? 'moon' : w.target === 'fog' ? 'wind' : 'sun';
+  $('weather-chip').innerHTML = `${icon(ic, 15)}<b>${w.name} · ${String(Math.floor(gfx.atmo.hour)).padStart(2, '0')} h ${String(Math.floor((gfx.atmo.hour % 1) * 60)).padStart(2, '0')}</b>`;
+}
+
 function updatePlace() {
   const a = AIRPORTS.find((x) => Math.hypot(x.x - plane.pos.x, x.z - plane.pos.z) < 3000);
-  $('place').textContent = `📍 ${a ? a.name : nearestPlaceName(plane.pos.x, plane.pos.z)}`;
+  $('place').textContent = a ? a.name : nearestPlaceName(plane.pos.x, plane.pos.z);
 }
 
 // ================= Boucle =================
@@ -593,7 +607,7 @@ function frame(now) {
 
     updatePrompt();
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
-    updateHUD();
+    updateHUD(realDt);
     netTick(now);
 
     mapTimer -= realDt;
@@ -603,7 +617,7 @@ function frame(now) {
       if (!$('bigmap').classList.contains('hidden')) drawBigMap();
     }
     placeTimer -= realDt;
-    if (placeTimer <= 0) { placeTimer = 1; updatePlace(); }
+    if (placeTimer <= 0) { placeTimer = 1; updatePlace(); updateWeatherChip(); }
 
     sound?.update(realDt, plane, inCockpit ? 'cockpit' : 'outside', camera.position.distanceTo(plane.pos), gfx.weatherState, paused);
   } else {
@@ -647,15 +661,15 @@ $('pilot-name').value = save.name;
 const tick = () => new Promise((res) => setTimeout(res, 20));
 (async () => {
   applySettings();
-  status('Construction du terrain…');
+  status('Construction du terrain…', 15);
   await tick();
   const a = airportById(save.lastAirport) || AIRPORTS[0];
   plane.placeOnRunway(a);
   terrain.buildAround(a.x, a.z, 4);
-  status('Aéroports, villes et monuments…');
+  status('Aéroports, villes et monuments…', 45);
   await tick();
   world = buildWorldObjects(scene);
-  status('Ciel et nuages…');
+  status('Ciel et nuages…', 65);
   await tick();
   gfx.buildClouds();
   applySettings('clouds');
@@ -663,12 +677,14 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
     scene, plane, getSave: () => save, persist, toast, beep, logMsg,
     setPaused: (v) => { paused = v; },
   });
-  status('Dessin de la carte…');
+  status('Dessin de la carte…', 82);
   await tick();
   buildMapImage();
-  status('Prêt !');
+  status('Prêt !', 100);
   $('start').disabled = false;
   requestAnimationFrame(frame);
+  setTimeout(() => { $('loader').classList.add('done'); $('menu').classList.remove('hidden'); $('pilot-name').focus(); }, 350);
+  setTimeout(() => $('loader').remove(), 1400);
 })();
 
 $('start').onclick = () => {

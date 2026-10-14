@@ -129,7 +129,8 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
     color: 0x2a3a48, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
     depthWrite: false, clearcoat: 0.4, clearcoatRoughness: 0.05, envMapIntensity: 0.7,
   });
-  const cabin = new THREE.MeshStandardMaterial({ color: 0x3b3f45, roughness: 0.85, metalness: 0 });
+  // habitacle : léger éclairage propre (lumière renvoyée par les vitres et la planche)
+  const cabin = new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.85, metalness: 0, emissive: 0x1d2024 });
   const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(0x1d3f7a);
   const FRAME = new THREE.Color(0x2a2f36);
 
@@ -148,7 +149,7 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
   const isGlass = (i, j, p) => {
     const [z, , h, yc] = keysZ[Math.min(i, keysZ.length - 1)];
     const ny = (p.y - yc) / h;
-    const windshield = z > -2.38 && z < -1.72 && ny > 0.28 && ny < 0.93;
+    const windshield = z > -2.45 && z < -1.72 && ny > 0.14 && ny < 0.985;
     const side = z > -1.72 && z < 0.45 && ny > 0.24 && ny < 0.74 && Math.abs(z + 0.65) > 0.06 && Math.abs(p.x) > 0.25;
     const post = Math.abs(z + 1.72) < 0.04 && ny > 0.28;
     return (windshield || side) && !post;
@@ -307,11 +308,11 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
   const interior = new THREE.Group();
   const panelMat = new THREE.MeshStandardMaterial({ map: defaultPanelTexture(), roughness: 0.6, emissive: 0xffffff, emissiveIntensity: 0, emissiveMap: null });
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.4), panelMat);
-  panel.position.set(0, 0.22, -1.9);
+  panel.position.set(0, 0.1, -1.92);
   panel.rotation.x = -0.18;
   interior.add(panel);
   const glare = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.05, 0.3), cabin);
-  glare.position.set(0, 0.43, -2.0);
+  glare.position.set(0, 0.31, -2.02);
   interior.add(glare);
   const floor = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 2.6), new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.95 }));
   floor.position.set(0, -0.42, -0.7);
@@ -334,7 +335,7 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
     wheelY.position.z = 0.32;
     wheelY.rotation.z = Math.PI;
     yoke.add(col, wheelY);
-    yoke.position.set(x, 0.12, -1.86);
+    yoke.position.set(x, 0.02, -1.86);
     interior.add(yoke);
     yokes.push(yoke);
   }
@@ -345,7 +346,7 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.3, 4, 10), new THREE.MeshStandardMaterial({ color: 0x2f4a6b, roughness: 0.8 }));
     torso.position.set(-0.27, 0.22, -0.88);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ color: 0xd9a77e, roughness: 0.7 }));
-    head.position.set(-0.27, 0.6, -0.92);
+    head.position.set(-0.27, 0.66, -0.92);
     const headset = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), dark);
     headset.position.copy(head.position);
     headset.rotation.y = Math.PI / 2;
@@ -384,7 +385,7 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
     prop, disc, flapL, flapR, ailL, ailR, elevator, rudder, legs, lights, strobe, landing, landingLight,
     fuse, interior, pilot, panel, yokes,
     // points utiles aux effets et à la caméra (repère de l'avion)
-    eye: new THREE.Vector3(-0.27, 0.62, -1.02),
+    eye: new THREE.Vector3(-0.27, 0.71, -1.05),
     exhaust: new THREE.Vector3(0.22, -0.5, -2.78),
     wingtips: [new THREE.Vector3(-5.5, 1.15, -1.0), new THREE.Vector3(5.5, 1.15, -1.0)],
     wheels: [new THREE.Vector3(-1.2, -1.55, -0.75), new THREE.Vector3(1.2, -1.55, -0.75), new THREE.Vector3(0, -1.55, -3.0)],
