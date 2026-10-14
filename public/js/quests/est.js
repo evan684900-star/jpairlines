@@ -1,6 +1,6 @@
 // Quêtes de la région : est (Port-Levant, Base du Volcan, le Volcan, l'Épave, parc éolien des Hauts)
 import {
-  L, VOLCANO, city, land, reach, drop, ring, ringAlt, ringsSpiral, terrainFollow, windTurbines,
+  L, VOLCANO, city, land, reach, drop, ring, ringAlt, windTurbines,
 } from './kit.js';
 
 // ----- utilitaires locaux -----
@@ -16,15 +16,18 @@ const PORT_LEVANT = city('Port-Levant'); // (24496, -5063), immeubles jusqu'à 7
 
 // Parc éolien des Hauts (parc 1) : rangée nord-sud de 10 éoliennes vers x = 16 500
 const T1 = windTurbines(1);
-const coteEst = (t) => P(t.x + 150, t.z + 9); // 150 m à l'est d'une éolienne (perpendiculaire à la rangée)
+// 150 m à l'est de l'éolienne n° i (perpendiculaire à la rangée) ; borné au nombre d'éoliennes réellement construites
+const coteEst = (i) => { const t = T1[Math.min(i, T1.length - 1)]; return P(t.x + 150, t.z + 9); };
 
-// Lieux inventés pour les histoires
+// Le cône est raide (pente ~40 % à 2,8 km du cratère) : les largages sur les flancs se font en
+// longeant la pente (le long des courbes de niveau), jamais face au volcan.
+// Le vrai sommet (bord du cratère) culmine vers 2 000 m (VOLCANO.h = 2300 est une valeur nominale).
 const CAPTEUR_OUEST = flanc(270, 2800); // ~530 m
 const CAPTEUR_NORD = flanc(0, 2800); // ~530 m
 const CAPTEUR_EST = flanc(90, 2800); // ~530 m
 const POSTE_OBS = flanc(45, 2800); // poste d'observation de la Dr Brasier, flanc nord-est (~540 m)
-const PANACHE = P(VOLCANO.x + 200, VOLCANO.z); // la fumée dérive vers l'est en montant
-const QUAIS = P(25200, -4800); // quais de Port-Levant (~65 m)
+const PANACHE = P(VOLCANO.x + 150, VOLCANO.z); // la fumée dérive vers l'est en montant (~+150 m vers 2 300 m)
+const QUAIS = P(25250, -4500); // quais de Port-Levant, au bord de l'eau (~10 m)
 const BUREAU_PARC = P(16900, -1300); // cabane des techniciens du parc éolien (~230 m)
 
 export default [
@@ -32,60 +35,65 @@ export default [
   {
     id: 'est-volcan-capteurs', title: 'Les sismographes de la Dr Brasier', category: 'exploration', airport: 'volcan',
     desc: 'Le volcan gronde ! Largue 3 sismographes sur ses flancs ouest, nord et est (à moins de 150 m du sol), '
-      + 'grimpe en spirale par les 5 anneaux, traverse l\'anneau au-dessus du cratère et reviens à la base.',
-    reward: 950,
+      + 'tiens 30 s entre 1 200 et 1 400 m pour relayer leurs signaux, puis reviens te poser à la base.',
+    reward: 850,
     steps: [
       drop(CAPTEUR_OUEST, 150, 'flanc ouest (530 m)', {
-        maxAgl: 150, spawn: 'flag', text: 'Monte vers 600 m avant d\'atteindre l\'île, puis largue le premier sismographe (X) sur le flanc ouest (530 m), à moins de 150 m du sol',
+        maxAgl: 150, spawn: 'flag',
+        text: 'Vers 650 m, longe le flanc ouest du sud vers le nord (jamais face à la pente !) et largue le premier sismographe (X), à moins de 150 m du sol',
       }),
       drop(CAPTEUR_NORD, 150, 'flanc nord (530 m)', {
-        maxAgl: 150, spawn: 'flag', text: 'Contourne le volcan par le nord : largue le deuxième sur le flanc nord, à moins de 150 m du sol',
+        maxAgl: 150, spawn: 'flag', text: 'Contourne le cône par le nord à la même hauteur : largue le deuxième sur le flanc nord, à moins de 150 m du sol',
       }),
       drop(CAPTEUR_EST, 150, 'flanc est (530 m)', {
-        maxAgl: 150, spawn: 'flag', text: 'Continue à contourner le cône : largue le dernier sur le flanc est, à moins de 150 m du sol. Ensuite, il va falloir grimper !',
+        maxAgl: 150, spawn: 'flag', text: 'Continue le tour du cône : largue le dernier sur le flanc est, à moins de 150 m du sol',
       }),
-      ...terrainFollow(ringsSpiral(VOLCANO.x, VOLCANO.z, 2000, 5, 1300, 2250, Math.PI / 2), 200).map((r, i) => ({
-        ...r, text: i === 0 ? 'Monte en spirale autour du cône : premier anneau à 1 300 m (tourne au large pour prendre de la hauteur)' : 'Continue la spirale vers le sommet',
-      })),
-      ringAlt(VOLCANO, 2350, { size: 50, text: 'Passe l\'anneau au-dessus du cratère : ça sent le soufre !' }),
-      land('volcan', { text: 'Redescends te poser à la Base du Volcan, sur la côte en face de l\'île' }),
+      {
+        type: 'hold', min: 1200, max: 1400, duration: 30,
+        text: 'Relais radio : écarte-toi du cône, monte et tiens ton altitude entre 1 200 et 1 400 m pendant 30 s, le temps que les sismographes se calent',
+      },
+      land('volcan', { text: 'Contourne le cône et pose-toi à la Base du Volcan, sur la côte en face de l\'île : la Dr Brasier épluche déjà les courbes' }),
     ],
   },
   {
     id: 'est-volcan-panache', title: 'Dans le panache', category: 'defi', airport: 'volcan',
     requires: 'est-volcan-capteurs', minRank: 1,
-    desc: 'Prélève des cendres : 6 anneaux en spirale autour du panache (2 200 à 2 700 m), traversée de la fumée '
-      + '(450 à 900 m au-dessus du cratère), palier à 2 500-2 700 m 20 s, piqué à 280 km/h, livraison à Port-Levant.',
+    desc: 'Prélève des cendres : traverse le panache d\'ouest en est (3 anneaux à 2 250 m), puis du nord au sud '
+      + '(3 anneaux à 2 400 m), redescends en piqué à 280 km/h (train rentré) et livre les flacons à Port-Levant.',
     reward: 1200,
     steps: [
-      ...terrainFollow(ringsSpiral(PANACHE.x, PANACHE.z, 750, 6, 2200, 2700, Math.PI), 200).map((r, i) => ({
-        ...r, text: i === 0 ? 'Prends d\'abord de la hauteur au-dessus de la mer (2 200 m !), puis entre dans la spirale autour du panache' : 'Spirale autour du panache, toujours plus haut',
-      })),
-      reach(PANACHE, 250, 'cœur du panache', {
-        minAgl: 450, maxAgl: 900, text: 'Plonge dans la fumée : traverse le cœur du panache, entre 450 et 900 m au-dessus du cratère',
+      ringAlt(P(VOLCANO.x - 1350, VOLCANO.z), 2250, {
+        text: 'Prends d\'abord de la hauteur au-dessus de la mer (2 250 m, ça prend une dizaine de minutes), puis première passe d\'ouest en est',
       }),
-      { type: 'hold', min: 2500, max: 2700, duration: 20, text: 'Prélèvement : tiens ton altitude entre 2 500 et 2 700 m pendant 20 s' },
-      { type: 'speed', min: 280, text: 'Les flacons sont pleins : redescends en piqué jusqu\'à 280 km/h (rentre le train !)' },
-      land('levant', { text: 'Livre les flacons au laboratoire de Port-Levant' }),
+      ringAlt(P(PANACHE.x, PANACHE.z), 2250, { size: 50, text: 'En plein dans la fumée, 250 m au-dessus du cratère : garde le cap à l\'est !' }),
+      ringAlt(P(VOLCANO.x + 1650, VOLCANO.z), 2250, { text: 'Sortie côté est : premier flacon plein' }),
+      ringAlt(P(PANACHE.x, VOLCANO.z - 1500), 2400, {
+        text: 'Deuxième passe, du nord au sud : grand virage à gauche par le nord en remontant à 2 400 m',
+      }),
+      ringAlt(P(PANACHE.x, PANACHE.z), 2400, { size: 50, text: 'Re-belote dans la fumée : cap au sud !' }),
+      ringAlt(P(PANACHE.x, VOLCANO.z + 1500), 2400, { text: 'Sortie côté sud : deuxième flacon plein' }),
+      { type: 'speed', min: 280, text: 'Les flacons sont pleins : pique vers la mer, au sud, jusqu\'à 280 km/h (rentre le train, sinon il sera arraché !)' },
+      land('levant', { text: 'Livre les flacons au laboratoire de Port-Levant, au nord : contourne le cône, tu es maintenant plus bas que le cratère !' }),
     ],
   },
   {
     id: 'est-volcan-evacuation', title: 'Évacuation du volcan', category: 'sauvetage', airport: 'levant',
-    requires: 'est-volcan-panache', minRank: 2, timeLimit: 1500, bonusTime: 1150, bonusReward: 400,
+    requires: 'est-volcan-panache', minRank: 2, timeLimit: 1620, bonusTime: 1200, bonusReward: 400,
     desc: 'Éruption imminente ! Survole Port-Levant puis l\'équipe du flanc nord-est (< 300 m du sol), largue les '
-      + 'masques (< 150 m), pose-toi à la Base du Volcan, vole 30 s sous 100 m et rentre à Port-Levant. 25 min !',
+      + 'masques (< 150 m), pose-toi à la Base du Volcan, vole 30 s sous 100 m et rentre à Port-Levant. 27 min !',
     reward: 2400,
     steps: [
       reach(PORT_LEVANT, 700, 'Port-Levant', {
         maxAgl: 300, text: 'Donne l\'alerte : survole Port-Levant à moins de 300 m du sol (immeubles de 70 m !)',
       }),
       reach(POSTE_OBS, 400, 'fumée du poste d\'observation', {
-        maxAgl: 300, spawn: 'smoke', text: 'Fonce au volcan : repère la fumée du poste d\'observation sur le flanc nord-est (< 300 m du sol)',
+        maxAgl: 300, spawn: 'smoke', text: 'Fonce au volcan : repère la fumée du poste d\'observation sur le flanc nord-est (< 300 m du sol), puis vire aussitôt : le cône monte vite derrière',
       }),
       drop(POSTE_OBS, 150, 'l\'équipe du poste', {
-        maxAgl: 150, spawn: 'hiker', text: 'Largue les masques à gaz et la radio (X) à l\'équipe, à moins de 150 m du sol',
+        maxAgl: 150, spawn: 'hiker',
+        text: 'Largue les masques à gaz et la radio (X) à l\'équipe, à moins de 150 m du sol, en longeant la pente (jamais face au cône !)',
       }),
-      land('volcan', { text: 'Contourne le cône par le nord et pose-toi à la Base du Volcan : la Dr Brasier embarque (fais le plein, K)' }),
+      land('volcan', { text: 'Contourne le cône par le nord et pose-toi à la Base du Volcan : la Dr Brasier embarque' }),
       {
         type: 'low', maxAgl: 100, duration: 30,
         text: 'Le nuage de cendres arrive : file vers le nord en rasant les flots, à moins de 100 m du sol (ou de l\'eau) pendant 30 s',
@@ -97,6 +105,7 @@ export default [
   // ===================== La mer du Levant =====================
   {
     id: 'est-epave-plongeurs', title: 'Les plongeurs de l\'épave', category: 'livraison', airport: 'levant',
+    requires: 'epave', // suite de « Recherche de l'épave » (base.js)
     desc: 'Le Bélouga a perdu son GPS : escorte-le 30 s (à moins de 600 m, sous 500 m), repère l\'épave en rasant '
       + 'l\'eau 15 s (< 60 m), largue les bouteilles aux plongeurs (< 80 m) et rentre à Port-Levant.',
     reward: 1050,
@@ -117,23 +126,23 @@ export default [
   },
   {
     id: 'est-regate', title: 'La régate du Volcan', category: 'tourisme', airport: 'volcan',
-    desc: 'Commente la régate : suis l\'Écume 30 s (< 600 m, sous 500 m), passe les 4 bouées au sud de l\'île du '
-      + 'Volcan, suis le Sirocco 30 s, salue le vainqueur 5 s sur le dos et pose-toi à la Base du Volcan.',
+    desc: 'Commente la régate : suis l\'Écume 30 s (< 600 m, sous 500 m), passe les 4 bouées du parcours au large, '
+      + 'au sud de la base, suis le Sirocco 30 s, salue le vainqueur 5 s sur le dos et pose-toi à la Base du Volcan.',
     reward: 1050,
     steps: [
       {
         type: 'follow', ship: 13, distance: 600, duration: 30, label: 'le voilier Écume',
         text: 'Rejoins l\'Écume, en tête de la régate : reste à moins de 600 m (et sous 500 m) pendant 30 s',
       },
-      ring(P(21000, 19000), 60, { text: 'Bouée n° 1 : le parcours longe la côte sud de l\'île du Volcan' }),
-      ring(P(23500, 19600), 60, { text: 'Bouée n° 2' }),
-      ring(P(26000, 19600), 60, { text: 'Bouée n° 3' }),
-      ring(P(28500, 18800), 60, { text: 'Bouée n° 4 : dernière bouée, demi-tour vers l\'ouest !' }),
+      ring(P(18800, 21000), 60, { text: 'Bouée n° 1 : le parcours fait le tour du plan d\'eau, au large au sud de la base' }),
+      ring(P(21000, 24500), 60, { text: 'Bouée n° 2 : cap au sud-est' }),
+      ring(P(24500, 22500), 60, { text: 'Bouée n° 3 : on remonte vers le nord-est' }),
+      ring(P(22000, 20200), 60, { text: 'Bouée n° 4 : dernière bouée, les voiliers sont au coude à coude !' }),
       {
         type: 'follow', ship: 4, distance: 600, duration: 30, label: 'le voilier Sirocco',
         text: 'Le Sirocco remonte tout le monde ! Reste à moins de 600 m de lui (et sous 500 m) pendant 30 s',
       },
-      { type: 'inverted', duration: 5, text: 'Le Sirocco a gagné ! Salue l\'équipage : vole sur le dos pendant 5 s' },
+      { type: 'inverted', duration: 5, text: 'Le Sirocco a gagné ! Remonte un peu, puis salue l\'équipage : vole sur le dos pendant 5 s' },
       land('volcan', { text: 'Pose-toi à la Base du Volcan pour la remise des trophées' }),
     ],
   },
@@ -147,8 +156,8 @@ export default [
       ring(P(20500, -10500), 150, { text: 'Patrouille côtière : longe la côte vers le nord-ouest (fais le plein avant, la tournée est longue !)' }),
       ring(P(19000, -13500), 150, { text: 'Continue le long de la côte' }),
       {
-        type: 'follow', balloon: 3, distance: 600, duration: 30, label: 'la montgolfière du guetteur',
-        text: 'Le guetteur des douanes t\'attend dans sa montgolfière (vers 850 m) : reste à moins de 600 m de lui pendant 30 s',
+        type: 'follow', balloon: 3, distance: 600, duration: 30, label: 'Cassis, la montgolfière du guetteur',
+        text: 'Le guetteur des douanes t\'attend à bord de Cassis, sa montgolfière (vers 850 m) : reste à moins de 600 m de lui (et de 500 m de son altitude) pendant 30 s',
       },
       {
         type: 'follow', ship: 11, distance: 700, duration: 45, label: 'le cargo suspect',
@@ -165,17 +174,17 @@ export default [
   // ===================== Quête trouvée sur le terrain =====================
   {
     id: 'est-eoliennes', title: 'L\'inspecteur des éoliennes', category: 'livraison', giver: BUREAU_PARC,
-    desc: 'Longe la rangée d\'éoliennes par les 4 anneaux (côté est), retrouve 30 s la montgolfière météo (à moins '
+    desc: 'Longe la rangée d\'éoliennes par les 4 anneaux (côté est), retrouve 30 s la montgolfière de Paulette (à moins '
       + 'de 500 m), largue la liste des pièces sur les quais de Port-Levant (< 200 m du sol) et pose-toi.',
     reward: 600,
     steps: [
-      ring(coteEst(T1[0]), 90, { text: 'Inspection : longe les éoliennes par l\'est, 150 m à côté des mâts (pales jusqu\'à 116 m)' }),
-      ring(coteEst(T1[3]), 90),
-      ring(coteEst(T1[6]), 90),
-      ring(coteEst(T1[9]), 90, { text: 'Dernière éolienne : une pale est fêlée, note-le !' }),
+      ring(coteEst(0), 90, { text: 'Inspection : longe les éoliennes par l\'est, 150 m à côté des mâts (pales jusqu\'à 116 m)' }),
+      ring(coteEst(3), 90),
+      ring(coteEst(6), 90),
+      ring(coteEst(9), 90, { text: 'Dernière éolienne : une pale est fêlée, note-le !' }),
       {
-        type: 'follow', balloon: 10, distance: 500, duration: 30, label: 'la montgolfière météo',
-        text: 'Paulette mesure le vent depuis sa montgolfière (vers 750 m) : reste à moins de 500 m d\'elle pendant 30 s',
+        type: 'follow', balloon: 10, distance: 500, duration: 30, label: 'Mirabelle, la montgolfière de Paulette',
+        text: 'Paulette mesure le vent depuis Mirabelle, sa montgolfière (vers 750 m) : reste à moins de 500 m d\'elle (et de 500 m de son altitude) pendant 30 s',
       },
       drop(QUAIS, 150, 'quais de Port-Levant', {
         maxAgl: 200, spawn: 'crate', text: 'Largue la liste des pièces (X) sur les quais de Port-Levant, à moins de 200 m du sol',
