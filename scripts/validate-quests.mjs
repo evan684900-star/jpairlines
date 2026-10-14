@@ -26,7 +26,8 @@ const err = (file, q, msg) => errors.push(`[${file}] ${q?.id ?? '?'} : ${msg}`);
 const warn = (file, q, msg) => warnings.push(`[${file}] ${q?.id ?? '?'} : ${msg}`);
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));
-const CRUISE = 55; // m/s, vitesse de croisière raisonnable
+const CRUISE = 52; // m/s, croisière du modèle de vol (≈ 190 km/h)
+const CLIMB = 3.5; // m/s, taux de montée moyen jusqu'à ~3000 m
 
 const STEP_KEYS = {
   ring: ['x', 'z', 'agl', 'alt', 'size'], land: ['airport'], touch: ['airport'],
@@ -140,13 +141,24 @@ function giverPoint(q) {
 // Estimation du temps nécessaire (s) pour enchaîner les étapes depuis le donneur
 function estimateTime(q) {
   let pos = giverPoint(q), t = 60;
+  let y = pos ? ground(pos.x, pos.z) : 0;
+  const climbTo = (target, dist) => {
+    // le temps de vol est le plus long entre le trajet horizontal et la montée
+    const tc = Math.max(0, target - y) / CLIMB;
+    y = target;
+    return Math.max(dist / CRUISE, tc);
+  };
   for (const st of q.steps) {
     const p = stepPoint(st);
-    if (p && pos) { t += Math.hypot(p.x - pos.x, p.z - pos.z) / CRUISE; pos = p; }
-    if (st.type === 'land') t += 90;
+    const d = p && pos ? Math.hypot(p.x - pos.x, p.z - pos.z) : 0;
+    if (st.type === 'ring') t += climbTo(p.y, d);
+    else if (st.type === 'altitude') t += climbTo(st.min, d);
+    else if (st.type === 'hold') t += climbTo((st.min + st.max) / 2, d);
+    else { t += d / CRUISE; if (p) y = Math.max(p.y + 150, y * 0.5); }
+    if (p) pos = p;
+    if (st.type === 'land') { t += 90; y = p.y; }
     if (st.type === 'touch') t += 40;
     if (num(st.duration)) t += st.duration;
-    if (st.type === 'altitude') t += st.min / 6;
     if (st.type === 'follow') t += 30;
   }
   return t;
