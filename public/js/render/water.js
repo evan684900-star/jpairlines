@@ -130,13 +130,15 @@ export class Water {
         uniform sampler2D tShore; uniform vec2 shoreCenter; uniform float shoreR;
         uniform float waveAmp; uniform vec2 waveDir; uniform float jpTime;
         ${HEIGHT_GLSL}
-        // hauteur du fond (m) : photo du relief près de la caméra, carte globale au-delà
-        float jpGround(vec2 xz) {
+        // hauteur du fond (m) et précision (1 = photo du relief près de la caméra, 0 = carte globale grossière)
+        vec2 jpGround(vec2 xz) {
           vec2 uv = vec2(0.5 + (xz.x - shoreCenter.x) / (2.0 * shoreR), 0.5 + (shoreCenter.y - xz.y) / (2.0 * shoreR));
           float far = jpTerrainH(xz);
-          if (any(lessThan(uv, vec2(0.02))) || any(greaterThan(uv, vec2(0.98)))) return far;
+          vec2 e = min(uv, 1.0 - uv);
+          float inside = smoothstep(0.02, 0.12, min(e.x, e.y));
+          if (inside <= 0.0) return vec2(far, 0.0);
           float near = texture2D(tShore, uv).r;
-          return near < -400.0 ? far : near;
+          return near < -400.0 ? vec2(far, 0.0) : vec2(mix(far, near, inside), inside);
         }
         vec2 rot(vec2 d, float a) { float c = cos(a), s = sin(a); return vec2(d.x * c - d.y * s, d.x * s + d.y * c); }
         void jpWave(vec2 p, vec2 d, float L, float q, float amp, inout vec3 P, inout vec3 N, inout float J) {
@@ -151,13 +153,12 @@ export class Water {
         }
       `;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\n${common}\nvarying vec3 vWW; varying float vDepth; varying float vCrest;`)
+        .replace('#include <common>', `#include <common>\n${common}\nvarying vec3 vWW; varying float vCrest;`)
         .replace('#include <beginnormal_vertex>', /* glsl */`
           vec3 jpP = vec3(0.0); vec3 jpN = vec3(0.0, 1.0, 0.0); float jpJ = 1.0;
           {
             vec2 p = (modelMatrix * vec4(position, 1.0)).xz;
-            float depth = max(0.0, -jpGround(p));
-            vDepth = depth;
+            float depth = max(0.0, -jpGround(p).x);
             float dcam = length(p - cameraPosition.xz);
             float amp = waveAmp * (1.0 - smoothstep(600.0, 3500.0, dcam)) * smoothstep(0.0, 6.0, depth);
             vec3 P = vec3(0.0), N = vec3(0.0, 1.0, 0.0); float J = 1.0;
@@ -176,14 +177,18 @@ export class Water {
         `);
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', /* glsl */`#include <common>
+          ${common}
           uniform sampler2D tNormal; uniform sampler2D tDetail; uniform vec3 shallowColor, deepColor;
-          uniform float jpTime; uniform float jpNight; uniform float jpWet;
-          varying vec3 vWW; varying float vDepth; varying float vCrest;
+          uniform float jpNight; uniform float jpWet;
+          varying vec3 vWW; varying float vCrest;
           float jpFoam;`)
         .replace('#include <color_fragment>', /* glsl */`
           #include <color_fragment>
           {
-            float depth = vDepth;
+            // profondeur au pixel (et non par sommet : la grille est grossière au loin)
+            vec2 gr = jpGround(vWW.xz);
+            float depth = max(0.0, -gr.x);
+            float vAccurate = gr.y;
             float dist = length(cameraPosition - vWW);
             // couleur selon la profondeur : turquoise près des côtes, bleu nuit au large
             float deep = 1.0 - exp(-depth / 7.0);
@@ -193,7 +198,7 @@ export class Water {
             float n1 = texture2D(tDetail, fuv + vec2(jpTime * 0.02, 0.0)).r;
             float n2 = texture2D(tDetail, fuv * 0.37 - vec2(0.0, jpTime * 0.015)).g;
             float band = sin(depth * 2.6 - jpTime * 1.4 + n2 * 6.0) * 0.5 + 0.5;
-            float shore = (1.0 - smoothstep(0.0, 2.2, depth)) * (0.55 + 0.45 * band);
+            float shore = (1.0 - smoothstep(0.0, 2.2, depth)) * (0.55 + 0.45 * band) * vAccurate;
             float crest = smoothstep(0.35, 0.8, vCrest);
             jpFoam = clamp((shore + crest * 0.8) * smoothstep(0.25, 0.75, n1 * 0.6 + n2 * 0.6), 0.0, 1.0);
             jpFoam *= 1.0 - smoothstep(1500.0, 5000.0, dist);

@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { WORLD, HALF, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
 import { createTerrainMaterial } from './render/materials.js';
+import { LAYERS } from './render/config.js';
 
 const CH = WORLD.chunk;
-export const TERRAIN_LAYER = 1; // calque utilisé pour photographier le relief (profondeur de l'eau)
+export const TERRAIN_LAYER = LAYERS.terrain; // calque utilisé pour photographier le relief (profondeur de l'eau)
 const LOD_SEGMENTS = [80, 40, 20, 10]; // 25 m, 50 m, 100 m, 200 m
 const MAX_INDEX = Math.ceil(HALF / CH) + 2;
 

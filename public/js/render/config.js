@@ -32,6 +32,9 @@ export const QUALITY_PRESETS = {
 
 export const EFFECT_KEYS = Object.keys(QUALITY_PRESETS.high.effects);
 
+// Calques three.js : relief (photo pour l'eau) et objets non soumis au tone mapping (marqueurs)
+export const LAYERS = { terrain: 1, overlay: 2 };
+
 // Réglages fixes de la direction artistique
 export const ART = {
   exposureDay: 0.42,

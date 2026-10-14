@@ -677,7 +677,7 @@ function frame(now) {
     animatePlaneMesh(r.mesh, r.st, realDt, wallT);
   }
 
-  gfx.render(rawDt, null);
+  gfx.render(rawDt, { speed: started ? THREE.MathUtils.clamp((plane.ias - 60) / 30, 0, 1) : 0 });
   fpsTimer -= rawDt;
   if (settings.showFps && fpsTimer <= 0) {
     fpsTimer = 0.5;

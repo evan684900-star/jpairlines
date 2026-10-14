@@ -2,7 +2,7 @@
 // résolution adaptative. Ne touche jamais à la simulation : il lit seulement l'état de l'avion.
 import * as THREE from 'three';
 import { installShaderExtensions, U } from './shared.js';
-import { renderConfig, ART } from './config.js';
+import { renderConfig, ART, LAYERS } from './config.js';
 import { buildTextures } from './textures.js';
 import { buildWorldHeightTexture } from './heightmap.js';
 import { Atmosphere } from './sky.js';
@@ -25,6 +25,8 @@ export class GameRenderer {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0xbfd4e6, 0.0001);
     this.camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 60000);
+    this.camera.layers.enable(LAYERS.overlay);
+    this.overlayTimer = 0;
     buildTextures();
     this.worldHeight = buildWorldHeightTexture(256);
     this.atmo = new Atmosphere(this.renderer, this.scene);
@@ -149,7 +151,16 @@ export class GameRenderer {
     return w;
   }
 
+  // les objets non tonemappés (marqueurs de quêtes, étiquettes) vont sur leur propre calque
+  tagOverlays() {
+    this.scene.traverse((o) => {
+      if (o.layers.mask === 1 && o.material && !Array.isArray(o.material) && o.material.toneMapped === false) o.layers.set(LAYERS.overlay);
+    });
+  }
+
   render(dt, fx) {
+    this.overlayTimer -= dt;
+    if (this.overlayTimer <= 0) { this.overlayTimer = 0.25; this.tagOverlays(); }
     if (this.cfg.post && this.post) this.post.render(dt, fx);
     else this.renderer.render(this.scene, this.camera);
     this.measure(dt);
