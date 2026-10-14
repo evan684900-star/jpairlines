@@ -110,3 +110,4 @@ button:disabled { opacity: 0.5; cursor: wait; }
 .tag { flex: none; font-size: 0.85em; color: #b9c9d8; max-width: 45%; text-align: right; }
 .tag.done { color: #8fe39a; }
 .tag.lock { color: #ffb4a8; }
+#fps { position: fixed; top: 8px; right: 50%; transform: translateX(50%); z-index: 20; font: 600 12px/1 ui-monospace, monospace; background: #000a; color: #9fe3ff; padding: 4px 8px; border-radius: 6px; pointer-events: none; }

@@ -8,31 +8,15 @@ import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm, FUEL_SCALE } from './settings.js';
 import { MULTIPLAYER_URL } from './config.js';
-import { buildTextures, Atmosphere } from './graphics.js';
+import { GameRenderer } from './render/renderer.js';
 import { QuestSystem } from './quests/engine.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t) => { $('load-status').textContent = t; };
 
 // ================= Rendu =================
-const renderer = new THREE.WebGLRenderer({ canvas: $('game'), antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: false });
-renderer.setSize(innerWidth, innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.42;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xbfd4e6, 0.0001);
-buildTextures();
-const atmo = new Atmosphere(renderer, scene);
-
-const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.5, 60000);
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+const gfx = new GameRenderer($('game'));
+const { renderer, scene, camera } = gfx;
 
 
 const terrain = new Terrain(scene);
@@ -40,20 +24,10 @@ const decor = new Decor(scene);
 let world = null;
 
 function applySettings(key) {
-  if (!key || key === 'quality') renderer.setPixelRatio({ low: 0.75, medium: 1, high: Math.min(devicePixelRatio, 2) }[settings.quality] || 1);
-  if (!key || key === 'viewDist') {
-    const d = settings.viewDist * 1000;
-    terrain.setViewDistance(d);
-    scene.fog.density = 1.4 / d;
-    camera.far = d * 1.6;
-    camera.updateProjectionMatrix();
-    atmo.sky.scale.setScalar(camera.far * 0.9);
-  }
+  gfx.applySettings(settings, key);
+  if (!key || key === 'viewDist') terrain.setViewDistance(settings.viewDist * 1000);
   if (!key || key === 'trees' || key === 'decoDist') decor.setOptions({ density: settings.trees, radius: settings.decoDist });
-  if (!key || key === 'fov') { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
-  if (world && (!key || key === 'clouds')) world.clouds.visible = settings.clouds;
-  if (!key || key === 'timeOfDay') atmo.setTime(settings.timeOfDay);
-  if (!key || key === 'shadows' || key === 'quality') atmo.setShadows(settings.shadows, settings.quality);
+  if (!key || key === 'showFps') $('fps').classList.toggle('hidden', !settings.showFps);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
   if (!key || key === 'units') {
@@ -624,9 +598,11 @@ function simulate(dt) {
   }
 }
 
+let fpsTimer = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const realDt = Math.min(0.05, (now - last) / 1000);
+  const rawDt = (now - last) / 1000;
+  const realDt = Math.min(0.05, rawDt);
   last = now;
   const wallT = Date.now() / 1000; // horloge commune : bateaux et montgolfières identiques pour tous
 
@@ -690,7 +666,8 @@ function frame(now) {
   labelTimer -= realDt;
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
-  updateAtmosphere(wallT);
+  gfx.update(realDt, wallT, settings, started ? plane.pos : camera.position);
+  updateWater(wallT);
 
   // autres joueurs : interpolation douce
   const k = 1 - Math.exp(-realDt * 8);
@@ -700,24 +677,22 @@ function frame(now) {
     animatePlaneMesh(r.mesh, r.st, realDt, wallT);
   }
 
-  renderer.render(scene, camera);
+  gfx.render(rawDt, null);
+  fpsTimer -= rawDt;
+  if (settings.showFps && fpsTimer <= 0) {
+    fpsTimer = 0.5;
+    $('fps').textContent = `${Math.round(gfx.fps)} FPS · ${Math.round(renderer.getPixelRatio() * 100)} %`;
+  }
 }
 
-const sunTmp = new THREE.Color();
-function updateAtmosphere(t) {
-  atmo.follow(started ? plane.pos : camera.position, camera.position);
+function updateWater(t) {
+  const atmo = gfx.atmo;
   const w = terrain.water.material.uniforms;
   w.time.value = t % 10000;
-  w.sunDir.value.copy(atmo.sunDir);
+  w.sunDir.value.copy(atmo.lightDir);
   w.sunColor.value.copy(atmo.sun.color).multiplyScalar(atmo.sun.intensity * 0.35);
   w.skyZenith.value.copy(atmo.zenith);
   w.skyHorizon.value.copy(atmo.horizon);
-  if (world) {
-    const c = world.clouds.material.uniforms;
-    sunTmp.copy(atmo.sun.color).multiplyScalar(0.6 + atmo.sun.intensity * 0.35);
-    c.litColor.value.copy(sunTmp);
-    c.shadowColor.value.copy(atmo.horizon).multiplyScalar(0.75);
-  }
 }
 
 // ================= Démarrage =================
@@ -733,6 +708,9 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status('Aéroports, villes et monuments…');
   await tick();
   world = buildWorldObjects(scene);
+  status('Ciel et nuages…');
+  await tick();
+  gfx.buildClouds();
   applySettings('clouds');
   quests = new QuestSystem({
     scene, plane, getSave: () => save, persist, toast, beep, logMsg,
@@ -761,4 +739,4 @@ $('start').onclick = () => {
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, quests: () => quests };
+window.jp = { plane, renderer, settings, gfx, camera, quests: () => quests };

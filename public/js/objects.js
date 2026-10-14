@@ -5,7 +5,8 @@ import {
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
-import { createBuildingMaterial, createClouds, TEX } from './graphics.js';
+import { createBuildingMaterial } from './render/materials.js';
+import { TEX } from './render/textures.js';
 
 const lambert = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, ...extra });
 
@@ -461,10 +462,7 @@ export function buildWorldObjects(scene) {
   buildShips(scene, anim);
   buildBalloons(scene, anim);
   buildWindFarms(scene, anim);
-  const clouds = createClouds();
-  scene.add(clouds);
   return {
-    clouds,
     update(dt, t) { for (const f of anim) f(dt, t); },
   };
 }

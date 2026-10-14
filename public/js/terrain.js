@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { WORLD, HALF, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
-import { createTerrainMaterial, createWaterMaterial, TEX } from './graphics.js';
+import { createTerrainMaterial } from './render/materials.js';
+import { createWaterMaterial } from './render/water.js';
+import { TEX } from './render/textures.js';
 
 const CH = WORLD.chunk;
 const LOD_SEGMENTS = [80, 40, 20, 10]; // 25 m, 50 m, 100 m, 200 m

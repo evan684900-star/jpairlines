@@ -7,7 +7,7 @@ import {
 import { QUESTS } from './index.js';
 import { CATEGORIES, RANKS, nextTo } from './kit.js';
 import { makeLabel } from '../objects.js';
-import { TEX } from '../graphics.js';
+import { TEX } from '../render/textures.js';
 
 const $ = (id) => document.getElementById(id);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));

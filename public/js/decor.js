@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { WORLD, AIRPORTS, CITIES, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
-import { createBuildingMaterial } from './graphics.js';
+import { createBuildingMaterial } from './render/materials.js';
 
 const CH = WORLD.chunk;
 
