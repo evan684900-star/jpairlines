@@ -203,7 +203,8 @@ export class Water {
             jpFoam = clamp((shore + crest * 0.8) * smoothstep(0.25, 0.75, n1 * 0.6 + n2 * 0.6), 0.0, 1.0);
             jpFoam *= 1.0 - smoothstep(1500.0, 5000.0, dist);
             diffuseColor.rgb = mix(water, vec3(0.92, 0.95, 0.97), jpFoam);
-            diffuseColor.a = mix(mix(0.25, 0.97, smoothstep(0.0, 9.0, depth)), 1.0, jpFoam);
+            // transparence seulement là où la profondeur est connue précisément (sinon taches sombres au large)
+            diffuseColor.a = mix(mix(1.0, mix(0.25, 0.97, smoothstep(0.0, 9.0, depth)), vAccurate), 1.0, jpFoam);
           }
         `)
         .replace('#include <roughnessmap_fragment>', /* glsl */`

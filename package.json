@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "prestart": "node scripts/build.js"
   },
   "repository": {
     "type": "git",
@@ -20,6 +21,7 @@
   },
   "homepage": "https://github.com/evan684900-star/jpairlines#readme",
   "dependencies": {
+    "@dgreenheck/ez-tree": "^1.1.0",
     "three": "^0.160.0",
     "ws": "^8.22.0"
   },

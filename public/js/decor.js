@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { WORLD, AIRPORTS, CITIES, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
-import { createBuildingMaterial } from './render/materials.js';
 import { injectShared } from './render/shared.js';
+import { variantsOf, TREE_STRIDE } from './render/trees.js';
+import { WALL_COLORS, ROOF_COLORS } from './render/buildings.js';
 
 const CH = WORLD.chunk;
 
@@ -29,10 +30,6 @@ export function mergeColored(parts) {
   return out;
 }
 
-const TRUNK = 0x4a3526;
-// bruit déterministe selon la position : les sommets dupliqués bougent pareil (pas de fissures)
-const prand = (x, y, z, k) => { const v = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719 + k * 4.581) * 43758.5453; return v - Math.floor(v); };
-
 // assombrit le bas du feuillage (occlusion ambiante simple)
 function shadeByHeight(geo, h0, h1, min = 0.55) {
   const p = geo.attributes.position, c = geo.attributes.color;
@@ -42,35 +39,14 @@ function shadeByHeight(geo, h0, h1, min = 0.55) {
   }
   return geo;
 }
-function jitter(geo, amount) {
-  const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const x = Math.round(p.getX(i) * 100) / 100, y = Math.round(p.getY(i) * 100) / 100, z = Math.round(p.getZ(i) * 100) / 100;
-    p.setXYZ(i, x + (prand(x, y, z, 1) - 0.5) * amount, y + (prand(x, y, z, 2) - 0.5) * amount * 0.5, z + (prand(x, y, z, 3) - 0.5) * amount);
-  }
-  return geo;
-}
 function finish(geo, h0, h1) {
   shadeByHeight(geo, h0, h1);
   geo.computeVertexNormals();
   return geo;
 }
 
-const TREE_GEOS = {
-  conifer: finish(mergeColored([
-    [new THREE.CylinderGeometry(0.25, 0.45, 5, 6).translate(0, 2.5, 0), TRUNK],
-    [jitter(new THREE.ConeGeometry(3.6, 6, 9, 2), 0.4).translate(0, 5, 0), 0x22402a],
-    [jitter(new THREE.ConeGeometry(3.0, 5.5, 9, 2), 0.35).translate(0, 8, 0), 0x264630],
-    [jitter(new THREE.ConeGeometry(2.3, 5, 8, 2), 0.3).translate(0, 11, 0), 0x2a4b31],
-    [jitter(new THREE.ConeGeometry(1.4, 4, 7, 1), 0.2).translate(0, 14, 0), 0x2e5034],
-  ]), 2, 16),
-  broadleaf: finish(mergeColored([
-    [new THREE.CylinderGeometry(0.3, 0.5, 5, 6).translate(0, 2.5, 0), TRUNK],
-    [jitter(new THREE.IcosahedronGeometry(3.4, 1), 0.7).scale(1, 0.85, 1).translate(0, 7.5, 0), 0x3d5d2a],
-    [jitter(new THREE.IcosahedronGeometry(2.6, 1), 0.6).translate(1.9, 6.6, 0.8), 0x456730],
-    [jitter(new THREE.IcosahedronGeometry(2.5, 1), 0.6).translate(-1.6, 6.9, -1.0), 0x3a5828],
-    [jitter(new THREE.IcosahedronGeometry(2.2, 1), 0.5).translate(0.3, 9.6, -0.4), 0x4b6e33],
-  ]), 3, 11),
+// palmiers et cactus (géométrie simple, colorée par sommet)
+const SIMPLE_GEOS = {
   palm: finish(mergeColored([
     [new THREE.CylinderGeometry(0.22, 0.32, 4, 6).translate(0, 2, 0), 0x7a6248],
     [new THREE.CylinderGeometry(0.2, 0.22, 4, 6).rotateZ(0.12).translate(0.25, 5.9, 0), 0x7a6248],
@@ -82,29 +58,9 @@ const TREE_GEOS = {
     [new THREE.CylinderGeometry(0.3, 0.3, 2, 6).rotateZ(Math.PI / 2).translate(1, 3, 0), 0x56733f],
     [new THREE.CylinderGeometry(0.3, 0.3, 2.2, 6).translate(1.9, 4, 0), 0x56733f],
   ]), 0, 6),
-  rock: finish(mergeColored([[jitter(new THREE.DodecahedronGeometry(2.5, 1), 0.9).scale(1.3, 0.7, 1), 0x7d776f]]), -1, 2),
 };
-// versions simplifiées pour les arbres lointains (niveau de détail)
-const TREE_GEOS_FAR = {
-  conifer: finish(mergeColored([
-    [new THREE.CylinderGeometry(0.3, 0.45, 4, 4).translate(0, 2, 0), TRUNK],
-    [new THREE.ConeGeometry(3.4, 13, 6, 1).translate(0, 9, 0), 0x264630],
-  ]), 2, 16),
-  broadleaf: finish(mergeColored([
-    [new THREE.CylinderGeometry(0.35, 0.5, 5, 4).translate(0, 2.5, 0), TRUNK],
-    [new THREE.IcosahedronGeometry(3.8, 0).scale(1.1, 0.95, 1.1).translate(0, 7.8, 0), 0x41622c],
-  ]), 3, 11),
-  palm: TREE_GEOS.palm,
-  cactus: TREE_GEOS.cactus,
-  rock: TREE_GEOS.rock,
-};
-const HOUSE_WALL = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-const HOUSE_ROOF = new THREE.ConeGeometry(0.78, 0.55, 4).rotateY(Math.PI / 4).translate(0, 1.27, 0);
-const WALL_COLORS = [0xe9e1cf, 0xdccbb0, 0xcdbb9c, 0xf0ebe0, 0xc4ad8a, 0xd8c4b4];
-const ROOF_COLORS = [0x8e3b2a, 0x733226, 0x4a403c, 0x9a4a2c, 0x5a463c];
 
 const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 });
-// les arbres ondulent doucement dans le vent (le haut bouge, le pied reste fixe)
 treeMat.onBeforeCompile = (shader) => {
   injectShared(shader);
   shader.vertexShader = shader.vertexShader
@@ -117,8 +73,6 @@ treeMat.onBeforeCompile = (shader) => {
         transformed.z += cos(jpTime * 1.1 + jpBase.z * 0.05) * jpSway * 0.7;
       #endif`);
 };
-const wallMat = createBuildingMaterial({ floor: 2.9, bay: 2.6, glass: 0.45 });
-const roofMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75 });
 
 function inExcludedZone(x, z) {
   for (const a of AIRPORTS) {
@@ -130,38 +84,80 @@ function inExcludedZone(x, z) {
   return false;
 }
 
-function chooseTree(x, z, h, r) {
+// Campagne (hors forêts) : arbres isolés, buissons, rochers, palmiers des côtes, cactus du désert
+function chooseSparse(x, z, h, r) {
   const { temp, dry } = climate(x, z);
-  if (h > snowLine(temp) - 150) return null;
-  if (dry > 0.62 && temp > 0.45) return r() < 0.05 ? (r() < 0.6 ? 'cactus' : 'rock') : null;
-  const forest = fbm(x / 1800, z / 1800, 3, 77);
-  if (temp > 0.85 && h < 60) return forest > 0.4 || r() < 0.2 ? 'palm' : null;
-  if (forest < 0.52) return r() < 0.03 ? (r() < 0.5 ? 'rock' : 'broadleaf') : null;
-  if (temp < 0.35 || h > 600) return 'conifer';
-  return r() < 0.3 ? 'conifer' : 'broadleaf';
+  if (h > snowLine(temp) - 150) return r() < 0.15 ? 'rock' : null;
+  if (dry > 0.62 && temp > 0.45) return r() < 0.35 ? (r() < 0.6 ? 'cactus' : 'rock') : null;
+  if (temp > 0.85 && h < 60) return 'palm';
+  const v = r();
+  return v < 0.3 ? 'broadleaf' : v < 0.65 ? 'bush' : v < 0.8 ? 'rock' : null;
 }
 
-function buildChunkDecor(ci, cj, density) {
+// libs : { trees, houses, rocks } ; opts : { density (réglage végétation), forest (arbres/km² en forêt) }
+function buildChunkDecor(ci, cj, opts, libs) {
   const r = rng((ci * 73856093) ^ (cj * 19349663) ^ 0x5eed);
   const group = new THREE.Group();
-  const lists = { conifer: [], broadleaf: [], palm: [], cactus: [], rock: [] };
-  const houses = [];
+  const simple = { palm: [], cactus: [] }, rocks = [], houses = [];
   const x0 = ci * CH, z0 = cj * CH;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const up = new THREE.Vector3(0, 1, 0);
-
-  const count = Math.round(1100 * density);
-  for (let k = 0; k < count; k++) {
-    const x = x0 + r() * CH, z = z0 + r() * CH;
-    const h = terrainHeight(x, z);
-    if (h < 3) continue;
-    const slope = Math.abs(terrainHeight(x + 12, z) - h) + Math.abs(terrainHeight(x, z + 12) - h);
-    if (slope > 9 || inExcludedZone(x, z)) continue;
-    const type = chooseTree(x, z, h, r);
-    if (!type) continue;
-    const k2 = 0.7 + r() * 0.7;
-    m.compose(p.set(x, groundHeight(x, z) - 0.8, z), q.setFromAxisAngle(up, r() * 6.28), s.set(k2, k2 * (0.85 + r() * 0.35), k2));
-    lists[type].push(m.clone());
+  const pick = { conifer: variantsOf('conifer'), broadleaf: variantsOf('broadleaf'), bush: variantsOf('bush') };
+  const density = opts.density;
+  // arbres : tableau compact [x, y, z, rotation, échelle, variante]
+  const spacing = Math.sqrt(1e6 / Math.max(50, opts.forest * density));
+  const cap = Math.ceil((CH / spacing + 1) ** 2) + 2000;
+  let data = new Float32Array(cap * TREE_STRIDE), n = 0;
+  const addTree = (x, y, z, kind, scale) => {
+    if (n >= cap) return;
+    const list = pick[kind], o = n * TREE_STRIDE;
+    data[o] = x; data[o + 1] = y; data[o + 2] = z; data[o + 3] = r() * 6.283; data[o + 4] = scale; data[o + 5] = list[Math.floor(r() * list.length)];
+    n++;
+  };
+  const place = (x, z, kind, h) => {
+    const y = terrainHeight(x, z) - 0.25;
+    if (pick[kind]) addTree(x, y, z, kind, 0.75 + r() * 0.55);
+    else if (kind === 'rock') {
+      const k2 = 1.2 + r() ** 2 * 5;
+      m.compose(p.set(x, y + 0.15, z), q.setFromAxisAngle(up, r() * 6.28), s.set(k2, k2 * (0.5 + r() * 0.5), k2 * (0.7 + r() * 0.5)));
+      rocks.push({ m: m.clone(), v: Math.floor(r() * 3) });
+    } else {
+      const k2 = 0.7 + r() * 0.7;
+      m.compose(p.set(x, y - 0.55, z), q.setFromAxisAngle(up, r() * 6.28), s.set(k2, k2 * (0.85 + r() * 0.35), k2));
+      simple[kind].push(m.clone());
+    }
+    return h;
+  };
+  // forêts : grille irrégulière, densité réglable (couvert continu vu d'avion)
+  if (density > 0) {
+    for (let gz = z0; gz < z0 + CH; gz += spacing) {
+      for (let gx = x0; gx < x0 + CH; gx += spacing) {
+        const x = gx + r() * spacing, z = gz + r() * spacing;
+        const forest = fbm(x / 1800, z / 1800, 3, 77);
+        if (forest < 0.5 || r() > Math.min(1, (forest - 0.5) * 8)) continue;
+        const h = terrainHeight(x, z);
+        if (h < 3) continue;
+        const { temp, dry } = climate(x, z);
+        if (h > snowLine(temp) - 150 || (dry > 0.62 && temp > 0.45)) continue;
+        if (Math.abs(terrainHeight(x + 8, z) - h) + Math.abs(terrainHeight(x, z + 8) - h) > 7) continue;
+        if (inExcludedZone(x, z)) continue;
+        if (temp > 0.85 && h < 60) { if (r() < 0.25) place(x, z, 'palm', h); continue; }
+        const v = r();
+        const kind = temp < 0.35 || h > 600 ? (v < 0.04 ? 'bush' : 'conifer') : v < 0.3 ? 'conifer' : v < 0.88 ? 'broadleaf' : 'bush';
+        place(x, z, kind, h);
+      }
+    }
+    // campagne : éléments isolés
+    const sparse = Math.round(700 * density);
+    for (let k = 0; k < sparse; k++) {
+      const x = x0 + r() * CH, z = z0 + r() * CH;
+      if (fbm(x / 1800, z / 1800, 3, 77) >= 0.5) continue;
+      const h = terrainHeight(x, z);
+      if (h < 3) continue;
+      if (Math.abs(terrainHeight(x + 12, z) - h) + Math.abs(terrainHeight(x, z + 12) - h) > 9 || inExcludedZone(x, z)) continue;
+      const kind = chooseSparse(x, z, h, r);
+      if (kind) place(x, z, kind, h);
+    }
   }
 
   // villages
@@ -173,41 +169,30 @@ function buildChunkDecor(ci, cj, density) {
     if (h < 4 || h > 1200) continue;
     if (Math.abs(terrainHeight(x + 15, z) - h) + Math.abs(terrainHeight(x, z + 15) - h) > 4) continue;
     if (inExcludedZone(x, z)) continue;
-    m.compose(p.set(x, groundHeight(x, z) - 0.5, z), q.setFromAxisAngle(up, Math.floor(r() * 4) * Math.PI / 2 + (fbm(x / 400, z / 400, 1, 9) - 0.5)),
-      s.set(8 + r() * 7, 5 + r() * 4, 8 + r() * 9));
-    houses.push({ m: m.clone(), wall: WALL_COLORS[Math.floor(r() * WALL_COLORS.length)], roof: ROOF_COLORS[Math.floor(r() * ROOF_COLORS.length)] });
+    const kind = r();
+    const type = kind < 0.24 ? 0 : kind < 0.5 ? 1 : kind < 0.62 ? 2 : kind < 0.78 ? 3 : kind < 0.86 ? 4 : 5;
+    const k2 = 0.9 + r() * 0.25;
+    m.compose(p.set(x, groundHeight(x, z) - 0.3, z), q.setFromAxisAngle(up, Math.floor(r() * 4) * Math.PI / 2 + (fbm(x / 400, z / 400, 1, 9) - 0.5)), s.set(k2, k2, k2));
+    houses.push({ m: m.clone(), type, wall: WALL_COLORS[Math.floor(r() * WALL_COLORS.length)], roof: ROOF_COLORS[Math.floor(r() * ROOF_COLORS.length)] });
   }
 
-  const col = new THREE.Color();
-  for (const [type, mats] of Object.entries(lists)) {
+  data = data.slice(0, n * TREE_STRIDE);
+  if (n) group.add(libs.trees.impostors(data, n, new THREE.Vector3(x0 + CH / 2, 300, z0 + CH / 2)));
+  for (const [type, mats] of Object.entries(simple)) {
     if (!mats.length) continue;
-    const im = new THREE.InstancedMesh(TREE_GEOS[type], treeMat, mats.length);
-    im.userData.tree = type;
-    im.castShadow = true;
-    im.receiveShadow = true;
-    mats.forEach((mm, i) => {
-      im.setMatrixAt(i, mm);
-      im.setColorAt(i, col.setRGB(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.75 + r() * 0.25));
-    });
+    const im = new THREE.InstancedMesh(SIMPLE_GEOS[type], treeMat, mats.length);
+    im.castShadow = im.receiveShadow = true;
+    const col = new THREE.Color();
+    mats.forEach((mm, i) => { im.setMatrixAt(i, mm); im.setColorAt(i, col.setRGB(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.75 + r() * 0.25)); });
     im.computeBoundingSphere();
     group.add(im);
   }
-  if (houses.length) {
-    const walls = new THREE.InstancedMesh(HOUSE_WALL, wallMat, houses.length);
-    const roofs = new THREE.InstancedMesh(HOUSE_ROOF, roofMat, houses.length);
-    walls.castShadow = roofs.castShadow = true;
-    walls.receiveShadow = roofs.receiveShadow = true;
-    houses.forEach((hh, i) => {
-      walls.setMatrixAt(i, hh.m); roofs.setMatrixAt(i, hh.m);
-      walls.setColorAt(i, col.setHex(hh.wall)); roofs.setColorAt(i, col.setHex(hh.roof));
-    });
-    walls.computeBoundingSphere(); roofs.computeBoundingSphere();
-    group.add(walls, roofs);
-  }
+  for (const mesh of [...(rocks.length ? libs.rocks.meshes(rocks) : []), ...(houses.length ? libs.houses.meshes(houses) : [])]) group.add(mesh);
+  group.userData.trees = { data, n };
   return group;
 }
 
-// Végétation et maisons : seulement autour du joueur
+// Végétation et maisons : seulement autour du joueur (arbres 3D tout près, imposteurs plus loin)
 export class Decor {
   constructor(scene) {
     this.scene = scene;
@@ -216,12 +201,28 @@ export class Decor {
     this.center = null;
     this.radius = 2;
     this.density = 1;
+    this.libs = null;
+    this.near = null;
+    this.nearRadius = 200;
+    this.nearMax = 300;
+    this.forest = 6000;
   }
 
-  setOptions({ density, radius }) {
-    if (density !== this.density || radius !== this.radius) {
+  // bibliothèques chargées de façon asynchrone (arbres EZ-Tree, maisons, rochers)
+  setLibraries(libs, nearTrees) {
+    this.libs = libs;
+    this.near = nearTrees;
+    this.center = null;
+  }
+
+  // density : réglage « végétation » ; radius : en morceaux de 2 km ; q : préréglage de qualité (forêts, arbres 3D)
+  setOptions({ density, radius, q }) {
+    if (q) { this.nearRadius = q.nearTrees; this.nearMax = q.nearTreeMax; }
+    const forest = q ? q.forestDensity : this.forest;
+    if (density !== this.density || radius !== this.radius || forest !== this.forest) {
       this.density = density;
       this.radius = radius;
+      this.forest = forest;
       for (const g of this.groups.values()) this.dispose(g);
       this.groups.clear();
       this.center = null;
@@ -230,20 +231,19 @@ export class Decor {
 
   dispose(g) {
     this.scene.remove(g);
-    g.traverse((o) => o.isInstancedMesh && o.dispose());
+    g.traverse((o) => {
+      if (o.userData.disposeGeometry) o.geometry.dispose();
+      if (!o.isInstancedMesh) return;
+      o.dispose();
+    });
   }
 
-  // niveau de détail : arbres complets près du joueur, simplifiés plus loin
-  applyLod(g, i, j) {
-    const far = Math.max(Math.abs(i - this.center[0]), Math.abs(j - this.center[1])) > 1;
-    for (const o of g.children) if (o.userData.tree) o.geometry = (far ? TREE_GEOS_FAR : TREE_GEOS)[o.userData.tree];
-  }
-
-  update(x, z, budgetMs = 4) {
+  // camPos : position de la caméra (arbres 3D autour d'elle)
+  update(x, z, budgetMs = 4, dt = 0, camPos = null) {
+    if (!this.libs) return;
     const ci = Math.floor(x / CH), cj = Math.floor(z / CH);
     if (!this.center || this.center[0] !== ci || this.center[1] !== cj) {
       this.center = [ci, cj];
-      for (const [key, g] of this.groups) { const [i, j] = key.split(',').map(Number); this.applyLod(g, i, j); }
       const R = this.radius;
       for (const [key, g] of this.groups) {
         const [i, j] = key.split(',').map(Number);
@@ -258,14 +258,24 @@ export class Decor {
       }
       this.queue.sort((a, b) => a.d - b.d);
     }
-    if (this.density <= 0) return;
-    const t0 = performance.now();
-    while (this.queue.length && performance.now() - t0 < budgetMs) {
-      const job = this.queue.shift();
-      const g = buildChunkDecor(job.i, job.j, this.density);
-      this.scene.add(g);
-      this.groups.set(job.key, g);
-      this.applyLod(g, job.i, job.j);
+    if (this.density > 0) {
+      const t0 = performance.now();
+      while (this.queue.length && performance.now() - t0 < budgetMs) {
+        const job = this.queue.shift();
+        const g = buildChunkDecor(job.i, job.j, { density: this.density, forest: this.forest }, this.libs);
+        this.scene.add(g);
+        this.groups.set(job.key, g);
+      }
+    }
+    // arbres 3D : morceaux autour de la caméra
+    if (this.near && camPos) {
+      const ki = Math.floor(camPos.x / CH), kj = Math.floor(camPos.z / CH);
+      const lists = [];
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        const g = this.groups.get(`${ki + di},${kj + dj}`);
+        if (g) lists.push(g.userData.trees);
+      }
+      this.near.update(dt, camPos, lists, this.nearRadius, this.nearMax);
     }
   }
 }

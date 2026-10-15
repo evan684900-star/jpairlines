@@ -10,6 +10,7 @@ import { Clouds } from './clouds.js';
 import { Weather } from './weather.js';
 import { Water } from './water.js';
 import { Effects } from './effects.js';
+import { TREE_U } from './trees.js';
 
 installShaderExtensions();
 
@@ -153,6 +154,11 @@ export class GameRenderer {
     U.jpWet.value += ((w.rain > 0.2 ? 1 : 0) - U.jpWet.value) * Math.min(1, dt * (w.rain > 0.2 ? 0.05 : 0.01));
     this.water?.update(dt, this.camera, w, this.weather.windDir, this.terrain.version);
     this.renderer.toneMappingExposure = this.atmo.exposure;
+    // lumière des arbres lointains (photos prises sous un éclairage de référence)
+    const a = this.atmo;
+    TREE_U.uLight.value.copy(a.sun.color).multiplyScalar(a.sun.intensity * 0.42 * Math.max(0.25, Math.min(1, a.lightDir.y * 2 + 0.3)))
+      .add(_c.copy(a.hemi.color).multiplyScalar(a.hemi.intensity * 1.1)).multiplyScalar(0.62);
+    TREE_U.jpWind.value = Math.min(1.5, w.wind / 10);
     const glow = Math.min(1, Math.max(0, (this.atmo.night - 0.3) / 0.5)) + w.darken * 0.4;
     for (const m of NIGHT_GLOWS) m.opacity = Math.min(1, glow);
     this.atmo.follow(focus, this.camera.position, this.camera.far);

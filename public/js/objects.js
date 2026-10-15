@@ -6,6 +6,7 @@ import {
 import { createPlaneMesh } from './plane.js';
 import { mergeColored } from './decor.js';
 import { createBuildingMaterial } from './render/materials.js';
+import { createCityMaterial, parapetGeometry } from './render/buildings.js';
 import { TEX, glowPoints } from './render/textures.js';
 
 const lambert = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, metalness: 0, ...extra });
@@ -234,8 +235,17 @@ function buildAirport(scene, a, r, anim) {
 function buildCities(scene) {
   const total = CITIES.reduce((s, c) => s + c.n, 0);
   const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-  const mesh = new THREE.InstancedMesh(geo, createBuildingMaterial(), total);
+  const mesh = new THREE.InstancedMesh(geo, createCityMaterial(), total);
   mesh.castShadow = mesh.receiveShadow = true;
+  // toits : acrotère (rebord) et groupes de climatisation
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x8d8e8c, roughness: 0.8 });
+  const parapets = new THREE.InstancedMesh(parapetGeometry(), roofMat, total);
+  const acGeo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+  const acs = new THREE.InstancedMesh(acGeo, new THREE.MeshStandardMaterial({ color: 0xb4b6b8, roughness: 0.5, metalness: 0.4 }), total * 3);
+  parapets.castShadow = acs.castShadow = true;
+  parapets.receiveShadow = acs.receiveShadow = true;
+  const pm = new THREE.Matrix4(), ps = new THREE.Vector3(), pp = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  let nAc = 0;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const palette = [0xc9c2b5, 0xb7a993, 0xd8d2c5, 0x99a4b0, 0xb89a7a, 0xe0ddd6, 0x7f93a8, 0xa9b4bc, 0x8a8580];
   const col = new THREE.Color();
@@ -255,8 +265,15 @@ function buildCities(scene) {
       const h = terrainHeight(x, z);
       if (h < 3) continue;
       const tall = 8 + r() * c.tall * Math.pow(Math.max(0.05, 1 - d), 2) * (r() < 0.08 ? 2.2 : 1);
-      m.compose(p.set(x, groundHeight(x, z) - 3, z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle), s.set(20 + r() * 25, tall + 3, 20 + r() * 25));
+      const w = 20 + r() * 25, dpt = 20 + r() * 25, gy = groundHeight(x, z) - 3;
+      m.compose(p.set(x, gy, z), q.setFromAxisAngle(up, -angle), s.set(w, tall + 3, dpt));
       mesh.setMatrixAt(n, m);
+      parapets.setMatrixAt(n, pm.compose(pp.set(x, gy + tall + 3, z), q, ps.set(w, 1.1, dpt)));
+      for (let k = 0, na = 1 + Math.floor(r() * 3); k < na && nAc < total * 3; k++) {
+        const ox = (r() - 0.5) * w * 0.6, oz = (r() - 0.5) * dpt * 0.6;
+        const ax = x + ox * Math.cos(angle) + oz * Math.sin(angle), az = z - ox * Math.sin(angle) + oz * Math.cos(angle);
+        acs.setMatrixAt(nAc++, pm.compose(pp.set(ax, gy + tall + 3, az), q, ps.set(2 + r() * 3, 1.2 + r() * 1.5, 1.5 + r() * 2)));
+      }
       mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
       n++;
       // lampadaires dans la rue voisine
@@ -266,9 +283,10 @@ function buildCities(scene) {
     }
     addLabel(scene, c.name, c.x, terrainHeight(c.x, c.z) + 300, c.z, 18000, { color: '#ffffff', size: 0.027 });
   }
-  mesh.count = n;
-  mesh.computeBoundingSphere();
-  scene.add(mesh, glowPoints(lamps, 0xffb060, 9));
+  mesh.count = parapets.count = n;
+  acs.count = nAc;
+  for (const o of [mesh, parapets, acs]) o.computeBoundingSphere();
+  scene.add(mesh, parapets, acs, glowPoints(lamps, 0xffb060, 9));
 }
 
 // ---------- Points d'intérêt ----------

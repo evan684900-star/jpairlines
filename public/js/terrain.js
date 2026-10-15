@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD, HALF, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
+import { WORLD, HALF, CITIES, terrainHeight, climate, snowLine, fbm, smoothstep } from './world.js';
 import { createTerrainMaterial } from './render/materials.js';
 import { LAYERS } from './render/config.js';
 
@@ -32,6 +32,14 @@ export function terrainColor(h, slope, x, z, out, info = null) {
   const { temp, dry } = climate(x, z);
   const n = fbm(x / 500, z / 500, 2, 5);
   lowlandColor(h, slope, x, z, temp, dry, n, out);
+  // villes : bitume et béton, avec quelques parcs
+  for (const c of CITIES) {
+    const d = Math.hypot(x - c.x, z - c.z) / (c.radius * 1.08);
+    if (d >= 1) continue;
+    const park = fbm(x / 260, z / 260, 2, 31) > 0.68 ? 0.35 : 1;
+    const k = smoothstep(1, 0.7, d) * park;
+    out.lerp(tmpRock.setRGB(0.36 + n * 0.08, 0.36 + n * 0.08, 0.35 + n * 0.07, SRGB), k);
+  }
   // transitions progressives vers la roche puis la neige (pas de saut d'un sommet à l'autre)
   const snow = snowLine(temp) + (n - 0.5) * 300;
   const rockF = Math.max(smoothstep(0.6, 0.95, slope), smoothstep(snow - 450, snow - 150, h));

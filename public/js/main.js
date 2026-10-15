@@ -10,6 +10,9 @@ import { settings, buildSettingsForm, saveSettings, FUEL_SCALE } from './setting
 import { MULTIPLAYER_URL } from './config.js';
 import { GameRenderer } from './render/renderer.js';
 import { CameraRig } from './render/cameras.js';
+import { TreeLibrary, NearTrees } from './render/trees.js';
+import { HouseLibrary } from './render/buildings.js';
+import { RockLibrary } from './render/rocks.js';
 import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
@@ -32,7 +35,7 @@ let world = null;
 function applySettings(key) {
   gfx.applySettings(settings, key);
   if (!key || key === 'viewDist') terrain.setViewDistance(settings.viewDist * 1000);
-  if (!key || key === 'trees' || key === 'decoDist') decor.setOptions({ density: settings.trees, radius: settings.decoDist });
+  if (!key || key === 'trees' || key === 'decoDist' || key === 'quality') decor.setOptions({ density: settings.trees, radius: settings.decoDist, q: gfx.cfg });
   if (!key || key === 'showFps') $('fps').classList.toggle('hidden', !settings.showFps);
   if (!key || key === 'volume' || key === 'muted') sound?.setVolume(settings.volume, settings.muted);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
@@ -628,7 +631,7 @@ function frame(now) {
   }
 
   terrain.update(plane.pos.x, plane.pos.z, started ? 5 : 12);
-  decor.update(plane.pos.x, plane.pos.z, started ? 3 : 8);
+  decor.update(plane.pos.x, plane.pos.z, started ? 3 : 8, realDt, camera.position);
   labelTimer -= realDt;
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
@@ -669,7 +672,13 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status('Aéroports, villes et monuments…', 45);
   await tick();
   world = buildWorldObjects(scene);
-  status('Ciel et nuages…', 65);
+  status('Arbres, maisons et rochers…', 55);
+  await tick();
+  try {
+    const [trees, rocks] = await Promise.all([new TreeLibrary().build(renderer), new RockLibrary().load()]);
+    decor.setLibraries({ trees, rocks, houses: new HouseLibrary() }, new NearTrees(scene, trees));
+  } catch (e) { console.warn('Décor détaillé indisponible', e); }
+  status('Ciel et nuages…', 70);
   await tick();
   gfx.buildClouds();
   applySettings('clouds');
@@ -702,4 +711,4 @@ $('start').onclick = () => {
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, gfx, camera, rig, planeMesh, quests: () => quests };
+window.jp = { plane, renderer, settings, gfx, camera, rig, planeMesh, decor, terrain, quests: () => quests };
