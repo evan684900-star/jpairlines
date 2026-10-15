@@ -76,6 +76,10 @@ if (lang === 'en') {
 const KEY = 'jpairlines-poki-settings';
 export const settings = Object.fromEntries(SCHEMA.filter((s) => s.key && !s.preset).map((s) => [s.key, s.def]));
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY)) || {}); } catch { /* pas de sauvegarde */ }
+// premier lancement sur téléphone ou tablette : qualité basse pour rester fluide
+try {
+  if (!localStorage.getItem(KEY) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) { settings.quality = 'low'; settings.viewDist = 10; }
+} catch { /* stockage indisponible */ }
 if (!QUALITY_PRESETS[settings.quality]) settings.quality = 'high';
 // v2 : la résolution adaptative (qui rendait l'image floue) n'est plus activée par défaut
 if ((settings.v || 1) < 2) { settings.adaptiveRes = false; settings.v = 2; }

@@ -83,6 +83,7 @@ const EN = {
     'reduce throttle, gear down below 210 km/h, flaps below 165 km/h, approach at ~120 km/h descending at 3 to 4 m/s, wings level. Just above the runway, pull up a little (flare) to touch down gently (less than 4 m/s in normal mode), then brake.',
   '· molette · clic-glisser': '· wheel · click-drag',
   Échap: 'Esc',
+  'Tourne ton appareil à l\'horizontale pour piloter': 'Turn your device sideways to fly',
 };
 
 function walk(root) {

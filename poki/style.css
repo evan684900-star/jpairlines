@@ -265,3 +265,44 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 .hero { position: relative; }
 .lang-switch { position: absolute; top: 14px; right: 14px; display: flex; gap: 4px; }
 .lang-switch .tab { padding: 5px 10px; font-size: 0.78em; }
+
+/* ===== Commandes tactiles ===== */
+#touch-ui { display: none; }
+body.touch #touch-ui { display: block; position: fixed; inset: 0; z-index: 4; pointer-events: none; user-select: none; -webkit-user-select: none; }
+body.touch #game { touch-action: none; }
+#touch-ui * { touch-action: none; -webkit-tap-highlight-color: transparent; }
+.t-stick { pointer-events: auto; position: absolute; left: max(12px, env(safe-area-inset-left)); bottom: 16px; width: min(34vh, 200px); height: min(34vh, 200px);
+  border-radius: 50%; background: radial-gradient(circle, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04) 70%); border: 2px solid rgba(255, 255, 255, 0.25); display: grid; place-items: center; }
+.t-stick.active { border-color: rgba(245, 181, 50, 0.8); }
+.t-stick span { position: absolute; bottom: -2px; font-size: 10px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.55); transform: translateY(100%); }
+.t-knob { width: 38%; height: 38%; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffd772, #f0a51f); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45); transition: transform 0.08s; }
+.t-stick.active .t-knob { transition: none; }
+.t-right { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: 12px; display: flex; gap: 10px; align-items: flex-end; }
+.t-buttons { pointer-events: auto; display: grid; grid-template-columns: repeat(3, 58px); gap: 6px; }
+.t-buttons button { flex-direction: column; justify-content: center; gap: 1px; width: 58px; height: 46px; padding: 2px; font-size: 9.5px; font-weight: 600; line-height: 1.1;
+  background: rgba(10, 18, 26, 0.72); color: #dfe7ee; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px; box-shadow: none; }
+.t-buttons button b { font-size: 13px; color: var(--accent); }
+.t-buttons button.on { background: rgba(245, 181, 50, 0.85); color: #1a1406; }
+.t-buttons button.on b { color: #1a1406; }
+.t-throttle { pointer-events: auto; position: relative; width: 56px; height: min(46vh, 230px); border-radius: 14px; background: rgba(10, 18, 26, 0.72); border: 1px solid rgba(255, 255, 255, 0.2); overflow: visible; }
+.t-fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 0 0 13px 13px; background: linear-gradient(0deg, rgba(62, 230, 255, 0.55), rgba(62, 230, 255, 0.15)); }
+.t-handle { position: absolute; left: -6px; right: -6px; height: 28px; border-radius: 8px; background: linear-gradient(180deg, #f2f4f6, #b9c2cb); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5); }
+.t-throttle span { position: absolute; top: -18px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.6); }
+.t-respawn { display: none; pointer-events: auto; position: absolute; left: 50%; bottom: 22%; transform: translateX(-50%); z-index: 12; }
+#touch-ui.crashed .t-respawn { display: inline-flex; }
+/* interface allégée sur écran tactile : instruments réduits, place pour les commandes */
+body.touch #flightdeck { left: 50%; transform: translateX(-50%) scale(0.62); transform-origin: bottom center; bottom: 4px; }
+body.touch #eis, body.touch #systems, body.touch #weather-chip { display: none; }
+body.touch #toolbar { top: 8px; bottom: auto; right: 8px; transform: scale(0.85); transform-origin: top right; }
+body.touch #minimap { display: none; }
+body.touch #quest-box { top: 54px; right: 8px; max-width: 42vw; font-size: 0.85em; }
+body.touch #prompt { bottom: auto; top: 54px; font-size: 0.85em; }
+body.touch #tuto { top: 8px; font-size: 0.9em; }
+body.touch #crash { z-index: 11; }
+/* portrait : on demande de tourner l'appareil */
+#rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  #rotate { display: flex; position: fixed; inset: 0; z-index: 50; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #0b1520; color: #dfe7ee; text-align: center; padding: 24px; }
+  #rotate div { font-size: 54px; }
+  #rotate p { font-size: 1.1em; max-width: 280px; }
+}

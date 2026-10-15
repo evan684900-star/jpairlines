@@ -19,6 +19,7 @@ import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
 import { Tutorial } from './tutorial.js';
+import { TouchControls } from './touch.js';
 import { translateDOM } from './i18n-dom.js';
 import { tr, trMsg, lang, setLang } from './i18n.js';
 
@@ -186,8 +187,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 function readInput() {
   const has = (...ks) => ks.some((k) => keys.has(k));
   let pitch = (has('arrowdown') ? 1 : 0) - (has('arrowup') ? 1 : 0);
-  if (settings.invertPitch) pitch = -pitch;
-  return {
+  const inp = {
     pitch,
     roll: (has('arrowright') ? 1 : 0) - (has('arrowleft') ? 1 : 0),
     yaw: (has('d') ? 1 : 0) - (has('q', 'a') ? 1 : 0),
@@ -196,6 +196,17 @@ function readInput() {
     trim: (has('t') ? 1 : 0) - (has('b') ? 1 : 0),
     refuel: has('k'),
   };
+  // commandes tactiles : ajoutées au clavier (le clavier garde la priorité s'il est utilisé)
+  const t = touch?.input(plane);
+  if (t) {
+    if (!inp.pitch) inp.pitch = t.pitch;
+    if (!inp.roll) inp.roll = t.roll;
+    if (!inp.yaw) inp.yaw = t.yaw;
+    if (!inp.throttle) inp.throttle = t.throttle;
+    inp.brake = inp.brake || t.brake;
+  }
+  if (settings.invertPitch) inp.pitch = -inp.pitch;
+  return inp;
 }
 
 // Carburant : on fait le plein arrêté dans un aéroport, moteur coupé, en payant 1 ₣ le litre.
@@ -239,6 +250,7 @@ function respawn(airport, teleport = false) {
   plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
   plane.fuel = keepFuel;
   rig.reset(plane);
+  touch?.sync(plane);
   $('crash').classList.add('hidden');
   if (far) {
     terrain.buildAround(plane.pos.x, plane.pos.z, 3);
@@ -248,6 +260,7 @@ function respawn(airport, teleport = false) {
 
 // ================= Barre d'outils (souris / tactile) =================
 const press = (key) => { dispatchEvent(new KeyboardEvent('keydown', { key })); dispatchEvent(new KeyboardEvent('keyup', { key })); };
+const touch = new TouchControls(press); // téléphone et tablette
 $('btn-camera').onclick = () => press('c');
 $('btn-map').onclick = () => press('m');
 $('btn-journal').onclick = () => press('j');
@@ -526,6 +539,7 @@ function setAircraft(id) {
   if (here) {
     plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine);
     rig.reset(plane);
+    touch?.sync(plane);
   } else respawn(undefined, true);
   toast(tr(`${def.name} sorti du hangar !`, `${def.name} is out of the hangar!`));
 }
@@ -694,6 +708,7 @@ function frame(now) {
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
     tutorial.update(paused ? 0 : realDt);
+    touch.setCrashed(plane.crashed);
     updatePrompt();
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
     updateHUD(realDt);
