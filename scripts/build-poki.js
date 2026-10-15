@@ -18,6 +18,6 @@ const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
 const zip = path.join(dist, 'jpairlines-poki.zip');
 fs.rmSync(zip, { force: true });
-execSync(`zip -qr -9 "${zip}" . -x "*.map" -x "*.DS_Store"`, { cwd: path.join(root, 'poki') });
+execSync(`zip -qr -9 "${zip}" . -x "*.map" -x "*.DS_Store" -x "LISEZMOI.md"`, { cwd: path.join(root, 'poki') });
 const mb = (fs.statSync(zip).size / 1048576).toFixed(1);
 console.log(`Version Poki prête : dist/jpairlines-poki.zip (${mb} Mo)`);

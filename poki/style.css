@@ -306,3 +306,4 @@ body.touch #crash { z-index: 11; }
   #rotate div { font-size: 54px; }
   #rotate p { font-size: 1.1em; max-width: 280px; }
 }
+.ac-action .ac-try { margin-top: 8px; font-size: 0.85em; }

@@ -20,6 +20,7 @@ import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
 import { Tutorial } from './tutorial.js';
 import { TouchControls } from './touch.js';
+import { Poki } from './poki-sdk.js';
 import { translateDOM } from './i18n-dom.js';
 import { tr, trMsg, lang, setLang } from './i18n.js';
 
@@ -138,6 +139,7 @@ const overlayOpen = () => OVERLAYS.some((id) => !$(id).classList.contains('hidde
 function closeOverlays() {
   for (const id of OVERLAYS) $(id).classList.add('hidden');
   paused = false;
+  if (started) Poki.gameplayStart();
 }
 
 addEventListener('keydown', (e) => {
@@ -159,7 +161,8 @@ addEventListener('keydown', (e) => {
   if (k === 'h') $('help').classList.toggle('hidden');
   if (paused) return;
   if (k === 'c') { rig.next(); toast(`${tr('Caméra', 'Camera')} : ${rig.modeName}`); }
-  if (k === 'r') respawn();
+  // après un crash : petite pause publicitaire possible (Poki décide), puis on repart
+  if (k === 'r') { if (plane.crashed) Poki.commercialBreak().then(() => respawn()); else respawn(); }
   if (k === 'enter' && quests?.canOpenBoard()) quests.openBoard();
   if (k === 'x') quests?.requestDrop();
   if (plane.crashed) return;
@@ -244,6 +247,7 @@ function doRefuel(dt) {
 
 function respawn(airport, teleport = false) {
   const a = airport || airportById(save.lastAirport) || AIRPORTS[0];
+  if (trialPlane) { trialPlane = false; swapPlane(save.aircraft); } // fin de l'essai : on reprend son avion
   quests?.onRespawn(plane.crashed, teleport);
   const far = plane.pos.distanceTo(new THREE.Vector3(a.x, a.elev, a.z)) > 4000;
   const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : plane.S.fuelCapacity;
@@ -277,6 +281,7 @@ for (const b of document.querySelectorAll('#toolbar button')) b.addEventListener
 // ================= Pause / paramètres / voyage =================
 function openPause() {
   paused = true;
+  Poki.gameplayStop();
   $('pause').classList.remove('hidden');
   renderAirportList();
   renderHangar();
@@ -524,23 +529,29 @@ attachPanel();
 // ================= Hangar : changer d'avion =================
 // Le nouvel avion est sorti au dernier aéroport (réservoir plein) ; une quête en cours continue
 // si l'on change d'avion arrêté dans un aéroport, sinon elle est annulée (comme un voyage).
-function setAircraft(id) {
-  const def = aircraftById(id);
-  if (!unlockedAircraft(save).includes(def)) return;
-  const here = atAirportStopped() ? plane.landedAt : null;
-  plane.setType(def.id);
+// remplace l'avion piloté (modèle 3D compris)
+let trialPlane = false; // avion essayé grâce à une pub : rendu à la réapparition
+function swapPlane(id) {
+  plane.setType(id);
   scene.remove(planeMesh);
   planeMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-  planeMesh = createPlaneMesh(def.id, { landingLight: true });
+  planeMesh = createPlaneMesh(id, { landingLight: true });
   scene.add(planeMesh);
   attachPanel();
-  save.aircraft = def.id;
-  persist();
+}
+function setAircraft(id, trial = false) {
+  const def = aircraftById(id);
+  if (!trial && !unlockedAircraft(save).includes(def)) return;
+  const here = atAirportStopped() ? plane.landedAt : null;
+  swapPlane(def.id);
+  trialPlane = false;
+  if (!trial) { save.aircraft = def.id; persist(); } // un essai (pub récompensée) n'est pas enregistré
   if (here) {
     plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine);
     rig.reset(plane);
     touch?.sync(plane);
   } else respawn(undefined, true);
+  trialPlane = trial; // l'essai dure jusqu'à la prochaine réapparition
   toast(tr(`${def.name} sorti du hangar !`, `${def.name} is out of the hangar!`));
 }
 
@@ -578,7 +589,23 @@ function renderHangar() {
       b.textContent = tr('Piloter cet avion', 'Fly this plane');
       b.onclick = () => { setAircraft(a.id); closeOverlays(); };
       act.appendChild(b);
-    } else act.innerHTML = `<span class="ac-lock">🔒 ${tr(`Débloqué par la quête « ${quest ? quest.title : a.unlock} »`, `Unlocked by the quest "${quest ? quest.title : a.unlock}"`)}</span>`;
+    } else {
+      act.innerHTML = `<span class="ac-lock">🔒 ${tr(`Débloqué par la quête « ${quest ? quest.title : a.unlock} »`, `Unlocked by the quest "${quest ? quest.title : a.unlock}"`)}</span>`;
+      // essai gratuit en regardant une pub (toujours au choix du joueur)
+      if (Poki.available) {
+        const b = document.createElement('button');
+        b.className = 'secondary ac-try';
+        b.textContent = tr('▶ Essayer le temps d\'un vol (pub)', '▶ Try it for one flight (ad)');
+        b.onclick = async () => {
+          b.disabled = true;
+          const ok = await Poki.rewardedBreak();
+          b.disabled = false;
+          if (ok) { setAircraft(a.id, true); closeOverlays(); toast(tr(`Essai du ${a.name} : bon vol !`, `Trying the ${a.name}: enjoy the flight!`)); }
+          else toast(tr('Pub non terminée : pas d\'essai cette fois', 'Ad not finished: no trial this time'));
+        };
+        act.appendChild(b);
+      }
+    }
     box.appendChild(card);
   }
 }
@@ -785,6 +812,11 @@ $('pilot-name').value = save.name;
 const tick = () => new Promise((res) => setTimeout(res, 20));
 (async () => {
   applySettings();
+  // SDK Poki : chargé en parallèle ; pendant une pub, le son est coupé et le jeu en pause
+  const pokiReady = Poki.init({
+    adStart: () => { paused = true; try { sound?.ctx.suspend(); } catch { /* pas de son */ } },
+    adEnd: () => { paused = overlayOpen(); try { if (!settings.muted) sound?.resume(); } catch { /* pas de son */ } },
+  });
   status(tr('Construction du terrain…', 'Building the terrain…'), 15);
   await tick();
   const a = airportById(save.lastAirport) || AIRPORTS[0];
@@ -808,6 +840,8 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
     setPaused: (v) => { paused = v; },
     // une quête terminée peut débloquer un avion
     onQuestDone: (q) => {
+      // mission réussie : pause publicitaire possible, seulement à l'arrêt au sol
+      if (plane.onGround) setTimeout(() => { if (plane.onGround && !overlayOpen()) Poki.commercialBreak(); }, 2500);
       const a = AIRCRAFT.find((x) => x.unlock === q.id);
       if (a) setTimeout(() => toast(tr(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`, `🔓 New plane unlocked: ${a.name}! Esc → Hangar to fly it`)), 3200);
     },
@@ -816,6 +850,8 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   await tick();
   buildMapImage();
   status(tr('Prêt !', 'Ready!'), 100);
+  await pokiReady;
+  Poki.loadingFinished();
   $('start').disabled = false;
   requestAnimationFrame(frame);
   setTimeout(() => { $('loader').classList.add('done'); if (!started) { $('menu').classList.remove('hidden'); $('pilot-name').focus(); } }, 350);
@@ -832,6 +868,7 @@ $('start').onclick = () => {
   initAudio();
   respawn();
   started = true;
+  Poki.gameplayStart();
   if (!tutoDone) { tutoDone = true; tutorial.start(); } else toast(tr('Bon vol ! H pour les commandes, Entrée près d\'un « ! » pour les missions.', 'Have a nice flight! H for controls, Enter near a "!" for missions.'));
 };
 
