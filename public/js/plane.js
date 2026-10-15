@@ -47,9 +47,9 @@ export const SPECS = {
 
 // Aides au pilotage et tolérance selon la difficulté
 export const DIFFICULTY = {
-  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity },
-  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8 },
-  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6 },
+  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, turnComp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity },
+  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8 },
+  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6 },
 };
 
 // Centre de gravité et points de contact, dans le repère du modèle (nez vers -Z, Y vers le haut, X à droite)
@@ -309,7 +309,17 @@ export class Plane {
         da += clamp(-bank * 1.2 * diff.wingLeveler - pr * 0.3, -0.6, 0.6);
       }
       if (diff.autoCoord && Math.abs(input.yaw) < 0.1) dr += clamp(beta * 6 * diff.autoCoord, -1, 1);
-      if (diff.pitchDamp) de += -qr * 0.25 * diff.pitchDamp;
+      // en virage, l'avion tourne naturellement en tangage (nez qui « suit » le virage) : ce n'est pas à amortir
+      const phi = clamp(Math.abs(bank), 0, 1.05);
+      const upright = _up.y > 0.2;
+      const qTurn = upright ? (G / Vd) * Math.sin(phi) * Math.tan(phi) : 0;
+      if (diff.pitchDamp) de += -(qr - qTurn) * 0.25 * diff.pitchDamp;
+      // compensation en virage : la portance penche avec l'avion, il faut tirer un peu (1/cos φ) pour ne pas descendre
+      if (diff.turnComp && upright && qbar > 150) {
+        const dn = 1 / Math.cos(phi) - 1;
+        const dAlpha = (dn * m * G) / (qbar * S.S * S.CLa);
+        de += ((-S.Cma * dAlpha - (S.Cmq * qTurn * S.c) / (2 * Vd)) / S.Cmde) * diff.turnComp;
+      }
     }
     de = clamp(de, -1, 1); da = clamp(da, -1, 1); dr = clamp(dr, -1, 1);
 

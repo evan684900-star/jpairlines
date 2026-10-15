@@ -120,6 +120,8 @@ demande environ ±1,6 g en croisière (et non le braquage maximal), mais garde t
 Le plafond (~6 km) est volontairement un peu plus haut qu'un vrai Cessna pour garder la quête « record d'altitude » faisable.
 Selon la difficulté : **facile** (stabilisateur de roulis, coordination automatique, crash rare), **normale** (aides légères),
 **réaliste** (aucune aide, chute d'aile au décrochage, casse au-delà de 6 g ou de la vitesse limite).
+En virage, la portance penche avec l'avion : un vrai pilote tire un peu sur le manche pour ne pas descendre.
+En facile et en normale, cette petite traction est ajoutée automatiquement ; en réaliste, c'est à toi de la doser.
 
 ## Carburant
 
