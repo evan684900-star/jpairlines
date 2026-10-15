@@ -1,3 +1,4 @@
+import { tr } from '../i18n.js';
 // Boîte à outils pour écrire des quêtes.
 // Ce fichier n'utilise pas three.js : il est aussi chargé par scripts/validate-quests.mjs (Node).
 //
@@ -45,24 +46,24 @@ import {
 export { AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO, HALF, terrainHeight, findCoast, findSea, findPeak, findFlat };
 
 export const CATEGORIES = {
-  course: 'Course',
-  livraison: 'Livraison',
+  course: tr('Course', 'Race'),
+  livraison: tr('Livraison', 'Delivery'),
   exploration: 'Exploration',
-  voltige: 'Voltige',
-  sauvetage: 'Sauvetage',
-  tourisme: 'Tourisme',
-  defi: 'Défi',
+  voltige: tr('Voltige', 'Aerobatics'),
+  sauvetage: tr('Sauvetage', 'Rescue'),
+  tourisme: tr('Tourisme', 'Sightseeing'),
+  defi: tr('Défi', 'Challenge'),
   transport: 'Transport',
 };
 
 // Rangs de pilote (selon l'expérience gagnée = total des récompenses)
 export const RANKS = [
-  { name: 'Élève pilote', xp: 0 },
-  { name: 'Pilote privé', xp: 1500 },
-  { name: 'Pilote confirmé', xp: 5000 },
-  { name: 'Commandant de bord', xp: 12000 },
-  { name: 'Pilote de ligne', xp: 25000 },
-  { name: 'As du ciel', xp: 50000 },
+  { name: tr('Élève pilote', 'Student pilot'), xp: 0 },
+  { name: tr('Pilote privé', 'Private pilot'), xp: 1500 },
+  { name: tr('Pilote confirmé', 'Experienced pilot'), xp: 5000 },
+  { name: tr('Commandant de bord', 'Captain'), xp: 12000 },
+  { name: tr('Pilote de ligne', 'Airline pilot'), xp: 25000 },
+  { name: tr('As du ciel', 'Sky ace'), xp: 50000 },
 ];
 
 export function A(id) {

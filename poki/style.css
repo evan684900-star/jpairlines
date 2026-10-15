@@ -260,3 +260,8 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 .tuto-dots i.cur { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
 #tuto-skip { margin-top: 8px; padding: 2px 6px; font-size: 0.75em; font-weight: 600; background: none; border: 0; color: var(--dim); text-decoration: underline; box-shadow: none; }
 #tuto-skip:hover { color: var(--text); transform: none; box-shadow: none; }
+
+/* choix de la langue (menu) */
+.hero { position: relative; }
+.lang-switch { position: absolute; top: 14px; right: 14px; display: flex; gap: 4px; }
+.lang-switch .tab { padding: 5px 10px; font-size: 0.78em; }

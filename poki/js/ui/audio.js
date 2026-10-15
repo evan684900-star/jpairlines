@@ -1,16 +1,17 @@
+import { tr } from '../i18n.js';
 // Sons synthétisés en direct (Web Audio, aucun fichier à télécharger) :
 // moteur à pistons dont le régime suit l'hélice, démarreur, vent, pluie, tonnerre, moteurs du train
 // et des volets, avertisseur de décrochage, toucher des roues, crash, bips d'alerte.
 // familles de sons et leur libellé dans les paramètres
 export const SOUND_GROUPS = [
-  { key: 'engine', label: 'Moteur et hélice' },
-  { key: 'wind', label: 'Vent' },
-  { key: 'rain', label: 'Pluie' },
-  { key: 'weather', label: 'Tonnerre' },
-  { key: 'systems', label: 'Train d\'atterrissage et volets' },
-  { key: 'alarms', label: 'Alarmes (décrochage)' },
-  { key: 'impacts', label: 'Roues au toucher, crash' },
-  { key: 'interface', label: 'Bips des quêtes et du jeu' },
+  { key: 'engine', label: tr('Moteur et hélice', 'Engine and propeller') },
+  { key: 'wind', label: tr('Vent', 'Wind') },
+  { key: 'rain', label: tr('Pluie', 'Rain') },
+  { key: 'weather', label: tr('Tonnerre', 'Thunder') },
+  { key: 'systems', label: tr('Train d\'atterrissage et volets', 'Landing gear and flaps') },
+  { key: 'alarms', label: tr('Alarmes (décrochage)', 'Alarms (stall)') },
+  { key: 'impacts', label: tr('Roues au toucher, crash', 'Touchdown, crash') },
+  { key: 'interface', label: tr('Bips des quêtes et du jeu', 'Quest and game beeps') },
 ];
 
 export class SoundEngine {

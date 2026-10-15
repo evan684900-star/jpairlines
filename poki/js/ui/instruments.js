@@ -1,3 +1,4 @@
+import { tr } from '../i18n.js';
 // Instruments de vol dessinés sur canvas :
 // - PFD (écran principal type « glass cockpit ») : horizon artificiel, échelle de tangage, inclinaison,
 //   bille, bandes de vitesse et d'altitude, variomètre, bande de cap ;
@@ -174,7 +175,7 @@ export class Instruments {
     if (s.agl < 750) {
       ctx.font = `700 ${Math.round(ah * 0.05)}px ${FONT}`;
       ctx.textAlign = 'center'; ctx.fillStyle = s.agl < 60 && !s.onGround ? C.amber : C.green;
-      ctx.fillText(`SOL ${Math.round(s.agl * u.alt)}`, W - tapeW / 2, 14);
+      ctx.fillText(`${tr('SOL', 'AGL')} ${Math.round(s.agl * u.alt)}`, W - tapeW / 2, 14);
     }
     // variomètre
     const vs = s.vs * u.vs;
@@ -279,7 +280,7 @@ export class Instruments {
     ctx.fillStyle = C.text; ctx.font = `700 ${fs + 2}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(jet ? `${Math.round(rpm)}` : String(Math.round(rpm / 10) * 10), gx, gy + R * 0.55);
     ctx.font = `600 ${fs - 2}px ${FONT}`; ctx.fillStyle = C.cyan;
-    ctx.fillText(jet ? 'N1 %' : 'TR/MIN', gx, gy + R * 0.95);
+    ctx.fillText(jet ? 'N1 %' : tr('TR/MIN', 'RPM'), gx, gy + R * 0.95);
     // barres : carburant, gaz, trim
     let y = gy + R + 22;
     const bar = (label, frac, col, text, center = false) => {
@@ -295,11 +296,11 @@ export class Instruments {
       y += fs * 1.6;
     };
     const fuelFrac = s.fuel / this.S.fuelCapacity;
-    bar('CARB', fuelFrac, fuelFrac < 0.05 ? C.red : fuelFrac < 0.15 ? C.amber : C.green, `${Math.round(s.fuel)} L`);
-    bar('GAZ', s.throttle, C.cyan, `${Math.round(s.throttle * 100)} %`);
-    bar('TRIM', 0.5 + s.trim, C.text, s.trim > 0.01 ? 'CABRÉ' : s.trim < -0.01 ? 'PIQUÉ' : 'NEUTRE', true);
+    bar(tr('CARB', 'FUEL'), fuelFrac, fuelFrac < 0.05 ? C.red : fuelFrac < 0.15 ? C.amber : C.green, `${Math.round(s.fuel)} L`);
+    bar(tr('GAZ', 'THR'), s.throttle, C.cyan, `${Math.round(s.throttle * 100)} %`);
+    bar('TRIM', 0.5 + s.trim, C.text, s.trim > 0.01 ? tr('CABRÉ', 'NOSE UP') : s.trim < -0.01 ? tr('PIQUÉ', 'NOSE DOWN') : tr('NEUTRE', 'NEUTRAL'), true);
     // volets
-    ctx.textAlign = 'left'; ctx.fillStyle = C.dim; ctx.fillText('VOLETS', pad, y);
+    ctx.textAlign = 'left'; ctx.fillStyle = C.dim; ctx.fillText(tr('VOLETS', 'FLAPS'), pad, y);
     ctx.textAlign = 'right'; ctx.fillStyle = C.text; ctx.fillText(`${Math.round(s.flaps)}°`, W - pad, y);
   }
 

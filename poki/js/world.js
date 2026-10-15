@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 // Monde partagé : tout est généré à partir d'une graine fixe,
 // donc chaque joueur obtient exactement la même carte.
 
@@ -90,8 +91,8 @@ export function rawHeight(x, z) {
 // ---------- Aéroports ----------
 export const AIRPORT_TYPES = {
   international: { length: 2600, width: 60, surface: 'asphalt', pad: 380, label: 'International' },
-  regional: { length: 1600, width: 45, surface: 'asphalt', pad: 260, label: 'Régional' },
-  strip: { length: 950, width: 30, surface: 'grass', pad: 150, label: 'Piste en herbe' },
+  regional: { length: 1600, width: 45, surface: 'asphalt', pad: 260, label: tr('Régional', 'Regional') },
+  strip: { length: 950, width: 30, surface: 'grass', pad: 150, label: tr('Piste en herbe', 'Grass strip') },
 };
 
 const AIRPORT_SPECS = [

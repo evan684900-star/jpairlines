@@ -1,12 +1,13 @@
+import { tr } from '../i18n.js';
 // Météo (purement visuelle : le vent ne modifie pas le vol) : couverture nuageuse, voile, brume,
 // pluie, orage. En mode « changeante », la météo dépend de l'heure UTC : la même pour tous les joueurs.
 const STATES = {
-  clear: { name: 'Grand beau', cover: 0.2, stratus: 0, cirrus: 0.4, darken: 0, turbidity: 0, fog: 1, hazeH: 450, haze: 0.00005, rain: 0, storm: 0, wind: 4 },
-  cloudy: { name: 'Nuageux', cover: 0.55, stratus: 0, cirrus: 0.55, darken: 0.08, turbidity: 0.12, fog: 1.1, hazeH: 450, haze: 0.00008, rain: 0, storm: 0, wind: 7 },
-  overcast: { name: 'Couvert', cover: 0.78, stratus: 0.82, cirrus: 0, darken: 0.42, turbidity: 0.45, fog: 1.35, hazeH: 500, haze: 0.00014, rain: 0, storm: 0, wind: 9 },
-  rain: { name: 'Pluie', cover: 0.88, stratus: 0.95, cirrus: 0, darken: 0.62, turbidity: 0.65, fog: 1.9, hazeH: 600, haze: 0.0003, rain: 1, storm: 0, wind: 11 },
-  storm: { name: 'Orage', cover: 1, stratus: 1, cirrus: 0, darken: 0.82, turbidity: 0.85, fog: 2.2, hazeH: 700, haze: 0.0004, rain: 1.6, storm: 1, wind: 16 },
-  fog: { name: 'Brouillard', cover: 0.3, stratus: 0.25, cirrus: 0.2, darken: 0.2, turbidity: 0.6, fog: 1.6, hazeH: 140, haze: 0.0045, rain: 0, storm: 0, wind: 2 },
+  clear: { name: tr('Grand beau', 'Clear'), cover: 0.2, stratus: 0, cirrus: 0.4, darken: 0, turbidity: 0, fog: 1, hazeH: 450, haze: 0.00005, rain: 0, storm: 0, wind: 4 },
+  cloudy: { name: tr('Nuageux', 'Cloudy'), cover: 0.55, stratus: 0, cirrus: 0.55, darken: 0.08, turbidity: 0.12, fog: 1.1, hazeH: 450, haze: 0.00008, rain: 0, storm: 0, wind: 7 },
+  overcast: { name: tr('Couvert', 'Overcast'), cover: 0.78, stratus: 0.82, cirrus: 0, darken: 0.42, turbidity: 0.45, fog: 1.35, hazeH: 500, haze: 0.00014, rain: 0, storm: 0, wind: 9 },
+  rain: { name: tr('Pluie', 'Rain'), cover: 0.88, stratus: 0.95, cirrus: 0, darken: 0.62, turbidity: 0.65, fog: 1.9, hazeH: 600, haze: 0.0003, rain: 1, storm: 0, wind: 11 },
+  storm: { name: tr('Orage', 'Storm'), cover: 1, stratus: 1, cirrus: 0, darken: 0.82, turbidity: 0.85, fog: 2.2, hazeH: 700, haze: 0.0004, rain: 1.6, storm: 1, wind: 16 },
+  fog: { name: tr('Brouillard', 'Fog'), cover: 0.3, stratus: 0.25, cirrus: 0.2, darken: 0.2, turbidity: 0.6, fog: 1.6, hazeH: 140, haze: 0.0045, rain: 0, storm: 0, wind: 2 },
 };
 const KEYS = ['cover', 'stratus', 'cirrus', 'darken', 'turbidity', 'fog', 'hazeH', 'haze', 'rain', 'storm', 'wind'];
 // probabilités du mode « changeante »

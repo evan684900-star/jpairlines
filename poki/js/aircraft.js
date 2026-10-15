@@ -1,3 +1,4 @@
+import { tr } from './i18n.js';
 // Flotte de JP Airlines : caractéristiques de vol, géométrie (roues, points de contact) et dessin de chaque avion.
 // Les valeurs sont des ordres de grandeur réels (masses, surfaces, puissances) ; les coefficients sans dimension
 // suivent ceux de l'avion de base, retouchés pour donner à chaque appareil son caractère.
@@ -43,8 +44,8 @@ const CUB_CABIN = {
 };
 
 const CUB = {
-  id: 'cub', name: 'Cub-1', role: 'Avion-école', seats: 4, engineLabel: '1 moteur à pistons de 160 ch',
-  desc: 'Le fidèle quadriplace à aile haute de JP Airlines : stable, indulgent, il pardonne presque tout. Parfait pour apprendre et pour les missions de tous les jours.',
+  id: 'cub', name: 'Cub-1', role: tr('Avion-école', 'Trainer'), seats: 4, engineLabel: tr('1 moteur à pistons de 160 ch', '1 piston engine, 160 hp'),
+  desc: tr('Le fidèle quadriplace à aile haute de JP Airlines : stable, indulgent, il pardonne presque tout. Parfait pour apprendre et pour les missions de tous les jours.', 'JP Airlines\' trusty four-seat high-wing plane: stable and forgiving, it lets you get away with almost anything. Perfect for learning and for everyday missions.'),
   unlock: null, color: 0xf4f5f7, accent: 0xc62f2a, acc2: 0x1d3f7a,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 224, cruise: 187, stall: 79, takeoff: 316, roll: 58 },
@@ -109,8 +110,8 @@ const CUB = {
 // Moustique : ULM biplace (type Ikarus C42). Léger, lent, décolle en 100 m, monte comme un ascenseur.
 // ----------------------------------------------------------------------------------------------------
 const MOUSTIQUE = {
-  id: 'moustique', name: 'Moustique', role: 'Ultra-léger', seats: 2, engineLabel: '1 moteur Rotax de 100 ch',
-  desc: 'Un ULM tout en vitres, à peine 300 kg à vide. Il décolle en 130 m, se pose presque partout et se pilote du bout des doigts. Attention au vent : il est léger !',
+  id: 'moustique', name: 'Moustique', role: tr('Ultra-léger', 'Ultralight'), seats: 2, engineLabel: tr('1 moteur Rotax de 100 ch', '1 Rotax engine, 100 hp'),
+  desc: tr('Un ULM tout en vitres, à peine 300 kg à vide. Il décolle en 130 m, se pose presque partout et se pilote du bout des doigts. Attention au vent : il est léger !', 'An ultralight made almost entirely of windows, barely 300 kg empty. It takes off in 130 m, lands almost anywhere and flies at a fingertip. Watch the wind: it\'s light!'),
   unlock: 'courrier', color: 0xf2c230, accent: 0x23252b, acc2: 0x8a8f99,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 171, cruise: 144, stall: 59, takeoff: 128, roll: 59 },
@@ -168,8 +169,8 @@ const MOUSTIQUE = {
 // Faucon : avion de voltige monoplace en tandem (type Extra 300). 300 ch, profil symétrique, ±10 g.
 // ----------------------------------------------------------------------------------------------------
 const FAUCON = {
-  id: 'faucon', name: 'Faucon', role: 'Voltige', seats: 2, engineLabel: '1 moteur à pistons de 300 ch',
-  desc: 'Une bête de voltige : il fait un tonneau complet en moins d\'une seconde et demie, vole aussi bien sur le dos qu\'à l\'endroit et encaisse les grosses ressources. Pas de volets : il faut savoir le poser.',
+  id: 'faucon', name: 'Faucon', role: tr('Voltige', 'Aerobatic'), seats: 2, engineLabel: tr('1 moteur à pistons de 300 ch', '1 piston engine, 300 hp'),
+  desc: tr('Une bête de voltige : il fait un tonneau complet en moins d\'une seconde et demie, vole aussi bien sur le dos qu\'à l\'endroit et encaisse les grosses ressources. Pas de volets : il faut savoir le poser.', 'An aerobatic beast: a full roll in under a second and a half, it flies as well upside down as right side up and takes hard pull-ups. No flaps: landing it takes skill.'),
   unlock: 'centre-coeur', color: 0xffffff, accent: 0xd4232c, acc2: 0x1b1b1f,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 325, cruise: 278, stall: 109, takeoff: 351, roll: 256 },
@@ -223,8 +224,8 @@ const FAUCON = {
 // Mistral : bimoteur d'affaires six places (type Beechcraft Baron). Train rentrant, 350 km/h.
 // ----------------------------------------------------------------------------------------------------
 const MISTRAL = {
-  id: 'mistral', name: 'Mistral', role: 'Bimoteur', seats: 6, engineLabel: '2 moteurs à pistons de 255 ch',
-  desc: 'Deux moteurs, six places et un train rentrant : le Mistral avale les longues distances à 340 km/h. Plus lourd et plus rapide, il demande d\'anticiper la descente et de sortir le train à temps.',
+  id: 'mistral', name: 'Mistral', role: tr('Bimoteur', 'Twin-engine'), seats: 6, engineLabel: tr('2 moteurs à pistons de 255 ch', '2 piston engines, 255 hp'),
+  desc: tr('Deux moteurs, six places et un train rentrant : le Mistral avale les longues distances à 340 km/h. Plus lourd et plus rapide, il demande d\'anticiper la descente et de sortir le train à temps.', 'Two engines, six seats and retractable gear: the Mistral eats long distances at 340 km/h. Heavier and faster, it requires planning your descent and lowering the gear in time.'),
   unlock: 'defi-traversee', color: 0xf4f4f0, accent: 0x1f3f7a, acc2: 0xc9a227,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 333, cruise: 280, stall: 111, takeoff: 477, roll: 76 },
@@ -281,8 +282,8 @@ const MISTRAL = {
 // Albatros : hydravion amphibie (type Cessna 206 sur flotteurs). Se pose sur l'eau ET sur les pistes.
 // ----------------------------------------------------------------------------------------------------
 const ALBATROS = {
-  id: 'albatros', name: 'Albatros', role: 'Hydravion amphibie', seats: 6, engineLabel: '1 moteur à pistons de 285 ch',
-  desc: 'Des flotteurs avec des roues dedans : train rentré, il se pose sur la mer, les lacs et les baies ; train sorti, sur les pistes. Ne jamais toucher l\'eau train sorti, il capoterait !',
+  id: 'albatros', name: 'Albatros', role: tr('Hydravion amphibie', 'Amphibious seaplane'), seats: 6, engineLabel: tr('1 moteur à pistons de 285 ch', '1 piston engine, 285 hp'),
+  desc: tr('Des flotteurs avec des roues dedans : train rentré, il se pose sur la mer, les lacs et les baies ; train sorti, sur les pistes. Ne jamais toucher l\'eau train sorti, il capoterait !', 'Floats with wheels inside: gear up, it lands on the sea, lakes and bays; gear down, on runways. Never touch the water with the gear down, it would flip over!'),
   unlock: 'ouest-sos-plateforme', color: 0xf6f6f2, accent: 0xe5622a, acc2: 0x274b7a,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 222, cruise: 182, stall: 95, takeoff: 419, roll: 60 },
@@ -339,8 +340,8 @@ const ALBATROS = {
 // Éclair : biréacteur léger (type Eclipse 500). 600 km/h, cabine pressurisée, empennage en T.
 // ----------------------------------------------------------------------------------------------------
 const ECLAIR = {
-  id: 'eclair', name: 'Éclair', role: 'Jet d\'affaires', seats: 6, engineLabel: '2 réacteurs de 4,1 kN',
-  desc: 'Le joyau de la flotte. Deux réacteurs, près de 600 km/h : il traverse la carte en quelques minutes. Les réacteurs mettent du temps à monter en régime et il atterrit vite : approche stabilisée obligatoire.',
+  id: 'eclair', name: 'Éclair', role: tr('Jet d\'affaires', 'Business jet'), seats: 6, engineLabel: tr('2 réacteurs de 4,1 kN', '2 jet engines, 4.1 kN'),
+  desc: tr('Le joyau de la flotte. Deux réacteurs, près de 600 km/h : il traverse la carte en quelques minutes. Les réacteurs mettent du temps à monter en régime et il atterrit vite : approche stabilisée obligatoire.', 'The jewel of the fleet. Two jet engines, almost 600 km/h: it crosses the map in minutes. The engines take time to spool up and it lands fast: a stabilised approach is a must.'),
   unlock: 'defi-champ-finale', color: 0xf5f6f8, accent: 0x0f6d7a, acc2: 0x9aa4ae,
   // performances mesurées au banc d'essai (scripts/flight-test.mjs), affichées au hangar
   perf: { vmax: 594, cruise: 489, stall: 141, takeoff: 832, roll: 92 },

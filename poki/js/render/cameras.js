@@ -1,3 +1,4 @@
+import { tr } from '../i18n.js';
 // Caméras : poursuite, cockpit, orbite libre, spectateur (au bord de la trajectoire).
 // Transitions fluides entre les vues et tremblements (désactivables, et coupés si le système
 // demande moins d'animations).
@@ -6,10 +7,10 @@ import { groundHeight } from '../world.js';
 import { setCockpitView } from '../planeModel.js';
 
 export const CAMERA_MODES = [
-  { id: 'chase', name: 'Poursuite' },
+  { id: 'chase', name: tr('Poursuite', 'Chase') },
   { id: 'cockpit', name: 'Cockpit' },
-  { id: 'orbit', name: 'Orbite libre' },
-  { id: 'spectator', name: 'Spectateur' },
+  { id: 'orbit', name: tr('Orbite libre', 'Free orbit') },
+  { id: 'spectator', name: tr('Spectateur', 'Spectator') },
 ];
 
 const TRANSITION = 0.75; // s

@@ -1,8 +1,11 @@
 import { QUALITY_PRESETS, EFFECT_KEYS } from './render/config.js';
 import { SOUND_GROUPS } from './ui/audio.js';
+import { lang } from './i18n.js';
 
 // Paramètres du joueur (sauvegardés dans le navigateur)
 export const SCHEMA = [
+  { section: 'Langue / Language' },
+  { key: 'lang', label: 'Langue / Language', type: 'select', def: lang, options: [['fr', 'Français'], ['en', 'English']] },
   { section: 'Graphismes' },
   { key: 'quality', label: 'Qualité', type: 'select', def: 'medium', options: [['low', 'Bas'], ['medium', 'Moyen'], ['high', 'Élevé']] },
   { key: 'adaptiveRes', label: 'Résolution adaptative (baisse un peu la netteté si le jeu rame)', type: 'check', def: false },
@@ -40,6 +43,35 @@ export const SCHEMA = [
   { key: 'volume', label: 'Volume général', type: 'range', def: 0.5, min: 0, max: 1, step: 0.05, unit: '' },
   ...SOUND_GROUPS.map((g) => ({ key: `snd_${g.key}`, label: `· ${g.label}`, type: 'range', def: 100, min: 0, max: 150, step: 5, unit: ' %' })),
 ];
+
+// version anglaise des libellés
+const EN = {
+  _sections: { Graphismes: 'Graphics', 'Effets visuels': 'Visual effects', 'Ciel et météo': 'Sky and weather', Simulation: 'Simulation', Commandes: 'Controls', Interface: 'Interface', Sons: 'Sound' },
+  quality: ['Quality', { low: 'Low', medium: 'Medium', high: 'High' }],
+  adaptiveRes: ['Adaptive resolution (slightly less sharp if the game is slow)'],
+  viewDist: ['View distance'], trees: ['Vegetation density'], decoDist: ['Tree distance'], fov: ['Field of view'], clouds: ['Clouds'],
+  fx_shadows: ['Shadows'], fx_post: ['Post-processing'], fx_bloom: ['· Glow (bloom)'], fx_ao: ['· Ambient occlusion (SSAO)'],
+  fx_godrays: ['· Sun rays and lens flares'], fx_chroma: ['· Chromatic aberration'], fx_motionFx: ['Shake and speed distortion'],
+  fx_particles: ['Particles (dust, smoke, trails)'],
+  timeMode: ['Time', { fixed: 'Fixed (set below)', cycle: 'Day/night cycle (24 min)', local: 'My computer\'s time' }],
+  timeOfDay: ['Time of day'],
+  weather: ['Weather', { auto: 'Changing', clear: 'Clear', cloudy: 'Cloudy', overcast: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog' }],
+  difficulty: ['Difficulty', { easy: 'Easy (auto engine, rare crashes)', normal: 'Normal', realistic: 'Realistic (no assists)' }],
+  fuelMode: ['Fuel consumption', { fast: 'Accelerated ×4 (recommended)', real: 'Realistic (×1)', off: 'Off' }],
+  timeScale: ['Time acceleration'],
+  sensitivity: ['Stick sensitivity'], invertPitch: ['Invert pitch (↑ = climb)'],
+  units: ['Units', { aviation: 'knots · feet' }], minimap: ['Minimap'], showFps: ['Frame counter (FPS)'],
+  muted: ['Mute'], volume: ['Master volume'],
+};
+if (lang === 'en') {
+  for (const item of SCHEMA) {
+    if (item.section) { item.section = EN._sections[item.section] || item.section; continue; }
+    const e = EN[item.key];
+    if (!e) continue;
+    item.label = e[0];
+    if (e[1] && item.options) item.options = item.options.map(([v, l]) => [v, e[1][v] || l]);
+  }
+}
 
 const KEY = 'jpairlines-poki-settings';
 export const settings = Object.fromEntries(SCHEMA.filter((s) => s.key && !s.preset).map((s) => [s.key, s.def]));
