@@ -63,7 +63,7 @@ kbd { font-family: var(--mono); background: #ffffff1c; border: 1px solid #ffffff
 .hint { color: var(--dim); font-size: 0.85em; margin-bottom: 0; line-height: 1.6; }
 .field { display: block; margin: 18px 0; color: var(--dim); font-size: 0.9em; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-input:not([type]), input[type=text] { display: block; width: 100%; margin-top: 6px; padding: 11px 12px; font: inherit; font-size: 1.05em; color: var(--text);
+input:not([type]), input[type=text], input[type=email], input[type=password] { display: block; width: 100%; margin-top: 6px; padding: 11px 12px; font: inherit; font-size: 1.05em; color: var(--text);
   border-radius: 10px; border: 1px solid var(--edge); background: rgba(0, 0, 0, 0.35); outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
 input:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(62, 230, 255, 0.2); }
 button { display: inline-flex; align-items: center; gap: 8px; padding: 11px 20px; font: inherit; font-size: 1em; font-weight: 700; border: 0; border-radius: 10px;
@@ -224,3 +224,24 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 .ac-cur { color: var(--accent); font-weight: 700; }
 .ac-lock { color: #ffcf7a; font-size: 0.85em; }
 .unlock { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 10px; background: rgba(255, 201, 77, 0.16); color: #ffd772; font-size: 0.78em; font-weight: 700; }
+
+/* Compte */
+.account { margin: 0 0 18px; padding: 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--edge); }
+.acc-title { font-weight: 700; margin-bottom: 10px; }
+.acc-title small { color: var(--dim); font-weight: 400; }
+#acc-google { display: flex; justify-content: center; min-height: 0; }
+#acc-google:empty { display: none; }
+.acc-or { display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 0.8em; margin: 10px 0; }
+.acc-or::before, .acc-or::after { content: ''; flex: 1; height: 1px; background: var(--edge); }
+.acc-tabs { display: flex; gap: 6px; margin-bottom: 4px; }
+.acc-tabs .tab { flex: 1; justify-content: center; padding: 8px 10px; font-size: 0.85em; }
+#acc-form input { margin-top: 8px; font-size: 0.95em; padding: 9px 12px; }
+#acc-form button { width: 100%; justify-content: center; margin-top: 10px; }
+.acc-msg { margin: 8px 0 0; font-size: 0.85em; color: #ffb4a8; min-height: 0; }
+.acc-msg:empty { display: none; }
+.acc-msg.ok { color: #9fe3b0; }
+.acc-user { display: flex; align-items: center; gap: 10px; }
+.acc-user > div { flex: 1; min-width: 0; }
+.acc-user small { display: block; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc-user button { padding: 8px 12px; font-size: 0.85em; }
+.acc-avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; color: #1a1406; background: linear-gradient(180deg, #ffc94d, #f0a51f); }

@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { handleApi } from './accounts.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 100;
@@ -20,7 +21,8 @@ const THREE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_
 const THREE_FILE = path.join(THREE_DIR, 'build/three.module.js');
 const ADDONS = path.join(THREE_DIR, 'examples/jsm');
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
+  if (await handleApi(req, res)) return; // comptes joueurs (/api/…)
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   // three.js est servi directement depuis node_modules (en local, sans build)

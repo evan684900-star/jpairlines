@@ -18,6 +18,7 @@ import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
+import { Account, mergeSaves, mountGoogleButton } from './account.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
@@ -52,7 +53,11 @@ try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } c
 if (!airportById(save.lastAirport)) save.lastAirport = 'alpha';
 if (!Array.isArray(save.visited)) save.visited = ['alpha'];
 if (!unlockedAircraft(save).some((a) => a.id === save.aircraft)) save.aircraft = 'cub';
-const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* stockage indisponible */ } };
+const account = new Account(); // compte joueur (facultatif), voir plus bas
+const persist = () => {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* stockage indisponible */ }
+  account?.pushSave(save); // copie en ligne si l'on est connecté
+};
 
 // ================= Joueur =================
 const plane = new Plane(save.aircraft);
@@ -262,9 +267,9 @@ function openPause() {
   renderHangar();
 }
 $('resume').onclick = closeOverlays;
-for (const b of document.querySelectorAll('.tab')) {
+for (const b of document.querySelectorAll('.tabs .tab')) {
   b.onclick = () => {
-    for (const t of document.querySelectorAll('.tab')) t.classList.toggle('active', t === b);
+    for (const t of document.querySelectorAll('.tabs .tab')) t.classList.toggle('active', t === b);
     for (const body of document.querySelectorAll('.tab-body')) body.classList.toggle('hidden', body.id !== b.dataset.tab);
   };
 }
@@ -735,6 +740,72 @@ function frame(now) {
   }
 }
 
+
+// ================= Compte joueur =================
+// facultatif : e-mail + mot de passe ou Google ; la progression est fusionnée puis sauvegardée en ligne
+let accMode = 'login';
+function showAccount(user) {
+  $('acc-out').classList.toggle('hidden', !!user);
+  $('acc-in').classList.toggle('hidden', !user);
+  if (!user) return;
+  $('acc-name').textContent = user.name;
+  $('acc-mail').textContent = user.email + (user.google ? ' · Google' : '');
+  $('acc-avatar').textContent = (user.name || '?')[0].toUpperCase();
+}
+// après connexion : fusion avec la progression locale (rien n'est perdu), puis envoi au serveur
+function adoptAccount(user) {
+  const before = save.aircraft;
+  save = mergeSaves(save, user.save);
+  save.name = user.name || save.name;
+  $('pilot-name').value = save.name;
+  if (!airportById(save.lastAirport)) save.lastAirport = 'alpha';
+  if (!unlockedAircraft(save).some((a) => a.id === save.aircraft)) save.aircraft = 'cub';
+  persist();
+  account.flush();
+  quests?.reset();
+  if (save.aircraft !== before && plane.type !== save.aircraft) setAircraft(save.aircraft);
+}
+account.onChange = showAccount;
+const accMsg = (t, ok = false) => { $('acc-msg').textContent = t; $('acc-msg').classList.toggle('ok', ok); };
+for (const b of document.querySelectorAll('[data-acc]')) {
+  b.onclick = () => {
+    accMode = b.dataset.acc;
+    for (const t of document.querySelectorAll('[data-acc]')) t.classList.toggle('active', t === b);
+    $('acc-submit').textContent = accMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+    $('acc-pass').autocomplete = accMode === 'login' ? 'current-password' : 'new-password';
+    $('acc-pass').placeholder = accMode === 'login' ? 'Mot de passe' : 'Mot de passe (8 caractères minimum)';
+    accMsg('');
+  };
+}
+$('acc-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const email = $('acc-email').value.trim(), pass = $('acc-pass').value;
+  if (!email || !pass) return accMsg('Entre ton e-mail et ton mot de passe.');
+  $('acc-submit').disabled = true;
+  accMsg('');
+  try {
+    const name = ($('pilot-name').value.trim() || save.name || 'Pilote').slice(0, 16);
+    const user = accMode === 'login' ? await account.login(email, pass) : await account.register(email, pass, name, save);
+    $('acc-pass').value = '';
+    adoptAccount(user);
+    toast(accMode === 'login' ? `Bon retour, ${user.name} !` : 'Compte créé : ta progression est sauvegardée.');
+  } catch (err) { accMsg(err.message); }
+  $('acc-submit').disabled = false;
+};
+$('acc-logout').onclick = async () => { await account.logout(); toast('Déconnecté : la progression reste aussi sur cet appareil.'); };
+account.config().then((cfg) => {
+  const ok = mountGoogleButton($('acc-google'), cfg.google, async (credential) => {
+    accMsg('');
+    try {
+      const user = await account.google(credential, ($('pilot-name').value.trim() || save.name || 'Pilote').slice(0, 16), save);
+      adoptAccount(user);
+      toast(`Connecté avec Google : bienvenue, ${user.name} !`);
+    } catch (err) { accMsg(err.message); }
+  });
+  $('acc-or').classList.toggle('hidden', !ok);
+});
+account.restore().then((user) => { if (user) adoptAccount(user); });
+addEventListener('pagehide', () => account.flush());
 
 // ================= Démarrage =================
 $('pilot-name').value = save.name;

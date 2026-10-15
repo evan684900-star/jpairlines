@@ -28,6 +28,25 @@ Vercel héberge très bien les fichiers du jeu, mais **ne peut pas garder un ser
 
 Sans serveur multijoueur, le jeu fonctionne quand même en solo.
 
+### Comptes joueurs (e-mail + mot de passe, ou Google)
+
+Le menu propose un compte **facultatif** : on peut toujours jouer sans. Connecté, la progression (argent, quêtes,
+aéroports, avions débloqués) est sauvegardée sur le serveur et retrouvée sur n'importe quel appareil ; à la connexion,
+elle est fusionnée avec celle du navigateur (aucune quête réussie n'est perdue).
+
+- Les comptes sont gérés par le serveur Node (`accounts.js`), dans `data/accounts.json` (non versionné, à sauvegarder).
+  Mots de passe hachés avec scrypt, jetons de session aléatoires (60 jours), tentatives limitées par adresse IP.
+- L'API est sur le même serveur que le multijoueur (`https://…/api/…`). Si un proxy (Caddy, Nginx) est devant Node,
+  il doit transmettre `/api/` en plus de `/ws` (le plus simple : tout transmettre, `reverse_proxy localhost:3000`).
+- **Connexion Google** : créer un « ID client OAuth » de type *Application Web* dans la
+  [console Google Cloud](https://console.cloud.google.com/apis/credentials), ajouter l'adresse du jeu
+  (ex. `https://jpairlines.vercel.app`, et `http://localhost:3000` pour les tests) dans « Origines JavaScript autorisées »,
+  puis lancer le serveur avec `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com npm start`. Le bouton Google apparaît
+  alors tout seul dans le menu ; sans cette variable, seule la connexion par e-mail est proposée.
+- Variables facultatives : `DATA_DIR` (dossier des comptes), `ALLOWED_ORIGINS` (liste d'adresses autorisées à appeler l'API,
+  séparées par des virgules ; vide = toutes, sans risque car l'API n'utilise pas de cookies).
+- Pas encore de réinitialisation du mot de passe par e-mail (il faudrait un service d'envoi de mails).
+
 ## Commandes
 
 | Touche | Action |
@@ -176,9 +195,11 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 
 ```
 server.js             serveur HTTP + WebSocket (/ws)
+accounts.js           comptes joueurs et sauvegarde en ligne (/api/…)
 vercel.json           config d'hébergement statique
 public/index.html     page, HUD, menus
-public/js/config.js   adresse du serveur multijoueur
+public/js/config.js   adresse du serveur multijoueur (et des comptes)
+public/js/account.js  compte joueur côté jeu : connexion, Google, synchronisation de la sauvegarde
 public/js/world.js    relief, aéroports, lieux, bateaux, montgolfières (déterministe)
 public/js/terrain.js  terrain par morceaux (niveaux de détail)
 public/js/decor.js    arbres et villages autour du joueur

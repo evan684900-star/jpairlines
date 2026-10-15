@@ -34,6 +34,28 @@
       <h1 class="brand">JP<span>AIRLINES</span></h1>
       <p class="sub">Un monde de 80 × 80 km, tous les pilotes dans le même ciel.</p>
       <label class="field">Nom de pilote <input id="pilot-name" maxlength="16" placeholder="Pilote" autocomplete="off" /></label>
+      <div id="account" class="account">
+        <div id="acc-out">
+          <div class="acc-title">Compte <small>— facultatif : garde ta progression sur tous tes appareils</small></div>
+          <div id="acc-google"></div>
+          <div id="acc-or" class="acc-or hidden"><span>ou</span></div>
+          <div class="acc-tabs">
+            <button type="button" class="tab active" data-acc="login">Connexion</button>
+            <button type="button" class="tab" data-acc="register">Créer un compte</button>
+          </div>
+          <form id="acc-form" novalidate>
+            <input id="acc-email" type="email" placeholder="Adresse e-mail" autocomplete="email" maxlength="200" />
+            <input id="acc-pass" type="password" placeholder="Mot de passe" autocomplete="current-password" maxlength="200" />
+            <button id="acc-submit" type="submit" class="secondary">Se connecter</button>
+          </form>
+          <p id="acc-msg" class="acc-msg"></p>
+        </div>
+        <div id="acc-in" class="hidden">
+          <div class="acc-user"><span class="acc-avatar" id="acc-avatar"></span><div><b id="acc-name"></b><small id="acc-mail"></small></div>
+            <button type="button" id="acc-logout" class="secondary">Se déconnecter</button></div>
+          <p class="acc-msg ok">Connecté : ta progression est sauvegardée dans ton compte.</p>
+        </div>
+      </div>
       <div class="actions">
         <button id="start" disabled><i data-icon="plane-takeoff"></i> Décoller</button>
         <button id="open-help" class="secondary"><i data-icon="circle-help"></i> Commandes</button>
