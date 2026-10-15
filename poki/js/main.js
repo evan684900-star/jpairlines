@@ -18,6 +18,8 @@ import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
+import { Tutorial } from './tutorial.js';
+import { tr } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
@@ -67,7 +69,7 @@ let quests = null; // créé après le chargement du monde
 function updatePrompt() {
   const pr = $('prompt');
   const lines = [];
-  if (!plane.crashed) {
+  if (!plane.crashed && !tutorial.active) {
     const q = quests ? quests.prompt() : '';
     if (q) lines.push(q);
     if (atAirportStopped() && plane.fuel < plane.S.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
@@ -688,6 +690,7 @@ function frame(now) {
     planeMesh.quaternion.copy(plane.quat);
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
+    tutorial.update(paused ? 0 : realDt);
     updatePrompt();
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
     updateHUD(realDt);
@@ -738,6 +741,22 @@ function frame(now) {
   }
 }
 
+
+// ================= Tutoriel (premier vol) =================
+const isTouch = () => document.body.classList.contains('touch');
+const tutorial = new Tutorial({
+  plane, isTouch,
+  getAgl: () => Math.max(0, plane.pos.y - plane.S.gear - Math.max(0, groundHeight(plane.pos.x, plane.pos.z))),
+  onFinish: (skipped) => {
+    if (skipped || !quests) return;
+    toast(tr('Bravo ! Première mission : passe dans les anneaux jaunes, puis pose-toi à Base Alpha', 'Well done! First mission: fly through the yellow rings, then land at Base Alpha'));
+    const q = quests.byId.get('premier-vol');
+    if (q && !save.completed.includes(q.id) && !quests.active) quests.start(q);
+  },
+});
+let tutoDone = false;
+try { tutoDone = localStorage.getItem('jpairlines-poki-tuto') === '1'; } catch { /* stockage indisponible */ }
+$('replay-tuto').onclick = () => { closeOverlays(); respawn(airportById('alpha'), true); tutorial.start(); };
 
 // ================= Démarrage =================
 $('pilot-name').value = save.name;
@@ -791,7 +810,7 @@ $('start').onclick = () => {
   initAudio();
   respawn();
   started = true;
-  toast('Bienvenue ! E pour démarrer le moteur, H pour l\'aide.');
+  if (!tutoDone) { tutoDone = true; tutorial.start(); } else toast(tr('Bon vol ! H pour les commandes, Entrée près d\'un « ! » pour les missions.', 'Have a nice flight! H for controls, Enter near a "!" for missions.'));
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
