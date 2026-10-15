@@ -2,7 +2,7 @@
 // missions de transport du jour et rangs de pilote.
 import * as THREE from 'three';
 import {
-  AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, terrainHeight, airportById, shipPosition, balloonPosition, rng, runwayLocal,
+  AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, terrainHeight, airportById, shipPosition, balloonPosition, rng, runwayLocal, onRunway,
 } from '../world.js';
 import { QUESTS } from './index.js';
 import { CATEGORIES, RANKS, nextTo } from './kit.js';
@@ -95,6 +95,37 @@ function person(mat = MAT.blue) {
   return g;
 }
 
+// zone d'atterrissage : cadre vert autour de la piste + quatre colonnes de lumière aux coins (visibles de loin)
+function landingZone(a) {
+  const g = new THREE.Group();
+  g.position.set(a.x, a.elev + 0.7, a.z);
+  g.rotation.y = a.heading; // axe local X = travers, axe local Z = piste
+  const hw = a.width / 2 + 5, hl = a.length / 2 + 20, t = 5;
+  const bar = (w, l, x, z) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), zoneMat);
+    m.position.set(x, 0, z);
+    g.add(m);
+  };
+  bar(t, hl * 2, -hw, 0); bar(t, hl * 2, hw, 0);
+  bar(hw * 2 + t, t, 0, -hl); bar(hw * 2 + t, t, 0, hl);
+  // chevrons pointant vers le centre de la piste, aux deux seuils
+  for (const end of [-1, 1]) for (const k of [0, 1, 2]) for (const side of [-1, 1]) {
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(3, hw * 0.75).rotateX(-Math.PI / 2), zoneMat);
+    c.rotation.y = side * end * 0.6;
+    c.position.set(side * hw * 0.32, 0, end * (hl - 60 - k * 40));
+    g.add(c);
+  }
+  const beamGeo = new THREE.CylinderGeometry(4, 4, 600, 12, 1, true);
+  for (const [x, z] of [[-hw, -hl], [hw, -hl], [-hw, hl], [hw, hl]]) {
+    const b = new THREE.Mesh(beamGeo, zoneBeamMat);
+    b.position.set(x, 300, z);
+    g.add(b);
+  }
+  let t0 = 0;
+  g.userData.update = (dt) => { t0 += dt; zoneMat.opacity = 0.6 + 0.3 * Math.sin(t0 * 4); };
+  return g;
+}
+
 function spawnMesh(kind) {
   const g = new THREE.Group();
   if (kind === 'raft') {
@@ -136,6 +167,8 @@ const ringNextMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: 
 const beamMat = new THREE.MeshBasicMaterial({ color: 0xffc928, transparent: true, opacity: 0.3, depthWrite: false, fog: false, toneMapped: false });
 const giverMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.28, depthWrite: false, fog: false, toneMapped: false });
 const targetMat = new THREE.MeshBasicMaterial({ color: 0xff5a2a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+const zoneMat = new THREE.MeshBasicMaterial({ color: 0x3dff7a, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -4 });
+const zoneBeamMat = new THREE.MeshBasicMaterial({ color: 0x3dff7a, transparent: true, opacity: 0.35, depthWrite: false, fog: false, toneMapped: false });
 const aimMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false });
 
 export class QuestSystem {
@@ -342,7 +375,7 @@ export class QuestSystem {
     const kmh = (v) => `${v} km/h`;
     switch (st.type) {
       case 'ring': return 'Passe dans l\'anneau jaune';
-      case 'land': return `Pose-toi et arrête-toi à ${airportById(st.airport).name}`;
+      case 'land': return `Pose-toi sur la piste de ${airportById(st.airport).name} (cadre vert) et arrête-toi complètement`;
       case 'touch': return `Toucher-décoller à ${airportById(st.airport).name} (touche la piste puis remets les gaz)`;
       case 'reach': return `Rejoins : ${st.label}${st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : ''}${st.minAgl ? ` (au moins ${st.minAgl} m au-dessus du sol)` : ''}`;
       case 'drop': return `Largue le colis (X) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''} · vise avec la croix blanche`;
@@ -374,6 +407,8 @@ export class QuestSystem {
         r.position.copy(this.stepPoint(s2));
         r.lookAt(k === 0 ? prev : p);
       }
+    } else if (st.type === 'land' || st.type === 'touch') {
+      this.add(landingZone(airportById(st.airport)));
     } else if (p) {
       const rad = st.radius || (st.type === 'follow' ? 60 : 80);
       const beam = this.add(new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, 4000, 32, 1, true), beamMat));
@@ -452,11 +487,24 @@ export class QuestSystem {
     const p = this.stepPoint(st, wallT);
     if (A.moving && p) A.moving.position.set(p.x, p.y + 2000, p.z);
     const hd = p ? Math.hypot(pos.x - p.x, pos.z - p.z) : 0;
-    let done = false, progress = null;
+    let done = false, progress = null, hint = '';
 
     switch (st.type) {
       case 'ring': done = pos.distanceTo(p) < (st.size || 30) + 4; break;
-      case 'land': done = !A.needAirborne && plane.landedAt?.id === st.airport; break;
+      case 'land': {
+        done = !A.needAirborne && plane.landedAt?.id === st.airport;
+        // aide au sol : il faut s'arrêter complètement dans le cadre vert
+        if (!done && plane.onGround && !plane.crashed) {
+          const kmh = Math.round(plane.speed * 3.6);
+          const here = onRunway(pos.x, pos.z)?.id === st.airport;
+          if (here && A.needAirborne) hint = 'Décolle d\'abord, puis reviens te poser';
+          else if (here) {
+            hint = `Arrête-toi : gaz à zéro (S) et freins (Espace) · ${kmh} km/h`;
+            progress = Math.min(1, Math.max(0, 1 - (plane.speed - 3) / 25));
+          } else if (hd < airportById(st.airport).reach) hint = 'Tu es hors de la piste : roule jusqu\'au cadre vert';
+        }
+        break;
+      }
       case 'touch': {
         // il faut toucher la piste elle-même (pas le parking), puis redécoller
         if (!A.needAirborne && plane.onGround) {
@@ -534,6 +582,7 @@ export class QuestSystem {
     if (st.type === 'low') info = `${info ? info + ' · ' : ''}Hauteur : ${Math.max(0, Math.round(agl))} m`;
     if (q.timeLimit) info += ` · ⏱ ${fmtTime(Math.max(0, q.timeLimit - A.elapsed))}`;
     else if (q.bonusTime) info += ` · ⏱ ${fmtTime(A.elapsed)} (bonus < ${fmtTime(q.bonusTime)})`;
+    if (hint) info = hint;
     $('quest-dist').textContent = info;
     const bar = $('quest-progress');
     if (progress !== null) {
