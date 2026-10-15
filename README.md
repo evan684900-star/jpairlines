@@ -98,6 +98,9 @@ L'avion est simulé comme un vrai avion léger (type Cessna 172), en corps rigid
 portance et traînée selon l'incidence (avec décrochage), hélice limitée en puissance, air moins dense en altitude,
 stabilité et amortissement aérodynamiques, effet de sol, roues à amortisseurs avec frottement et freins.
 Les virages viennent de l'inclinaison, le trim règle la vitesse à laquelle l'avion vole « tout seul ».
+Comme sur un vrai avion, l'effort au manche augmente avec la vitesse : au clavier, une touche de profondeur tenue
+demande environ ±1,6 g en croisière (et non le braquage maximal), mais garde tout son effet à basse vitesse
+(rotation, arrondi). La « sensibilité du manche » des paramètres règle cette force.
 
 | Mesure (banc d'essai) | Le jeu | Cessna 172 |
 |---|---|---|

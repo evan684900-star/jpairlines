@@ -211,8 +211,9 @@ export class Plane {
 
     // commandes lissées (le clavier est tout-ou-rien : on amène les gouvernes progressivement)
     const sens = opts.sensitivity || 1;
+    this.sens = sens;
     const ramp = (cur, target, up, down) => cur + clamp(target - cur, -dt * (Math.abs(target) > Math.abs(cur) ? up : down), dt * (Math.abs(target) > Math.abs(cur) ? up : down));
-    this.ctrl.pitch = ramp(this.ctrl.pitch, clamp(input.pitch * sens, -1, 1), 2.2, 3.5);
+    this.ctrl.pitch = ramp(this.ctrl.pitch, clamp(input.pitch, -1, 1), 1.5, 3.5);
     this.ctrl.roll = ramp(this.ctrl.roll, clamp(input.roll * sens, -1, 1), 3, 4);
     this.ctrl.yaw = ramp(this.ctrl.yaw, clamp(input.yaw, -1, 1), 3, 4);
 
@@ -292,7 +293,12 @@ export class Plane {
     const ge = hGround < S.b ? (() => { const x = (16 * Math.max(hGround, 0.5)) / S.b; return (x * x) / (1 + x * x); })() : 1;
 
     // aides (selon la difficulté)
-    let de = this.ctrl.pitch + this.trim;
+    // « sensation » du manche : comme sur un vrai avion, l'effort grandit avec la vitesse. Une touche tenue
+    // demande donc un facteur de charge raisonnable (≈ ±1,6 g en croisière) et non le débattement maximal,
+    // qui à grande vitesse ferait plonger ou cabrer violemment. À basse vitesse (rotation, arrondi) : plein débattement.
+    // sur le dos, il faut pousser fort pour tenir le nez au-dessus de l'horizon : plus d'autorité
+    const feel = Math.min(1, Math.max((26 / Vd) ** 2, 0.2) * (this.sens || 1) * (_up.y < 0 ? 2.4 : 1));
+    let de = this.ctrl.pitch * feel + this.trim;
     let da = this.ctrl.roll;
     let dr = this.ctrl.yaw;
     const airborne = !this.onGround;
