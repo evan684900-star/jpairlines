@@ -65,6 +65,13 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
 - **Terrain** : herbe et terre avec cartes de normales, roche triplanaire sur les pentes, neige calculée au pixel,
   variations de couleur à plusieurs échelles, vallées assombries, sol mouillé sous la pluie.
 - **Eau** : matériau PBR (reflets du ciel et du soleil), vagues de Gerstner, turquoise près des côtes, transparence, écume sur les plages.
+- **Végétation** : arbres générés par [EZ-Tree](https://github.com/dgreenheck/ez-tree) (MIT) — pins, chênes, frênes,
+  bouleaux, buissons avec écorce PBR (textures CC0 de Poly Haven et TextureCan) et feuillage détouré. Vrais arbres 3D
+  autour de la caméra, « imposteurs » (photos des mêmes arbres prises au chargement) au loin : des forêts denses
+  et continues, jusqu'à 9 000 arbres/km² en Ultra. Rochers photogrammétriques (glTF de la démo d'EZ-Tree).
+- **Bâtiments** : maisons de six types (pavillon, maison à étage, longère, maison en L, grange, villa) avec toits en
+  tuiles ou ardoise, crépi, fenêtres encadrées, volets, portes et cheminées ; en ville, tours de verre, bureaux en béton
+  et immeubles de brique, toits en gravier avec acrotère et climatiseurs, sol urbain.
 - **Nuit** : balisage des pistes, phares tournants des aéroports, lampadaires et fenêtres allumées, phare d'atterrissage de l'avion.
 - **Post-traitement** : occlusion ambiante (SSAO), halo (bloom), rayons du soleil, reflets d'objectif, aberration chromatique,
   distorsion de vitesse, gouttes sur la verrière, vignette, tone mapping ACES, anticrénelage MSAA ou SMAA.
@@ -82,7 +89,7 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
 
 | Réglage | Effet |
 |---|---|
-| Qualité Bas / Moyen / Élevé / Ultra | résolution, ombres, nombre de nuages, finesse de l'eau, particules, MSAA |
+| Qualité Bas / Moyen / Élevé / Ultra | résolution, ombres, nuages, eau, particules, MSAA, densité des forêts et nombre d'arbres 3D |
 | Résolution adaptative | baisse la résolution si le jeu passe sous 60 images/s, la remonte ensuite |
 | Effets visuels | ombres, post-traitement, bloom, SSAO, rayons et reflets du soleil, aberration chromatique, tremblements, particules |
 | Heure | fixe, cycle jour/nuit de 24 min (le même pour tous) ou heure de l'ordinateur |
