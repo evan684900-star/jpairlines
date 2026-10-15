@@ -83,7 +83,7 @@ export class GameRenderer {
     const cfg = renderConfig(settings);
     const prev = this.cfg;
     this.cfg = cfg;
-    if (!key || key === 'quality' || key === 'adaptiveRes') { this.resScale = 1; this.setPixelRatio(); }
+    if (!key || key === 'quality' || key === 'adaptiveRes') { this.resScale = 1; this.warmup = 8; this.setPixelRatio(); }
     if (!key || key === 'viewDist') {
       this.viewDist = settings.viewDist * 1000;
       this.camera.far = this.viewDist * 1.6;
@@ -191,16 +191,21 @@ export class GameRenderer {
     this.measure(dt);
   }
 
-  // compteur d'images et résolution adaptative (vise 60 images/s)
+  // compteur d'images et résolution adaptative (optionnelle) : prudente pour ne pas rendre l'image floue.
+  // On attend la fin des chargements, on ignore les à-coups, on ne descend jamais sous 80 %.
   measure(dt) {
     if (!(dt > 0)) return;
-    this.frameAvg += (dt - this.frameAvg) * 0.05;
+    this.frameAvg += (Math.min(dt, 0.25) - this.frameAvg) * 0.05;
     this.fps = 1 / this.frameAvg;
     if (!this.cfg.adaptive) return;
+    this.warmup = (this.warmup ?? 8) - dt;
+    if (this.warmup > 0) return;
     this.adaptTimer -= dt;
     if (this.adaptTimer > 0) return;
     this.adaptTimer = 1;
-    if (this.fps < 52 && this.resScale > 0.55) { this.resScale = Math.max(0.55, this.resScale - 0.1); this.setPixelRatio(); }
-    else if (this.fps > 58.5 && this.resScale < 1) { this.resScale = Math.min(1, this.resScale + 0.05); this.setPixelRatio(); }
+    this.slow = this.fps < 45 ? (this.slow || 0) + 1 : 0;
+    this.fast = this.fps > 54 ? (this.fast || 0) + 1 : 0;
+    if (this.slow >= 3 && this.resScale > 0.8) { this.resScale = Math.max(0.8, this.resScale - 0.1); this.slow = 0; this.setPixelRatio(); }
+    else if (this.fast >= 2 && this.resScale < 1) { this.resScale = Math.min(1, this.resScale + 0.1); this.fast = 0; this.setPixelRatio(); }
   }
 }

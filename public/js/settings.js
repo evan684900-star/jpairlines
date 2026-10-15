@@ -4,7 +4,7 @@ import { QUALITY_PRESETS, EFFECT_KEYS } from './render/config.js';
 export const SCHEMA = [
   { section: 'Graphismes' },
   { key: 'quality', label: 'Qualité', type: 'select', def: 'high', options: [['low', 'Bas'], ['medium', 'Moyen'], ['high', 'Élevé'], ['ultra', 'Ultra']] },
-  { key: 'adaptiveRes', label: 'Résolution adaptative (vise 60 FPS)', type: 'check', def: true },
+  { key: 'adaptiveRes', label: 'Résolution adaptative (baisse un peu la netteté si le jeu rame)', type: 'check', def: false },
   { key: 'viewDist', label: 'Distance de vue', type: 'range', def: 20, min: 8, max: 36, step: 2, unit: ' km' },
   { key: 'trees', label: 'Densité de végétation', type: 'range', def: 1, min: 0, max: 2, step: 0.25, unit: '×' },
   { key: 'decoDist', label: 'Distance des arbres', type: 'range', def: 2, min: 1, max: 4, step: 1, unit: ' km × 2' },
@@ -43,6 +43,8 @@ const KEY = 'jpairlines-settings';
 export const settings = Object.fromEntries(SCHEMA.filter((s) => s.key && !s.preset).map((s) => [s.key, s.def]));
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY)) || {}); } catch { /* pas de sauvegarde */ }
 if (!QUALITY_PRESETS[settings.quality]) settings.quality = 'high';
+// v2 : la résolution adaptative (qui rendait l'image floue) n'est plus activée par défaut
+if ((settings.v || 1) < 2) { settings.adaptiveRes = false; settings.v = 2; }
 // cases « effets » : valeurs du préréglage de qualité tant que le joueur ne les a pas changées
 export function applyPreset() {
   for (const k of EFFECT_KEYS) settings[`fx_${k}`] = QUALITY_PRESETS[settings.quality].effects[k];
