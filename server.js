@@ -54,7 +54,7 @@ const isVec = (a, n) => Array.isArray(a) && a.length === n && a.every((v) => typ
 wss.on('connection', (ws) => {
   if (players.size >= MAX_PLAYERS) return ws.close(1013, 'Serveur plein');
   const id = nextId++;
-  const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0 };
+  const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0, a: 0 };
   players.set(id, player);
   ws.send(JSON.stringify({ t: 'welcome', id }));
 
@@ -66,8 +66,9 @@ wss.on('connection', (ws) => {
     } else if (msg.t === 'state' && isVec(msg.p, 3) && isVec(msg.q, 4)) {
       player.p = msg.p;
       player.q = msg.q;
-      // état visible par les autres : vitesse, régime, train, volets, feux
+      // état visible par les autres : vitesse, régime, train, volets, feux, type d'avion
       for (const k of ['s', 'r', 'g', 'f', 'l']) player[k] = num(msg[k], 0, 1000);
+      player.a = Math.round(num(msg.a, 0, 31));
     }
   });
   ws.on('close', () => players.delete(id));

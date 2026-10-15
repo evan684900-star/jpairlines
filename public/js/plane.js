@@ -4,46 +4,14 @@
 // Moments : stabilité et amortissement aérodynamiques + gouvernes, contacts au sol.
 import * as THREE from 'three';
 import { groundHeight, onRunway, runwayPoint } from './world.js';
+import { aircraftById } from './aircraft.js';
 
 export { createPlaneMesh, animatePlaneMesh } from './planeModel.js';
 
 const G = 9.81;
 
-// ---------- Caractéristiques (ordre de grandeur Cessna 172) ----------
-export const SPECS = {
-  name: 'Cub-1',
-  emptyMass: 790, // kg, avion vide
-  pilotMass: 85,
-  S: 16.2, // surface alaire (m²)
-  b: 11.0, // envergure (m)
-  c: 1.5, // corde moyenne (m)
-  inertia: new THREE.Vector3(1825, 2667, 1285), // kg·m² autour de X (tangage), Y (lacet), Z (roulis)
-  // portance / traînée
-  CL0: 0.25, CLa: 4.9, alphaStall: 0.27, alphaStallNeg: -0.22,
-  CLflap: 0.2, alphaStallFlap: -0.012, // par cran de volets
-  CD0: 0.026, k: 0.054, CDgear: 0.012, CDflap: 0.014, CDprop: 0.012,
-  CYb: -0.45,
-  // moments (convention aéronautique : roulis à droite, tangage à cabrer, lacet à droite positifs)
-  Clb: -0.09, Clp: -0.47, Clr: 0.09, Clda: 0.05,
-  Cm0: 0.045, Cma: -0.9, Cmq: -12, Cmde: 0.42, Cmflap: -0.008,
-  Cnb: 0.07, Cnr: -0.1, Cndr: 0.04, Cnda: -0.004, Cnp: -0.03,
-  // moteur et hélice
-  maxPower: 119000, // W (160 ch)
-  staticThrust: 2700, // N
-  propEff: 0.7,
-  // carburant
-  fuelCapacity: 160, // litres
-  fuelDensity: 0.72, // kg/L
-  fuelFlowIdle: 6, // L/h au ralenti
-  fuelFlowMax: 46, // L/h plein gaz
-  // limites
-  gear: 1.55, // hauteur de l'origine du modèle au-dessus du sol, train sorti
-  belly: 0.7,
-  vFlaps: 46, // vitesse max volets sortis (m/s, ~165 km/h)
-  vGear: 58, // vitesse max train sorti (m/s, ~210 km/h)
-  vne: 84, // vitesse à ne jamais dépasser (m/s, ~300 km/h)
-  flapNotches: [0, 10, 20, 30],
-};
+// ---------- Caractéristiques : voir aircraft.js (SPECS = avion de base, conservé pour compatibilité) ----------
+export const SPECS = aircraftById('cub').specs;
 
 // Aides au pilotage et tolérance selon la difficulté
 export const DIFFICULTY = {
@@ -51,24 +19,6 @@ export const DIFFICULTY = {
   normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8 },
   realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6 },
 };
-
-// Centre de gravité et points de contact, dans le repère du modèle (nez vers -Z, Y vers le haut, X à droite)
-const CG = new THREE.Vector3(0, -0.15, -1.2);
-const WHEELS = [
-  { p: new THREE.Vector3(0, -1.55, -3.0), k: 32000, c: 3200, nose: true },
-  { p: new THREE.Vector3(-1.2, -1.55, -0.75), k: 60000, c: 6000, brake: true },
-  { p: new THREE.Vector3(1.2, -1.55, -0.75), k: 60000, c: 6000, brake: true },
-];
-const HARD_POINTS = [
-  { p: new THREE.Vector3(0, -0.98, -3.82), kind: 'fatal', name: 'L\'hélice a touché le sol' },
-  { p: new THREE.Vector3(-5.5, 0.95, -1.3), kind: 'fatal', name: 'Une aile a touché le sol' },
-  { p: new THREE.Vector3(5.5, 0.95, -1.3), kind: 'fatal', name: 'Une aile a touché le sol' },
-  { p: new THREE.Vector3(0, 1.85, 4.0), kind: 'fatal', name: 'L\'avion s\'est retourné' },
-  { p: new THREE.Vector3(0, 1.1, -1.2), kind: 'fatal', name: 'L\'avion s\'est retourné' },
-  { p: new THREE.Vector3(0, 0.15, 4.2), kind: 'tail' },
-  { p: new THREE.Vector3(0, -0.55, -1.6), kind: 'belly' },
-  { p: new THREE.Vector3(0, -0.4, 1.2), kind: 'belly' },
-];
 
 const DT = 1 / 240; // pas de simulation (s)
 const clamp = THREE.MathUtils.clamp;
@@ -89,13 +39,23 @@ export function airDensity(alt) {
 }
 
 export class Plane {
-  constructor() {
+  constructor(type = 'cub') {
     this.pos = new THREE.Vector3(); // origine du modèle 3D (monde)
     this.quat = new THREE.Quaternion();
     this.velocity = new THREE.Vector3(); // vitesse du centre de gravité (monde)
     this.omega = new THREE.Vector3(); // vitesse angulaire (repère avion)
     this.events = [];
-    this.fuel = SPECS.fuelCapacity;
+    this.setType(type);
+  }
+
+  // change d'appareil (réservoir plein, avion remis à zéro)
+  setType(id) {
+    const def = aircraftById(id);
+    this.type = def.id;
+    this.def = def;
+    this.S = def.specs;
+    this.geo = def.geo;
+    this.fuel = this.S.fuelCapacity;
     this.reset();
   }
 
@@ -121,6 +81,7 @@ export class Plane {
     this.lights = false;
     this.trim = 0;
     this.onGround = true;
+    this.onWater = false;
     this.wheelsOnGround = 3;
     this.crashed = false;
     this.crashReason = '';
@@ -132,7 +93,7 @@ export class Plane {
     this.time = 0;
   }
 
-  get mass() { return SPECS.emptyMass + SPECS.pilotMass + this.fuel * SPECS.fuelDensity; }
+  get mass() { const S = this.S; return S.emptyMass + S.pilotMass + this.fuel * S.fuelDensity; }
   get euler() { return _e.setFromQuaternion(this.quat, 'YXZ'); }
   // cap en degrés (0 = nord = -Z, sens horaire)
   get headingDeg() {
@@ -140,8 +101,13 @@ export class Plane {
     return ((THREE.MathUtils.radToDeg(Math.atan2(_fwd.x, -_fwd.z)) % 360) + 360) % 360;
   }
   // vitesse de décrochage (vraie, m/s) dans la configuration et à l'altitude actuelles
+  // braquage des volets en degrés (interpolé entre les crans)
+  get flapDeg() {
+    const n = this.S.flapNotches, i = Math.floor(this.flapPos), f = this.flapPos - i;
+    return n[Math.min(i, n.length - 1)] * (1 - f) + n[Math.min(i + 1, n.length - 1)] * f;
+  }
   get stallSpeed() {
-    const S = SPECS;
+    const S = this.S;
     const clMax = S.CL0 + S.CLflap * this.flapPos + S.CLa * (S.alphaStall + S.alphaStallFlap * this.flapPos);
     return Math.sqrt((2 * this.mass * G) / (airDensity(this.pos.y) * S.S * clMax));
   }
@@ -153,7 +119,7 @@ export class Plane {
     const side = (Math.random() - 0.5) * a.width * 0.4;
     const [x, z] = runwayPoint(a.x, a.z, a.heading, side, back);
     this.quat.setFromEuler(new THREE.Euler(0, a.heading, 0, 'YXZ'));
-    this.pos.set(x, groundHeight(x, z) + SPECS.gear - 0.04, z);
+    this.pos.set(x, groundHeight(x, z) + this.S.gear - 0.04, z);
     this.landedAt = a;
     if (engineOn) { this.engineOn = true; this.rpm = 0.15; }
   }
@@ -169,16 +135,20 @@ export class Plane {
     } else if (this.fuel <= 0) {
       this.emit('Réservoir vide !');
     } else {
-      this.engineStart = 1.6;
+      this.engineStart = this.S.startTime;
       this.emit('Démarrage du moteur…');
     }
   }
   setFlaps(delta) {
-    this.flaps = clamp(this.flaps + delta, 0, SPECS.flapNotches.length - 1);
-    this.emit(`Volets ${SPECS.flapNotches[this.flaps]}°`);
+    const n = this.S.flapNotches;
+    if (n.length < 2) return this.emit('Pas de volets sur cet avion');
+    this.flaps = clamp(this.flaps + delta, 0, n.length - 1);
+    this.emit(`Volets ${n[this.flaps]}°`);
   }
   toggleGear() {
-    if (this.onGround) return this.emit('Impossible de rentrer le train au sol !');
+    if (!this.S.retractable) return this.emit('Train fixe sur cet avion');
+    // sur l'eau (hydravion), on peut sortir les roues pour remonter sur une plage ou une rampe
+    if (this.onGround && !this.onWater) return this.emit('Impossible de rentrer le train au sol !');
     if (this.gearBroken) return this.emit('Le train est endommagé…');
     this.gearDown = !this.gearDown;
     this.emit(this.gearDown ? 'Sortie du train' : 'Rentrée du train');
@@ -195,6 +165,7 @@ export class Plane {
   // Tourne l'avion autour de la verticale (vitesse comprise), ex. demi-tour au bord de la carte
   rotateHeading(angle) {
     _q.setFromAxisAngle(UPV, angle);
+    const CG = this.geo.cg;
     const cg = _tmp.copy(CG).applyQuaternion(this.quat).add(this.pos);
     this.quat.premultiply(_q);
     this.velocity.applyQuaternion(_q);
@@ -228,7 +199,7 @@ export class Plane {
   }
 
   updateSystems(dt, input, opts, diff) {
-    const S = SPECS;
+    const S = this.S;
     this.time += dt;
     // moteur & carburant
     if (this.engineStart > 0) {
@@ -246,7 +217,7 @@ export class Plane {
     // l'hélice tourne aussi « en moulinet » quand l'avion avance moteur coupé
     const windmill = clamp(this.speed / 120, 0, 0.35);
     const targetRpm = this.engineOn ? 0.15 + 0.85 * this.throttle : windmill;
-    this.rpm += (targetRpm - this.rpm) * Math.min(1, dt * (this.engineOn ? 1.8 : 0.6));
+    this.rpm += (targetRpm - this.rpm) * Math.min(1, dt * (this.engineOn ? S.spool : 0.6)); // un réacteur met plus de temps à monter en régime
 
     // volets & train
     this.flapPos += clamp(this.flaps - this.flapPos, -dt * 0.6, dt * 0.6);
@@ -264,7 +235,7 @@ export class Plane {
   }
 
   step(h, input, diff) {
-    const S = SPECS;
+    const S = this.S, CG = this.geo.cg;
     const m = this.mass;
     _fwd.set(0, 0, -1).applyQuaternion(this.quat);
     _up.set(0, 1, 0).applyQuaternion(this.quat);
@@ -297,7 +268,7 @@ export class Plane {
     // demande donc un facteur de charge raisonnable (≈ ±1,6 g en croisière) et non le débattement maximal,
     // qui à grande vitesse ferait plonger ou cabrer violemment. À basse vitesse (rotation, arrondi) : plein débattement.
     // sur le dos, il faut pousser fort pour tenir le nez au-dessus de l'horizon : plus d'autorité
-    const feel = Math.min(1, Math.max((26 / Vd) ** 2, 0.2) * (this.sens || 1) * (_up.y < 0 ? 2.4 : 1));
+    const feel = Math.min(1, Math.max((S.feelV / Vd) ** 2, S.feelFloor) * (this.sens || 1) * (_up.y < 0 ? 2.4 : 1));
     let de = this.ctrl.pitch * feel + this.trim;
     let da = this.ctrl.roll;
     let dr = this.ctrl.yaw;
@@ -365,25 +336,31 @@ export class Plane {
     // repère three : X = tangage (cabrer +), Y = lacet (nez à gauche +), Z = roulis (aile droite qui monte +)
     _T.set(Cm * qbar * S.S * S.c, -Cn * qbar * S.S * S.b, -Cl * qbar * S.S * S.b);
 
-    // ----- poussée de l'hélice (limitée en puissance) -----
+    // ----- poussée : hélice (limitée en puissance) ou réacteur -----
     if (this.engineOn) {
       const sigma = rho / 1.225;
       const power = Math.max(0, (this.rpm - 0.15) / 0.85);
-      // moteur atmosphérique : la puissance baisse avec la densité de l'air (formule de Gagg-Ferrar)
-      const lapse = Math.max(0, 1.132 * sigma - 0.132);
-      const thrust = Math.min(S.staticThrust * power * sigma, (S.propEff * S.maxPower * power * lapse) / Math.max(V, 1));
+      let thrust;
+      if (S.engine === 'jet') {
+        // réacteur : poussée presque constante, qui baisse avec l'altitude et un peu avec la vitesse
+        thrust = S.staticThrust * power * sigma ** 0.75 * Math.max(0.3, 1 - S.ram * V);
+      } else {
+        // moteur atmosphérique : la puissance baisse avec la densité de l'air (formule de Gagg-Ferrar)
+        const lapse = Math.max(0, 1.132 * sigma - 0.132);
+        thrust = Math.min(S.staticThrust * power * sigma, (S.propEff * S.maxPower * power * lapse) / Math.max(V, 1));
+      }
       _F.addScaledVector(_fwd, thrust);
     }
 
     // ----- contacts avec le sol -----
     const groundUnder = groundHeight(cgX, cgZ);
     this.cachedGround = groundUnder;
-    let wheelsDown = 0;
+    let wheelsDown = 0, onWater = false;
     if (cgY - Math.max(0, groundUnder) < 12) {
       _ww.copy(this.omega).applyQuaternion(this.quat); // vitesse angulaire (monde)
       _Tw.set(0, 0, 0);
       const gearOk = this.gearPos > 0.95 && !this.gearBroken;
-      const points = gearOk ? [...WHEELS, ...HARD_POINTS] : HARD_POINTS;
+      const points = gearOk ? [...this.geo.wheels, ...this.geo.hard] : this.geo.hard;
       for (const pt of points) {
         _r.copy(pt.p).sub(CG).applyQuaternion(this.quat); // bras de levier depuis le CG (monde)
         _pw.set(cgX, cgY, cgZ).add(_r);
@@ -393,10 +370,26 @@ export class Plane {
         const pen = surf - _pw.y;
         if (pen <= 0) continue;
         _vp.crossVectors(_ww, _r).add(this.velocity); // vitesse du point de contact
-        if (water) return this.crash(this.speed > 3 ? 'Amerrissage forcé ! Cet avion n\'a pas de flotteurs.' : 'Tu as roulé dans l\'eau !');
+        if (water && !S.amphibious) return this.crash(this.speed > 3 ? 'Amerrissage forcé ! Cet avion n\'a pas de flotteurs.' : 'Tu as roulé dans l\'eau !');
         if (pt.kind === 'fatal') return this.crash(pt.name);
-        if (pt.kind === 'belly') {
-          if (this.velocity.length() > 2) return this.crash(gearOk ? 'Le train s\'est effondré' : 'Atterrissage sur le ventre : le train n\'était pas sorti !');
+        if (water) {
+          // hydravion sur l'eau : seuls les flotteurs portent
+          if (!pt.kind) {
+            if (this.speed > 6 && diff.damage) return this.crash('Train sorti sur l\'eau : l\'hydravion a capoté !');
+            continue; // à très basse vitesse, les roues trempent sans gêner
+          }
+          if (pt.kind === 'tail') continue;
+          if (pt.kind === 'belly' && this.velocity.length() > 2) return this.crash('L\'hydravion a piqué dans l\'eau !');
+          if (pt.kind === 'float') {
+            if (_vp.y < -diff.crashVs * 1.4) return this.crash(`Amerrissage trop brutal (${(-_vp.y).toFixed(1)} m/s)`);
+            onWater = true;
+            wheelsDown++;
+          }
+        } else if (pt.kind === 'belly' || pt.kind === 'float') {
+          if (this.velocity.length() > 2) {
+            if (pt.kind === 'float') return this.crash('Atterrissage sur les flotteurs : il fallait sortir les roues !');
+            return this.crash(gearOk ? 'Le train s\'est effondré' : 'Atterrissage sur le ventre : le train n\'était pas sorti !');
+          }
         }
         if (!pt.kind) {
           // roue : contrôle de la violence de l'impact
@@ -420,8 +413,9 @@ export class Plane {
         }
         _side.crossVectors(_hf, UPV);
         const vLong = _vp.dot(_hf), vLat = _vp.dot(_side);
-        const muLat = pt.kind ? 0.5 : 0.8;
-        let muLong = pt.kind ? 0.4 : 0.025;
+        const floating = water && pt.kind === 'float';
+        const muLat = floating ? 0.3 : pt.kind ? 0.5 : 0.8;
+        let muLong = floating ? 0.06 : pt.kind ? 0.4 : 0.025;
         if (pt.brake) muLong += this.parkingBrake ? 0.8 : this.brake ? 0.6 : 0;
         _fc.set(0, Fn, 0)
           .addScaledVector(_side, -clamp(vLat / 0.3, -1, 1) * muLat * Fn)
@@ -432,12 +426,13 @@ export class Plane {
       _T.add(_Tw.applyQuaternion(_qi));
     }
     this.wheelsOnGround = wheelsDown;
+    this.onWater = onWater;
     this.onGround = wheelsDown > 0 || (this.onGround && cgY - Math.max(0, groundUnder) < 1.75);
 
     // facteur de charge
     _tmp.copy(_F).addScaledVector(UPV, m * G);
     this.gLoad = _tmp.dot(_up) / (m * G);
-    if (airborne && Math.abs(this.gLoad) > diff.gLimit) return this.crash(`Structure rompue : ${this.gLoad.toFixed(1)} g !`);
+    if (airborne && Math.abs(this.gLoad) > diff.gLimit * S.gTol) return this.crash(`Structure rompue : ${this.gLoad.toFixed(1)} g !`);
     if (diff.damage && this.ias > S.vne * (diff.gLimit < 7 ? 1.1 : 1.2)) return this.crash('Vitesse excessive : la structure a cédé !');
 
     // ----- intégration (Euler semi-implicite) -----
@@ -462,8 +457,9 @@ export class Plane {
   }
 
   refuel(dt) {
-    if (this.fuel >= SPECS.fuelCapacity) return 0;
-    const add = Math.min(SPECS.fuelCapacity - this.fuel, 15 * dt);
+    const cap = this.S.fuelCapacity;
+    if (this.fuel >= cap) return 0;
+    const add = Math.min(cap - this.fuel, Math.max(15, cap / 12) * dt);
     this.fuel += add;
     return add;
   }

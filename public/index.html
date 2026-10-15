@@ -69,6 +69,7 @@
       <button class="tool" id="btn-camera" title="Changer de caméra (C)"><i data-icon="camera"></i><small id="cam-name">Poursuite</small></button>
       <button class="tool" id="btn-map" title="Carte (M)"><i data-icon="map"></i></button>
       <button class="tool" id="btn-journal" title="Journal de quêtes (J)"><i data-icon="book-open"></i></button>
+      <button class="tool" id="btn-hangar" title="Hangar : choisir son avion"><i data-icon="plane"></i></button>
       <button class="tool" id="btn-mute" title="Couper / remettre le son"><i data-icon="volume-2"></i></button>
       <button class="tool" id="btn-pause" title="Pause et paramètres (Échap)"><i data-icon="settings"></i></button>
     </div>
@@ -118,11 +119,16 @@
       <h2>Pause</h2>
       <div class="tabs">
         <button data-tab="tab-settings" class="tab active">Paramètres</button>
+        <button data-tab="tab-hangar" class="tab">Hangar</button>
         <button data-tab="tab-travel" class="tab">Aéroports</button>
         <button data-tab="tab-help" class="tab">Commandes</button>
       </div>
       <div id="tab-settings" class="tab-body"><div id="settings-form"></div>
         <p><button id="reset-progress" class="danger">Effacer ma progression</button></p>
+      </div>
+      <div id="tab-hangar" class="tab-body hidden">
+        <p class="sub">Ta flotte. Les nouveaux avions se débloquent en réussissant certaines quêtes. Changer d'avion arrêté dans un aéroport garde ta quête en cours ; ailleurs, il t'attend à ton dernier aéroport.</p>
+        <div id="hangar-list"></div>
       </div>
       <div id="tab-travel" class="tab-body hidden">
         <p class="sub">Réapparais dans un aéroport où tu t'es déjà posé.</p>
@@ -145,7 +151,7 @@
       <tr><td><kbd>T</kbd> · <kbd>B</kbd></td><td>Trim nez haut · nez bas</td></tr>
       <tr><th colspan="2">Systèmes</th></tr>
       <tr><td><kbd>E</kbd></td><td>Démarrer / couper le moteur</td></tr>
-      <tr><td><kbd>F</kbd> · <kbd>V</kbd></td><td>Sortir / rentrer les volets (0°, 10°, 20°, 30°)</td></tr>
+      <tr><td><kbd>F</kbd> · <kbd>V</kbd></td><td>Sortir / rentrer les volets (crans selon l'avion)</td></tr>
       <tr><td><kbd>G</kbd></td><td>Sortir / rentrer le train d'atterrissage</td></tr>
       <tr><td><kbd>Espace</kbd></td><td>Freins (maintenir)</td></tr>
       <tr><td><kbd>P</kbd></td><td>Frein de parking</td></tr>

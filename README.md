@@ -100,10 +100,32 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
 Le système « réduire les animations » coupe automatiquement les tremblements, la distorsion et les animations de l'interface.
 Le post-traitement n'est chargé que s'il est activé.
 
+## La flotte : 6 avions
+
+On commence avec le **Cub-1** ; les cinq autres se débloquent en réussissant certaines quêtes, puis se choisissent
+au **hangar** (bouton avion de la barre d'outils, ou `Échap` → Hangar). Changer d'avion arrêté dans un aéroport garde
+la quête en cours ; ailleurs, le nouvel avion attend au dernier aéroport. Les autres joueurs voient l'avion que tu pilotes.
+
+| Avion | Type (inspiré de) | Débloqué par | Max | Décrochage | Roulage | Particularités |
+|---|---|---|---|---|---|---|
+| Cub-1 | avion-école (Cessna 172) | — | 224 km/h | 79 km/h | 316 m | stable et indulgent, train rentrant |
+| Moustique | ULM (Ikarus C42) | « Courrier pour la Capitale » | 171 km/h | 59 km/h | 128 m | très léger, décolle et se pose court, train fixe |
+| Faucon | voltige (Extra 300) | « Un cœur dans le ciel » | 325 km/h | 109 km/h | 351 m | 256°/s en roulis, profil symétrique, encaisse ±10 g, sans volets |
+| Mistral | bimoteur (Beechcraft Baron) | « La grande traversée » | 333 km/h | 111 km/h | 477 m | 6 places, 1 650 km d'autonomie, son de deux moteurs |
+| Albatros | hydravion amphibie (Cessna 206 sur flotteurs) | « Un homme à la mer ! » | 222 km/h | 95 km/h | 419 m | se pose sur l'eau train **rentré**, sur piste train sorti |
+| Éclair | biréacteur (Eclipse 500) | « Coupe : la Grande Finale » | 594 km/h | 141 km/h | 832 m | réacteurs lents à monter en régime (N1 %), empennage en T |
+
+Chaque avion a sa masse, sa voilure, son moteur, son centre de gravité, ses roues et ses points de contact (`public/js/aircraft.js`),
+son modèle 3D (construit à partir de la même description dans `planeModel.js`), ses sons et ses limites (VNE, train, volets).
+Les chiffres ci-dessus sont **mesurés** par le banc d'essai (`node scripts/flight-test.mjs normal all`), qui vérifie
+pour chaque avion décollage, montée, vitesse max, décrochage, virage, plané, atterrissage, vol sur le dos, piqué
+et taux de roulis — plus amerrissage, déjaugeage et capotage train sorti pour l'hydravion.
+Sur l'eau, l'Albatros flotte sur ses flotteurs ; s'y poser roues sorties le fait capoter (sauf en facile).
+
 ## Physique de vol
 
-L'avion est simulé comme un vrai avion léger (type Cessna 172), en corps rigide à 6 degrés de liberté :
-portance et traînée selon l'incidence (avec décrochage), hélice limitée en puissance, air moins dense en altitude,
+Chaque avion est simulé en corps rigide à 6 degrés de liberté (l'avion de base est réglé comme un Cessna 172) :
+portance et traînée selon l'incidence (avec décrochage), hélice limitée en puissance ou réacteur, air moins dense en altitude,
 stabilité et amortissement aérodynamiques, effet de sol, roues à amortisseurs avec frottement et freins.
 Les virages viennent de l'inclinaison, le trim règle la vitesse à laquelle l'avion vole « tout seul ».
 Comme sur un vrai avion, l'effort au manche augmente avec la vitesse : au clavier, une touche de profondeur tenue
@@ -126,7 +148,7 @@ En facile et en normale, cette petite traction est ajoutée automatiquement ; en
 
 ## Carburant
 
-Réservoir de 160 L. Pour faire le plein : s'arrêter dans n'importe quel aéroport, **couper le moteur (`E`)**, maintenir **`K`**
+Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pour le jet). Pour faire le plein : s'arrêter dans n'importe quel aéroport, **couper le moteur (`E`)**, maintenir **`K`**
 (1 ₣ le litre ; sans argent, l'aéroport offre du carburant de secours jusqu'à 40 L). La consommation est accélérée ×4 par défaut
 (≈ 50 min plein gaz, ≈ 200 km en croisière) ; on peut la passer en réaliste ou la désactiver dans les paramètres.
 
@@ -145,10 +167,10 @@ Réservoir de 160 L. Pour faire le plein : s'arrêter dans n'importe quel aérop
 - **14 aéroports** de 3 tailles (international avec terminal et avions de ligne, régional, piste en herbe), avec balisage, tour, hangars et pompe à essence.
 - **Villes et villages**, champs cultivés, forêts (sapins, feuillus, palmiers, cactus), éoliennes, bateaux qui naviguent, montgolfières, nuages.
 - **14 lieux** : volcan fumant, Toit du Monde, phares, tour radio, arche marine, épave, plateforme pétrolière, château, pyramides, observatoire, stade, colosse.
-- **L'avion (Cub-1)** : moteur à démarrer, régime, carburant, volets à 4 crans, train rentrant, freins et frein de parking, trim, feux, gouvernes animées. Alarmes : décrochage, train, vitesse volets/train, carburant, terrain. Dégâts en survitesse (volets rentrés de force, train arraché).
+- **Les avions** (6, voir la flotte) : moteur à démarrer, régime, carburant, volets à crans, train rentrant ou fixe, freins et frein de parking, trim, feux, gouvernes animées. Alarmes : décrochage, train, vitesse volets/train, carburant, terrain. Dégâts en survitesse (volets rentrés de force, train arraché).
 - **72 quêtes** réparties sur toute la carte, avec des histoires en plusieurs épisodes.
 - **Paramètres** : qualité, distance de vue, densité de végétation, champ de vision, nuages, difficulté (facile / normale / réaliste), carburant, accélération du temps, sensibilité, unités (km/h·m ou nœuds·pieds), volume…
-- **Multijoueur** : on voit les autres avions (train, volets, feux, hélice) et leurs noms.
+- **Multijoueur** : on voit les autres avions (leur modèle, train, volets, feux, hélice) et leurs noms.
 
 ## Structure
 
@@ -161,8 +183,9 @@ public/js/world.js    relief, aéroports, lieux, bateaux, montgolfières (déter
 public/js/terrain.js  terrain par morceaux (niveaux de détail)
 public/js/decor.js    arbres et villages autour du joueur
 public/js/objects.js  aéroports, villes, monuments, bateaux, éoliennes
-public/js/plane.js    physique de vol (6 degrés de liberté)
-public/js/planeModel.js modèle 3D de l'avion (matériaux PBR, habitacle)
+public/js/aircraft.js la flotte : caractéristiques, géométrie, sons et déblocage de chaque avion
+public/js/plane.js    physique de vol (6 degrés de liberté), commune à tous les avions
+public/js/planeModel.js modèles 3D des avions, construits depuis aircraft.js (matériaux PBR, habitacle)
 public/js/render/     rendu : config (qualité), renderer (orchestration), sky, clouds, weather,
                       materials (terrain, bâtiments), water, post (post-traitement), effects, cameras,
                       shared (brume, ombres des nuages), textures, heightmap
@@ -170,7 +193,7 @@ public/js/ui/         instruments (PFD, planche de bord), audio (sons), icons (L
 public/js/quests/     quêtes par région (kit.js = format, engine.js = moteur)
 public/js/settings.js paramètres
 public/js/main.js     boucle de jeu, caméra, HUD, carburant, réseau
-scripts/flight-test.mjs     banc d'essai en vol automatique (node scripts/flight-test.mjs [easy|normal|realistic])
+scripts/flight-test.mjs     banc d'essai en vol automatique (node scripts/flight-test.mjs [easy|normal|realistic] [avion|all])
 scripts/validate-quests.mjs vérifie toutes les quêtes (format, relief, chronos)
 scripts/quest-reference.mjs données de la carte pour écrire des quêtes
 ```

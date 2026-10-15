@@ -1,5 +1,6 @@
-// Modèle 3D détaillé de l'avion de base (type Cessna à aile haute), nez vers -Z.
+// Modèles 3D des avions, construits à partir de leur description (aircraft.js) : nez vers -Z.
 import * as THREE from 'three';
+import { aircraftById } from './aircraft.js';
 
 // Relie des anneaux de points (même nombre de points) en une surface lisse
 // glassOf(i, j, p) (optionnel) : sommets de vitre ; la géométrie a alors 2 groupes (0 = carrosserie, 1 = vitres)
@@ -104,21 +105,51 @@ function interpKeys(keys, step) {
   return out;
 }
 
-// stations du fuselage : [z, demi-largeur, demi-hauteur, centre y]
-const FUSE = [
-  [-3.72, 0.3, 0.3, -0.02], [-3.55, 0.47, 0.45, 0.0], [-3.1, 0.55, 0.55, 0.04], [-2.4, 0.58, 0.66, 0.12],
-  [-1.6, 0.59, 0.74, 0.2], [-0.6, 0.59, 0.74, 0.2], [0.4, 0.55, 0.66, 0.18], [1.4, 0.42, 0.5, 0.18],
-  [2.6, 0.26, 0.36, 0.24], [3.7, 0.14, 0.26, 0.32], [4.15, 0.07, 0.19, 0.36],
-];
 
-// opts.detail : intérieur, pilote, halos et phare (avion du joueur et des autres pilotes)
-export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) {
+// anneau de section « superellipse » (fuselage, nacelles, flotteurs) ; keel > 0 creuse le dessous en V (coque)
+function superRing(z, w, h, yc, M, P, x0 = 0, keel = 0) {
+  const r = [];
+  for (let j = 0; j < M; j++) {
+    const a = (j / M) * Math.PI * 2;
+    const cx = Math.cos(a), cy = Math.sin(a);
+    let y = h * Math.sign(cy) * Math.abs(cy) ** (2 / P);
+    if (keel && cy < 0) y *= 1 - keel * Math.abs(cx);
+    r.push(new THREE.Vector3(x0 + w * Math.sign(cx) * Math.abs(cx) ** (2 / P), yc + y, z));
+  }
+  return r;
+}
+
+// demi-largeur du fuselage à une abscisse z (pour placer les mâts des réacteurs)
+function fuseWidthAt(fuse, z) {
+  for (let i = 0; i < fuse.length - 1; i++) {
+    const a = fuse[i], b = fuse[i + 1];
+    if (z >= a[0] && z <= b[0]) return lerp(a[1], b[1], (z - a[0]) / (b[0] - a[0]));
+  }
+  return fuse[fuse.length - 1][1];
+}
+
+// cylindre tendu entre deux points (haubans, mâts)
+function rod(a, b, r, mat, flat = 2.2) {
+  const len = a.distanceTo(b);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8).scale(1, 1, flat), mat);
+  m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
+  return m;
+}
+
+// type : identifiant de l'avion (aircraft.js)
+// opts.color / opts.accent : peinture (sinon celle de l'avion) ; opts.detail : intérieur, pilote, halos
+// opts.landingLight : vrai phare (avion du joueur)
+export function createPlaneMesh(type = 'cub', opts = {}) {
+  const def = aircraftById(type);
+  const MD = def.model;
+  const color = opts.color ?? def.color, accent = opts.accent ?? def.accent;
   const detail = opts.detail ?? true;
   const g = new THREE.Group();
   // peinture vernie (vernis = clearcoat), métal brossé, caoutchouc, plexiglas
   const paintProps = { vertexColors: true, roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 };
   const paint = new THREE.MeshPhysicalMaterial({ ...paintProps, side: THREE.DoubleSide });
-  const paintOut = new THREE.MeshPhysicalMaterial({ ...paintProps, side: THREE.BackSide }); // fuselage vu de l'extérieur
+  const paintOut = new THREE.MeshPhysicalMaterial({ ...paintProps, side: THREE.BackSide }); // surfaces fermées vues de l'extérieur
   const bodyMat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 });
   const accentMat = new THREE.MeshPhysicalMaterial({ color: accent, roughness: 0.36, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.12 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 0.55, metalness: 0.2 });
@@ -131,222 +162,381 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
   });
   // habitacle : léger éclairage propre (lumière renvoyée par les vitres et la planche)
   const cabin = new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.85, metalness: 0, emissive: 0x1d2024 });
-  const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(0x1d3f7a);
+  const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(def.acc2 ?? 0x1d3f7a);
   const FRAME = new THREE.Color(0x2a2f36);
+  const pick = (k) => (k === 'acc' ? ACC : k === 'acc2' ? ACC2 : BODY);
 
   // ----- fuselage -----
-  const M = 24, P = 2.6;
-  const rings = interpKeys(FUSE, 0.1).map(([z, w, h, yc]) => {
-    const r = [];
-    for (let j = 0; j < M; j++) {
-      const a = (j / M) * Math.PI * 2;
-      const cx = Math.cos(a), cy = Math.sin(a);
-      r.push(new THREE.Vector3(w * Math.sign(cx) * Math.abs(cx) ** (2 / P), yc + h * Math.sign(cy) * Math.abs(cy) ** (2 / P), z));
-    }
-    return r;
-  });
-  const keysZ = interpKeys(FUSE, 0.1);
-  const isGlass = (i, j, p) => {
+  const M = 24, P = MD.power ?? 2.6;
+  const keysZ = interpKeys(MD.fuse, 0.1);
+  const rings = keysZ.map(([z, w, h, yc]) => superRing(z, w, h, yc, M, P));
+  const gl = MD.glass;
+  const isGlass = gl ? (i, j, p) => {
     const [z, , h, yc] = keysZ[Math.min(i, keysZ.length - 1)];
     const ny = (p.y - yc) / h;
-    const windshield = z > -2.45 && z < -1.72 && ny > 0.14 && ny < 0.985;
-    const side = z > -1.72 && z < 0.45 && ny > 0.24 && ny < 0.74 && Math.abs(z + 0.65) > 0.06 && Math.abs(p.x) > 0.25;
-    const post = Math.abs(z + 1.72) < 0.04 && ny > 0.28;
+    const [s0, s1, n0, n1] = gl.shield;
+    const windshield = z > s0 && z < s1 && ny > n0 && ny < n1;
+    let side = false;
+    if (Math.abs(p.x) > gl.xMin) {
+      for (const sd of gl.sides) {
+        if (z <= sd.z0 || z >= sd.z1 || ny <= sd.ny0 || ny >= sd.ny1) continue;
+        let ok = !(sd.gaps || []).some((gz) => Math.abs(z - gz) < (sd.gapW ?? 0.06));
+        if (sd.period) ok = (z - sd.z0) % sd.period < sd.size; // hublots
+        if (ok) side = true;
+      }
+    }
+    const post = gl.posts.some((pz) => Math.abs(z - pz) < 0.04) && ny > gl.sides[0].ny0 + 0.04;
     return (windshield || side) && !post;
-  };
+  } : null;
   const fuseGeo = loft(rings, (c, i, j, p) => {
     const [z, , h, yc] = keysZ[Math.min(i, keysZ.length - 1)];
     const ny = (p.y - yc) / h;
-    if (isGlass(i, j, p)) c.copy(FRAME);
-    else if (ny > -0.18 && ny < -0.04 && z > -3.2) c.copy(ACC);
-    else if (ny > -0.3 && ny < -0.22 && z > -3.2) c.copy(ACC2);
-    else c.copy(BODY);
+    if (isGlass && isGlass(i, j, p)) { c.copy(FRAME); return; }
+    c.copy(BODY);
+    for (const [a, b, k, zMin] of MD.stripes || []) if (ny > a && ny < b && z > zMin) c.copy(pick(k));
   }, true, isGlass);
-  const fuse = new THREE.Mesh(fuseGeo, [paintOut, glassMat]);
+  const hidden = new THREE.MeshBasicMaterial({ visible: false });
+  const fuse = new THREE.Mesh(fuseGeo, isGlass ? [paintOut, glassMat] : paintOut);
   g.add(fuse);
   // habitacle : parois intérieures (même géométrie vue de l'intérieur, sans les vitres)
-  const shell = new THREE.Mesh(fuseGeo, [cabin, new THREE.MeshBasicMaterial({ visible: false })]);
+  const shell = new THREE.Mesh(fuseGeo, isGlass ? [cabin, hidden] : cabin);
   g.add(shell);
+  // verrière en bulle (avion de voltige)
+  if (MD.canopy) {
+    const cp = MD.canopy;
+    const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2).scale(cp.w, cp.h, (cp.z1 - cp.z0) / 2), glassMat);
+    bubble.position.set(0, cp.y, (cp.z0 + cp.z1) / 2);
+    bubble.renderOrder = 2;
+    g.add(bubble);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 6, 40).rotateX(Math.PI / 2).scale(cp.w, 1, (cp.z1 - cp.z0) / 2), dark);
+    rim.position.copy(bubble.position);
+    g.add(rim);
+  }
 
-  // ----- aile haute -----
-  const wingY = 0.99, LE = -1.95;
-  const chordAt = (x) => { const s = Math.abs(x); return s < 2.9 ? 1.6 : lerp(1.6, 1.15, (s - 2.9) / 2.6); };
-  const wingRing = (x, from, to, thick) => {
-    const c = chordAt(x);
-    const le = LE + (1.6 - c) * 0.25;
-    return airfoil(10, thick, from, to).map(([t, y]) => new THREE.Vector3(x, wingY + Math.abs(x) * 0.03 + y * c, le + t * c));
+  // ----- aile -----
+  const W = MD.wing;
+  const chordAt = (x) => { const s = Math.abs(x); return s < W.taperFrom || W.half <= W.taperFrom ? W.root : lerp(W.root, W.tip, (s - W.taperFrom) / (W.half - W.taperFrom)); };
+  const leAt = (x) => W.le + (W.root - chordAt(x)) * 0.25 + Math.abs(x) * W.sweep;
+  const yAt = (x) => W.y + Math.abs(x) * W.dihedral;
+  const mainTo = 0.74; // le reste de la corde : volets et ailerons mobiles
+  const wingRing = (x, thick) => {
+    const c = chordAt(x), le = leAt(x);
+    return airfoil(10, thick, 0, mainTo).map(([t, y]) => new THREE.Vector3(x, yAt(x) + y * c, le + t * c));
   };
-  const wingXs = [-5.5, -5.2, -4.2, -2.9, -1.5, 0, 1.5, 2.9, 4.2, 5.2, 5.5];
-  const wing = new THREE.Mesh(loft(wingXs.map((x) => wingRing(x, 0, 0.74, Math.abs(x) > 5.3 ? 0.07 : 0.13)),
-    (c, i, j, p) => c.copy(Math.abs(p.x) > 4.6 ? ACC : BODY)), paint);
+  const half = W.xs || [...new Set([W.half, W.half - 0.3, (W.half + W.taperFrom) / 2, W.taperFrom, W.taperFrom / 2, 0].map((v) => Math.round(v * 100) / 100))]
+    .filter((v) => v >= 0 && v <= W.half).sort((a, b) => b - a);
+  const wingXs = [...half.map((v) => -v), ...half.slice(0, -1).reverse()];
+  const wing = new THREE.Mesh(loft(wingXs.map((x) => wingRing(x, Math.abs(x) > W.half - 0.2 ? W.tipThick : W.thick)),
+    (c, i, j, p) => c.copy(Math.abs(p.x) > W.accentFrom ? ACC : BODY)), paint);
   g.add(wing);
+  if (W.winglets) {
+    for (const s of [-1, 1]) {
+      const c = chordAt(W.half);
+      const wl = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, c * 0.75), accentMat);
+      wl.position.set(s * (W.half + 0.03), yAt(W.half) + 0.27, leAt(W.half) + c * 0.45);
+      wl.rotation.z = -s * 0.12;
+      g.add(wl);
+    }
+  }
 
   // gouvernes : pièces mobiles avec charnière au bord avant
   const surface = (x0, x1, chordFrac, mat) => {
-    const xm = (x0 + x1) / 2, c = chordAt(xm), le = LE + (1.6 - c) * 0.25;
+    const xm = (x0 + x1) / 2, c = chordAt(xm);
     const pivot = new THREE.Group();
-    pivot.position.set(xm, wingY + Math.abs(xm) * 0.03, le + 0.74 * c);
+    pivot.position.set(xm, yAt(xm), leAt(xm) + mainTo * c);
     const piece = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(x1 - x0) - 0.04, 0.05, c * chordFrac), mat);
     piece.position.z = (c * chordFrac) / 2;
     pivot.add(piece);
     g.add(pivot);
     return pivot;
   };
-  const flapL = surface(-2.9, -0.62, 0.25, bodyMat), flapR = surface(0.62, 2.9, 0.25, bodyMat);
-  const ailL = surface(-5.2, -2.95, 0.25, bodyMat), ailR = surface(2.95, 5.2, 0.25, bodyMat);
+  const flapL = W.flaps ? surface(-W.flaps[1], -W.flaps[0], 0.25, bodyMat) : null;
+  const flapR = W.flaps ? surface(W.flaps[0], W.flaps[1], 0.25, bodyMat) : null;
+  const ailL = surface(-W.ail[1], -W.ail[0], 0.25, bodyMat), ailR = surface(W.ail[0], W.ail[1], 0.25, bodyMat);
 
-  // haubans
-  const strut = (x) => {
-    const a = new THREE.Vector3(0.52 * Math.sign(x), -0.32, -1.1), b = new THREE.Vector3(x, wingY + Math.abs(x) * 0.03 - 0.05, -1.2);
-    const len = a.distanceTo(b);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, len, 8).scale(1, 1, 2.2), metal);
-    m.position.copy(a).add(b).multiplyScalar(0.5);
-    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-    g.add(m);
-  };
-  strut(-2.7); strut(2.7);
+  // haubans (aile haute)
+  if (W.struts) {
+    const [fx, fy, fz] = W.struts.from;
+    for (const s of [-1, 1]) {
+      const x = s * W.struts.x;
+      g.add(rod(new THREE.Vector3(fx * s, fy, fz), new THREE.Vector3(x, yAt(x) - 0.05, W.struts.z), 0.035, metal));
+    }
+  }
 
   // ----- empennage -----
+  const T = MD.stab;
   const stabRing = (x) => {
-    const s = Math.abs(x), c = lerp(0.85, 0.5, s / 1.8), le = 3.25 + s * 0.12;
-    return airfoil(8, 0.09, 0, 0.62).map(([t, y]) => new THREE.Vector3(x, 0.4 + y * c, le + t * c));
+    const s = Math.abs(x), c = lerp(T.root, T.tip, s / T.half), le = T.le + s * T.sweep;
+    return airfoil(8, 0.09, 0, 0.62).map(([t, y]) => new THREE.Vector3(x, T.y + y * c, le + t * c));
   };
-  g.add(new THREE.Mesh(loft([-1.8, -0.9, 0, 0.9, 1.8].map(stabRing), (c) => c.copy(BODY)), paint));
+  g.add(new THREE.Mesh(loft([-1, -0.5, 0, 0.5, 1].map((k) => stabRing(k * T.half)), (c) => c.copy(BODY)), paint));
   const elevator = new THREE.Group();
-  elevator.position.set(0, 0.4, 3.25 + 0.62 * 0.85);
-  const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.04, 0.32), accentMat);
-  elevMesh.position.z = 0.16;
+  elevator.position.set(0, T.y, T.le + 0.62 * T.root);
+  const elevMesh = new THREE.Mesh(new THREE.BoxGeometry(T.half * 2 - 0.2, 0.04, T.root * 0.376), accentMat);
+  elevMesh.position.z = T.root * 0.188;
   elevator.add(elevMesh);
   g.add(elevator);
 
+  const F = MD.fin;
   const finRing = (y) => {
-    const t = (y - 0.45) / 1.35, c = lerp(1.25, 0.42, t), le = lerp(2.75, 3.75, t);
+    const t = (y - F.y0) / (F.y1 - F.y0), c = lerp(F.root, F.tip, t), le = lerp(F.le0, F.le1, t);
     return airfoil(8, 0.1, 0, 0.7).map(([u, w]) => new THREE.Vector3(w * c, y, le + u * c));
   };
-  g.add(new THREE.Mesh(loft([0.45, 0.9, 1.35, 1.8].map(finRing), (c, i, j, p) => c.copy(p.y > 1.15 ? ACC : BODY)), paint));
+  g.add(new THREE.Mesh(loft([0, 1 / 3, 2 / 3, 1].map((k) => finRing(lerp(F.y0, F.y1, k))), (c, i, j, p) => c.copy(p.y > F.accentFrom ? ACC : BODY)), paint));
   const rudder = new THREE.Group();
-  rudder.position.set(0, 1.12, 3.95);
-  const rudMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.3, 0.3), accentMat);
-  rudMesh.position.z = 0.15;
+  rudder.position.set(0, (F.y0 + F.y1) / 2, (F.le0 + 0.7 * F.root + F.le1 + 0.7 * F.tip) / 2 + 0.12);
+  const rudMesh = new THREE.Mesh(new THREE.BoxGeometry(0.04, (F.y1 - F.y0) * 0.963, F.root * 0.24), accentMat);
+  rudMesh.position.z = F.root * 0.12;
   rudder.add(rudMesh);
   g.add(rudder);
 
-  // ----- moteur & hélice -----
-  const spinnerProfile = [[0.2, 0], [0.19, 0.08], [0.15, 0.2], [0.08, 0.31], [0, 0.37]].map(([r, y]) => new THREE.Vector2(r, y));
-  const spinner = new THREE.Mesh(new THREE.LatheGeometry(spinnerProfile, 18).rotateX(-Math.PI / 2), accentMat);
-  spinner.position.z = -3.72;
-  g.add(spinner);
-  const prop = new THREE.Group();
-  prop.position.z = -3.8;
-  for (let k = 0; k < 2; k++) {
-    const bg = new THREE.BoxGeometry(0.13, 0.95, 0.025, 1, 6, 1).translate(0, 0.52, 0);
-    const pa = bg.attributes.position;
-    for (let i = 0; i < pa.count; i++) {
-      const y = pa.getY(i), tw = 0.6 - y * 0.45;
-      const x = pa.getX(i) * (1 - y * 0.35), z = pa.getZ(i);
-      pa.setXYZ(i, x * Math.cos(tw) - z * Math.sin(tw), y, x * Math.sin(tw) + z * Math.cos(tw));
+  // ----- moteurs : hélices (nez ou nacelles d'aile) -----
+  const props = [];
+  const tipMat = new THREE.MeshStandardMaterial({ color: 0xf2c21b, roughness: 0.5 });
+  for (const pc of MD.props || []) {
+    const r = pc.r, sp = pc.spinner ?? 1;
+    if (pc.nacelle) {
+      const n = pc.nacelle, R = n.rad;
+      const keys = [[pc.z + 0.02, R * 0.6, R * 0.6, 0], [pc.z + 0.3, R * 0.92, R * 0.92, 0], [pc.z + 0.9, R, R * 1.02, 0.02], [n.z1 - 1.3, R * 0.95, R * 0.98, 0.02], [n.z1, R * 0.22, R * 0.3, 0.06]];
+      const nac = new THREE.Mesh(loft(interpKeys(keys, 0.15).map(([z, w, h, yc]) => superRing(z, w, h, pc.y + yc, 18, 2.4, pc.x)), (c, i, j, p) => c.copy(p.y - pc.y > R * 0.55 ? ACC : BODY)), paintOut);
+      g.add(nac);
     }
-    bg.computeVertexNormals();
-    const blade = new THREE.Mesh(bg, dark);
-    blade.rotation.z = k * Math.PI;
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.03), new THREE.MeshStandardMaterial({ color: 0xf2c21b, roughness: 0.5 }));
-    tip.position.y = 1.0;
-    tip.rotation.y = 0.15;
-    blade.add(tip);
-    prop.add(blade);
+    const spinnerProfile = [[0.2, 0], [0.19, 0.08], [0.15, 0.2], [0.08, 0.31], [0, 0.37]].map(([a, b]) => new THREE.Vector2(a * sp, b * sp));
+    const spinner = new THREE.Mesh(new THREE.LatheGeometry(spinnerProfile, 18).rotateX(-Math.PI / 2), accentMat);
+    spinner.position.set(pc.x, pc.y, pc.z);
+    g.add(spinner);
+    const prop = new THREE.Group();
+    prop.position.set(pc.x, pc.y, pc.z - 0.08);
+    const nb = pc.blades || 2;
+    for (let k = 0; k < nb; k++) {
+      const bg = new THREE.BoxGeometry(0.13 * Math.min(1, r * 1.05), 0.95 * r, 0.025, 1, 6, 1).translate(0, 0.52 * r, 0);
+      const pa = bg.attributes.position;
+      for (let i = 0; i < pa.count; i++) {
+        const y = pa.getY(i), yn = y / r, tw = 0.6 - yn * 0.45;
+        const x = pa.getX(i) * (1 - yn * 0.35), z = pa.getZ(i);
+        pa.setXYZ(i, x * Math.cos(tw) - z * Math.sin(tw), y, x * Math.sin(tw) + z * Math.cos(tw));
+      }
+      bg.computeVertexNormals();
+      const blade = new THREE.Mesh(bg, dark);
+      blade.rotation.z = (k * Math.PI * 2) / nb;
+      const tip = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.09, 0.03), tipMat);
+      tip.position.y = 1.0 * r;
+      tip.rotation.y = 0.15;
+      blade.add(tip);
+      prop.add(blade);
+    }
+    g.add(prop);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.05 * r, 32), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+    disc.position.set(pc.x, pc.y, pc.z - 0.1);
+    g.add(disc);
+    props.push({ prop, disc, spin: pc.spin ?? 1 });
+    if (pc.intakes) {
+      for (const x of [-0.25, 0.25]) {
+        const intake = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), dark);
+        intake.position.set(pc.x + x, pc.y - 0.18, pc.z + 0.2);
+        g.add(intake);
+      }
+    }
   }
-  g.add(prop);
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(1.05, 32), new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
-  disc.position.z = -3.82;
-  g.add(disc);
-  for (const x of [-0.25, 0.25]) {
-    const intake = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.1), dark);
-    intake.position.set(x, -0.18, -3.52);
-    g.add(intake);
-  }
-  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8).rotateX(Math.PI / 2), chrome);
-  exhaust.position.set(0.22, -0.48, -2.9);
-  g.add(exhaust);
-  const antenna = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.35, 0.08), dark);
-  antenna.position.set(0, 1.12, -0.2);
-  g.add(antenna);
 
-  // ----- train d'atterrissage rentrant -----
+  // ----- réacteurs arrière (jet) : nacelle ouverte, soufflante qui tourne, tuyère, mât -----
+  const fans = [];
+  const LIP = new THREE.Color(0xd8dde2);
+  for (const jc of MD.jets || []) {
+    const R = jc.r, L = jc.z1 - jc.z0;
+    const keys = [[jc.z0, R * 0.86, R * 0.86, 0], [jc.z0 + 0.1, R * 0.97, R * 0.97, 0], [jc.z0 + 0.45, R, R, 0], [jc.z1 - 0.55, R * 0.92, R * 0.92, 0], [jc.z1, R * 0.74, R * 0.74, 0]];
+    const pod = new THREE.Mesh(loft(interpKeys(keys, 0.12).map(([z, w, h, yc]) => superRing(z, w, h, jc.y + yc, 22, 2, jc.x)), (c, i, j, p) => c.copy(i < 2 ? LIP : p.y - jc.y > R * 0.6 ? ACC : BODY), false), paintOut);
+    g.add(pod);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(R * 0.9, 0.035, 8, 28), chrome);
+    lip.position.set(jc.x, jc.y, jc.z0 + 0.02);
+    g.add(lip);
+    const inner = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.86, R * 0.74, L, 22, 1, true).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.6, metalness: 0.5, side: THREE.BackSide }));
+    inner.position.set(jc.x, jc.y, (jc.z0 + jc.z1) / 2);
+    g.add(inner);
+    const fan = new THREE.Group();
+    fan.position.set(jc.x, jc.y, jc.z0 + 0.22);
+    const hub = new THREE.Mesh(new THREE.ConeGeometry(R * 0.28, R * 0.5, 16).rotateX(-Math.PI / 2), chrome);
+    hub.position.z = -0.1;
+    fan.add(hub);
+    for (let k = 0; k < 16; k++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, R * 0.62, 0.02).translate(0, R * 0.5, 0), metal);
+      b.rotation.set(0, 0.5, (k / 16) * Math.PI * 2, 'ZXY');
+      fan.add(b);
+    }
+    g.add(fan);
+    fans.push(fan);
+    const nozzle = new THREE.Mesh(new THREE.ConeGeometry(R * 0.4, R * 0.9, 16).rotateX(Math.PI / 2), dark);
+    nozzle.position.set(jc.x, jc.y, jc.z1 - 0.1);
+    g.add(nozzle);
+    // mât reliant la nacelle au fuselage
+    const zm = (jc.z0 + jc.z1) / 2 + 0.15, fw = fuseWidthAt(MD.fuse, zm) * 0.8;
+    const span = Math.abs(jc.x) - R * 0.8 - fw;
+    const pylon = new THREE.Mesh(new THREE.BoxGeometry(span + 0.2, 0.09, L * 0.55), bodyMat);
+    pylon.position.set(Math.sign(jc.x) * (fw + span / 2), jc.y - 0.05, zm);
+    g.add(pylon);
+  }
+
+  if (MD.exhaust && !MD.jets) {
+    const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8).rotateX(Math.PI / 2), chrome);
+    exhaust.position.set(...MD.exhaust);
+    g.add(exhaust);
+  }
+  if (MD.antenna) {
+    const antenna = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.35, 0.08), dark);
+    antenna.position.set(...MD.antenna);
+    g.add(antenna);
+  }
+
+  // ----- train d'atterrissage -----
+  const GR = MD.gear, gearH = def.specs.gear, wr = GR.r, wheelY = -gearH + wr;
   const legs = [];
   const wheel = (parent, x, y, z, fairing) => {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.16, 18).rotateZ(Math.PI / 2), rubber);
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(wr, wr, wr * 0.55, 18).rotateZ(Math.PI / 2), rubber);
     w.position.set(x, y, z);
     parent.add(w);
+    const hubcap = new THREE.Mesh(new THREE.CylinderGeometry(wr * 0.45, wr * 0.45, wr * 0.58, 12).rotateZ(Math.PI / 2), metal);
+    hubcap.position.copy(w.position);
+    parent.add(hubcap);
     if (fairing) {
-      const f = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10).scale(0.13, 0.27, 0.55), bodyMat);
+      const f = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10).scale(wr * 0.43, wr * 0.9, wr * 1.83), bodyMat);
       f.position.set(x, y + 0.04, z + 0.05);
       parent.add(f);
     }
   };
-  for (const s of [-1, 1]) {
-    const leg = new THREE.Group();
-    leg.position.set(0.42 * s, -0.48, -0.75);
-    const a = new THREE.Vector3(0, 0, 0), b = new THREE.Vector3(0.78 * s, -0.77, 0);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.05, a.distanceTo(b), 0.1), metal);
-    bar.position.copy(b).multiplyScalar(0.5);
-    bar.rotation.z = Math.atan2(b.x, -b.y);
-    leg.add(bar);
-    wheel(leg, b.x, b.y, 0, true);
-    g.add(leg);
-    legs.push(leg);
+  const fixed = !def.specs.retractable;
+  const mains = GR.mains, nose = GR.nose;
+  if (mains.style === 'float') {
+    // roues escamotables logées dans les flotteurs
+    const fl = GR.floats;
+    for (const s of [-1, 1]) {
+      for (const [z, isNose] of [[mains.z, false], [nose.z, true]]) {
+        const leg = new THREE.Group();
+        const top = fl.bottom + fl.h * 0.5;
+        leg.position.set(s * mains.x, top, z);
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, top - wheelY, 8), metal);
+        bar.position.y = -(top - wheelY) / 2;
+        leg.add(bar);
+        wheel(leg, 0, wheelY - top, 0, false);
+        if (isNose) leg.scale.setScalar(0.8);
+        g.add(leg);
+        legs.push(leg);
+      }
+    }
+    // flotteurs : coque en V, pont peint, étrave relevée, redan
+    for (const s of [-1, 1]) {
+      const b = fl.bottom, h = fl.h / 2, w = fl.w;
+      const keys = [[fl.z0, 0.08, 0.08, b + h * 1.5], [fl.z0 + 0.35, w * 0.55, h * 0.6, b + h * 1.15], [fl.z0 + 1.1, w, h, b + h], [mains.z + 0.25, w, h, b + h],
+        [mains.z + 0.3, w * 0.96, h * 0.86, b + h * 1.12], [fl.z1 - 1.2, w * 0.75, h * 0.62, b + h * 1.3], [fl.z1, 0.06, 0.08, b + h * 1.75]];
+      const floatGeo = loft(interpKeys(keys, 0.2).map(([z, ww, hh, yc]) => superRing(z, ww, hh, yc, 18, 2.6, s * mains.x, 0.45)),
+        (c, i, j, p) => c.copy(p.y > b + h * 1.55 ? ACC : p.y < b + 0.12 ? ACC2 : BODY));
+      g.add(new THREE.Mesh(floatGeo, paintOut));
+      for (const z of [nose.z + 0.6, mains.z + 0.2]) {
+        g.add(rod(new THREE.Vector3(s * mains.x, b + h * 1.9, z), new THREE.Vector3(s * 0.5, -0.45, z - 0.15), 0.04, metal, 2));
+        g.add(rod(new THREE.Vector3(s * mains.x, b + h * 1.9, z + 0.4), new THREE.Vector3(s * 0.4, -0.5, z - 0.35), 0.03, metal, 1.5));
+      }
+    }
+  } else {
+    for (const s of [-1, 1]) {
+      const leg = new THREE.Group();
+      if (mains.style === 'spring') {
+        // jambe de train à lame (type Cessna)
+        leg.position.set(mains.ax * s, mains.ay, mains.z);
+        const a = new THREE.Vector3(0, 0, 0), b = new THREE.Vector3((mains.x - mains.ax) * s, wheelY - mains.ay, 0);
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.05, a.distanceTo(b), 0.1), metal);
+        bar.position.copy(b).multiplyScalar(0.5);
+        bar.rotation.z = Math.atan2(b.x, -b.y);
+        leg.add(bar);
+        wheel(leg, b.x, b.y, 0, GR.pants);
+      } else {
+        // jambe oléopneumatique qui se replie dans l'aile ou la nacelle
+        leg.position.set(mains.x * s, mains.ay, mains.z);
+        const L = mains.ay - wheelY;
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, L * 0.62, 10), metal);
+        strut.position.y = -L * 0.31;
+        const oleo = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, L * 0.5, 10), chrome);
+        oleo.position.y = -L * 0.7;
+        const brace = rod(new THREE.Vector3(0, -L * 0.15, 0.35), new THREE.Vector3(0, -L * 0.55, 0), 0.025, metal, 1);
+        leg.add(strut, oleo, brace);
+        wheel(leg, 0.13 * s, wheelY - mains.ay, 0, false);
+        leg.userData.fold = mains.fold === 'in' ? -s : 0;
+      }
+      leg.userData.fixed = fixed;
+      g.add(leg);
+      legs.push(leg);
+    }
+    const noseLeg = new THREE.Group();
+    noseLeg.position.set(nose.x ?? 0, nose.ay, nose.z);
+    const Ln = nose.ay - wheelY;
+    const strutN = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, Ln, 8), metal);
+    strutN.position.y = -Ln / 2;
+    noseLeg.add(strutN);
+    wheel(noseLeg, 0, -Ln, 0, GR.pants);
+    noseLeg.userData.fixed = fixed;
+    g.add(noseLeg);
+    legs.push(noseLeg);
   }
-  const nose = new THREE.Group();
-  nose.position.set(0, -0.45, -3.0);
-  const strutN = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8), metal);
-  strutN.position.y = -0.4;
-  nose.add(strutN);
-  wheel(nose, 0, -0.8, 0, true);
-  g.add(nose);
-  legs.push(nose);
 
-  // ----- habitacle : planche de bord, sièges, manches, pilote -----
+  // ----- habitacle : planche de bord, sièges, manches ou yokes, pilote -----
+  const CB = MD.cabin;
   const interior = new THREE.Group();
   const panelMat = new THREE.MeshStandardMaterial({ map: defaultPanelTexture(), roughness: 0.6, emissive: 0xffffff, emissiveIntensity: 0, emissiveMap: null });
-  const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.08, 0.4), panelMat);
-  panel.position.set(0, 0.1, -1.92);
+  const panel = new THREE.Mesh(new THREE.PlaneGeometry(CB.panel.w, CB.panel.w * 0.37), panelMat);
+  panel.position.set(0, CB.panel.y, CB.panel.z);
   panel.rotation.x = -0.18;
   interior.add(panel);
-  const glare = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.05, 0.3), cabin);
-  glare.position.set(0, 0.31, -2.02);
+  const glare = new THREE.Mesh(new THREE.BoxGeometry(CB.panel.w + 0.04, 0.05, 0.3), cabin);
+  glare.position.set(0, CB.panel.y + 0.21, CB.panel.z - 0.1);
   interior.add(glare);
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.04, 2.6), new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.95 }));
-  floor.position.set(0, -0.42, -0.7);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(CB.floor.w, 0.04, CB.floor.len), new THREE.MeshStandardMaterial({ color: 0x2a2c30, roughness: 0.95 }));
+  floor.position.set(0, CB.floor.y, CB.floor.z);
   interior.add(floor);
-  const seatMat = new THREE.MeshStandardMaterial({ color: 0x5a4a3c, roughness: 0.8 });
-  for (const [x, z] of [[-0.27, -0.95], [0.27, -0.95], [-0.27, 0.15], [0.27, 0.15]]) {
+  const seatMat = new THREE.MeshStandardMaterial({ color: CB.stick ? 0x2b2e33 : 0x5a4a3c, roughness: 0.8 });
+  for (const [x, z] of CB.seats) {
     const seat = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.1, 0.45), seatMat);
-    seat.position.set(x, -0.12, z);
+    seat.position.set(x, CB.seatY, z);
     const back = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.62, 0.09), seatMat);
-    back.position.set(x, 0.2, z + 0.25);
+    back.position.set(x, CB.seatY + 0.32, z + 0.25);
     back.rotation.x = 0.12;
     interior.add(seat, back);
   }
   const yokes = [];
-  for (const x of [-0.27, 0.27]) {
-    const yoke = new THREE.Group();
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.32, 8).rotateX(Math.PI / 2), dark);
-    col.position.z = 0.16;
-    const wheelY = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.016, 6, 20, Math.PI), dark);
-    wheelY.position.z = 0.32;
-    wheelY.rotation.z = Math.PI;
-    yoke.add(col, wheelY);
-    yoke.position.set(x, 0.02, -1.86);
-    interior.add(yoke);
-    yokes.push(yoke);
+  if (CB.stick) {
+    // manche à balai entre les jambes (ULM, voltige)
+    for (const [x, z] of CB.seats.slice(0, CB.seats[0][0] === 0 ? 2 : 1)) {
+      const stick = new THREE.Group();
+      stick.position.set(x, CB.seatY - 0.12, z - 0.45);
+      const rodM = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.5, 8).translate(0, 0.25, 0), dark);
+      const grip = new THREE.Mesh(new THREE.CapsuleGeometry(0.025, 0.08, 4, 8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7 }));
+      grip.position.y = 0.52;
+      stick.add(rodM, grip);
+      stick.userData.stick = true;
+      interior.add(stick);
+      yokes.push(stick);
+    }
+  } else {
+    for (const x of CB.yokes) {
+      const yoke = new THREE.Group();
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.32, 8).rotateX(Math.PI / 2), dark);
+      col.position.z = 0.16;
+      const wheelY2 = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.016, 6, 20, Math.PI), dark);
+      wheelY2.position.z = 0.32;
+      wheelY2.rotation.z = Math.PI;
+      yoke.add(col, wheelY2);
+      yoke.position.set(x, CB.yokeY, CB.yokeZ);
+      yoke.userData.z0 = CB.yokeZ;
+      interior.add(yoke);
+      yokes.push(yoke);
+    }
   }
   g.add(interior);
+  const [sx, sz] = CB.seats[0];
   let pilot = null;
   if (detail) {
     pilot = new THREE.Group();
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.3, 4, 10), new THREE.MeshStandardMaterial({ color: 0x2f4a6b, roughness: 0.8 }));
-    torso.position.set(-0.27, 0.22, -0.88);
+    torso.position.set(sx, CB.seatY + 0.34, sz + 0.07);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 10), new THREE.MeshStandardMaterial({ color: 0xd9a77e, roughness: 0.7 }));
-    head.position.set(-0.27, 0.66, -0.92);
+    head.position.set(sx, CB.seatY + 0.78, sz + 0.03);
     const headset = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), dark);
     headset.position.copy(head.position);
     headset.rotation.y = Math.PI / 2;
@@ -359,36 +549,39 @@ export function createPlaneMesh(color = 0xf4f5f7, accent = 0xc62f2a, opts = {}) 
     const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(6) }));
     m.position.set(x, y, z);
     if (detail) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: new THREE.Color(c).multiplyScalar(1.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-      sp.scale.setScalar(halo);
-      m.add(sp);
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: new THREE.Color(c).multiplyScalar(1.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+      spr.scale.setScalar(halo);
+      m.add(spr);
     }
     g.add(m);
     return m;
   };
-  const lights = [light(0xff1a1a, -5.52, 1.16, -1.5), light(0x18ff50, 5.52, 1.16, -1.5), light(0xffffff, 0, 1.0, 4.2)];
-  const strobe = light(0xffffff, 0, 1.82, 3.95, 0.09, 1.6);
-  const landing = light(0xfff3cf, -1.6, 0.98, -1.97, 0.1, 1.0);
+  const LT = MD.lights, tipY = yAt(W.half) + 0.005;
+  const lights = [light(0xff1a1a, -(W.half + 0.02), tipY, LT.navZ), light(0x18ff50, W.half + 0.02, tipY, LT.navZ), light(0xffffff, 0, LT.tail[0], LT.tail[1])];
+  const strobe = light(0xffffff, 0, LT.strobe[0], LT.strobe[1], 0.09, 1.6);
+  const [lx, ly, lz] = LT.landing;
+  const landing = light(0xfff3cf, lx, ly, lz, 0.1, 1.0);
   for (const l of [...lights, strobe, landing]) l.visible = false;
   let landingLight = null;
   if (opts.landingLight) {
     // phare d'atterrissage : vraie lumière qui éclaire la piste la nuit
     landingLight = new THREE.SpotLight(0xfff1d6, 0, 1200, 0.3, 0.55, 1.1);
-    landingLight.position.set(-1.6, 0.9, -2.0);
-    landingLight.target.position.set(-1.6, -6, -60);
+    landingLight.position.set(lx, ly - 0.08, lz - 0.03);
+    landingLight.target.position.set(lx, -6, -60);
     g.add(landingLight, landingLight.target);
   }
 
   g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial) && !Array.isArray(o.material)) { o.castShadow = true; o.receiveShadow = true; } });
   fuse.castShadow = true;
+  const ex = MD.exhaust;
   g.userData = {
-    prop, disc, flapL, flapR, ailL, ailR, elevator, rudder, legs, lights, strobe, landing, landingLight,
+    type: def.id, props, fans, flapL, flapR, ailL, ailR, elevator, rudder, legs, lights, strobe, landing, landingLight,
     fuse, interior, pilot, panel, yokes,
     // points utiles aux effets et à la caméra (repère de l'avion)
-    eye: new THREE.Vector3(-0.27, 0.71, -1.05),
-    exhaust: new THREE.Vector3(0.22, -0.5, -2.78),
-    wingtips: [new THREE.Vector3(-5.5, 1.15, -1.0), new THREE.Vector3(5.5, 1.15, -1.0)],
-    wheels: [new THREE.Vector3(-1.2, -1.55, -0.75), new THREE.Vector3(1.2, -1.55, -0.75), new THREE.Vector3(0, -1.55, -3.0)],
+    eye: new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
+    exhaust: new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
+    wingtips: [new THREE.Vector3(-W.half, yAt(W.half), MD.tipFxZ), new THREE.Vector3(W.half, yAt(W.half), MD.tipFxZ)],
+    wheels: def.geo.wheels.filter((w) => w.brake).map((w) => w.p.clone()).concat(def.geo.wheels.filter((w) => w.nose).map((w) => w.p.clone())),
   };
   return g;
 }
@@ -404,20 +597,29 @@ export function setCockpitView(mesh, inside) {
 export function animatePlaneMesh(mesh, st, dt, time) {
   const u = mesh.userData;
   const rpm = st.rpm || 0;
-  u.prop.rotation.z += dt * (rpm > 0.05 ? 8 + rpm * 70 : 0);
-  u.prop.visible = rpm < 0.45;
-  u.disc.material.opacity = rpm > 0.3 ? Math.min(0.35, (rpm - 0.3) * 1.5) : 0;
-  u.flapL.rotation.x = u.flapR.rotation.x = (st.flapPos || 0) * 0.17;
+  for (const p of u.props) {
+    p.prop.rotation.z += dt * (rpm > 0.05 ? 8 + rpm * 70 : 0) * p.spin;
+    p.prop.visible = rpm < 0.45;
+    p.disc.material.opacity = rpm > 0.3 ? Math.min(0.35, (rpm - 0.3) * 1.5) : 0;
+  }
+  for (const f of u.fans) f.rotation.z += dt * rpm * 55;
+  if (u.flapL) u.flapL.rotation.x = u.flapR.rotation.x = (st.flapPos || 0) * 0.17;
   u.ailL.rotation.x = (st.roll || 0) * 0.3;
   u.ailR.rotation.x = -(st.roll || 0) * 0.3;
   u.elevator.rotation.x = -(st.pitch || 0) * 0.35;
   u.rudder.rotation.y = (st.yaw || 0) * 0.35;
   const gp = st.gearPos ?? 1;
   for (const leg of u.legs) {
-    leg.rotation.x = -(1 - gp) * Math.PI / 2;
+    if (leg.userData.fixed) continue;
+    if (leg.userData.fold) leg.rotation.z = leg.userData.fold * (1 - gp) * Math.PI / 2;
+    else leg.rotation.x = -(1 - gp) * Math.PI / 2;
     leg.visible = gp > 0.03;
   }
-  for (const y of u.yokes) { y.rotation.z = -(st.roll || 0) * 0.5; y.position.z = -1.86 + (st.pitch || 0) * 0.06; }
+  for (const y of u.yokes) {
+    if (y.userData.stick) { y.rotation.x = (st.pitch || 0) * 0.3; y.rotation.z = -(st.roll || 0) * 0.3; continue; }
+    y.rotation.z = -(st.roll || 0) * 0.5;
+    y.position.z = y.userData.z0 + (st.pitch || 0) * 0.06;
+  }
   const on = !!st.lights;
   for (const l of u.lights) l.visible = on;
   u.strobe.visible = on && time % 1.2 < 0.08;

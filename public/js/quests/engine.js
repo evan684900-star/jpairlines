@@ -8,12 +8,16 @@ import { QUESTS } from './index.js';
 import { CATEGORIES, RANKS, nextTo } from './kit.js';
 import { makeLabel } from '../objects.js';
 import { TEX } from '../render/textures.js';
+import { AIRCRAFT } from '../aircraft.js';
 
 const $ = (id) => document.getElementById(id);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const fmtDist = (d) => (d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// avion débloqué par une quête (affiché au tableau et dans le journal)
+const unlockOf = (q) => AIRCRAFT.find((a) => a.unlock === q.id);
+const unlockTag = (q) => { const a = unlockOf(q); return a ? ` <span class="unlock">✈️ Débloque : ${a.name} (${a.role.toLowerCase()})</span>` : ''; };
 const CAT_ICON = { course: '🏁', livraison: '📦', exploration: '🧭', voltige: '🌀', sauvetage: '🛟', tourisme: '📷', defi: '🏆', transport: '✈️' };
 
 // ---------- Missions de transport du jour (identiques pour tous les joueurs) ----------
@@ -293,7 +297,7 @@ export class QuestSystem {
         : active ? '<span class="tag">▶ En cours</span>'
           : lock ? `<span class="tag lock">🔒 ${esc(lock)}</span>`
             : `<button data-accept="${esc(q.id)}">Accepter</button>`;
-      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(q.title)}</b> <span class="r">${q.reward} ₣</span><br>
+      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(q.title)}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
         <small>${esc(q.desc)}</small>${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
     };
     const qs = [...quests].sort((a, b) => this.isDone(a) - this.isDone(b) || a.reward - b.reward);
@@ -456,6 +460,7 @@ export class QuestSystem {
     else if (!s.completed.includes(q.id)) s.completed.push(q.id);
     this.persist();
     this.abandon(true);
+    this.onQuestDone?.(q);
     this.toast(`✅ ${q.title} terminée ! +${gain} ₣${bonus ? ` (dont bonus chrono ${bonus} ₣)` : ''}`);
     this.beep(880, 0.25);
     const after = this.rankIndex();
@@ -681,7 +686,7 @@ export class QuestSystem {
         const isDone = this.isDone(q), lock = this.lockReason(q), act = this.active?.q.id === q.id;
         const icon = isDone ? '✅' : act ? '▶' : lock ? '🔒' : '❗';
         const where = q.airport ? airportById(q.airport).name : this.placeName(q.giver.x, q.giver.z);
-        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(q.title)}</b> <small>· ${esc(where)}</small><br>`
+        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(q.title)}</b> <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
           + `<small>${esc(lock && !isDone ? lock : q.desc)}</small></li>`;
       }
       html += '</ul>';

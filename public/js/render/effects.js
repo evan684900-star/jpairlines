@@ -277,16 +277,22 @@ export class Effects {
         }
       }
       // poussière au roulage (beaucoup plus sur l'herbe et la terre) et souffle de l'hélice
-      if (plane.onGround && (plane.speed > 4 || plane.rpm > 0.5)) {
+      const wet = plane.onWater; // hydravion sur l'eau : gerbes d'écume au lieu de poussière
+      if (plane.onGround && (wet ? plane.speed > 3 : plane.speed > 4 || plane.rpm > 0.5)) {
         const a = onRunway(plane.pos.x, plane.pos.z);
         const paved = a && a.surface !== 'grass';
-        const rate = (paved ? 3 : 14) * Math.min(1, plane.speed / 25 + plane.rpm * 0.4) * dens;
+        const rate = (wet ? 26 : paved ? 3 : 14) * Math.min(1, plane.speed / (wet ? 15 : 25) + (wet ? 0 : plane.rpm * 0.4)) * dens;
         this.acc.dust += dt * rate;
         while (this.acc.dust > 1) {
           this.acc.dust--;
           const w = u.wheels[Math.random() < 0.5 ? 0 : 1];
           this.world(mesh, w, _v);
-          _v.y = groundHeight(_v.x, _v.z) + 0.3;
+          _v.y = wet ? 0.15 : groundHeight(_v.x, _v.z) + 0.3;
+          if (wet) {
+            _w.set((Math.random() - 0.5) * 4, 1.5 + Math.random() * 3, (Math.random() - 0.5) * 4).addScaledVector(plane.velocity, 0.15);
+            this.smoke.emit(_v, _w, { life: 1.6, size: 1.0, grow: 3, color: new THREE.Color(0.92, 0.95, 0.97), alpha: 0.45, drag: 1.2, rise: -2.5 });
+            continue;
+          }
           _w.set((Math.random() - 0.5) * 3, Math.random() * 1.2, (Math.random() - 0.5) * 3).addScaledVector(plane.velocity, 0.3);
           const c = paved ? new THREE.Color(0.62, 0.6, 0.57) : new THREE.Color(0.55, 0.45, 0.32);
           this.smoke.emit(_v, _w, { life: 2.6, size: 1.4, grow: 4, color: c, alpha: paved ? 0.12 : 0.3, drag: 1.4, rise: 0.15 });

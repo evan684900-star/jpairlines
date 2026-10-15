@@ -4,6 +4,7 @@ import {
   terrainHeight, groundHeight, rng, shipPosition, balloonPosition, turbinePositions,
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
+import { AIRCRAFT, aircraftById } from './aircraft.js';
 import { mergeColored } from './decor.js';
 import { createBuildingMaterial } from './render/materials.js';
 import { createCityMaterial, parapetGeometry } from './render/buildings.js';
@@ -220,8 +221,12 @@ function buildAirport(scene, a, r, anim) {
   // petits avions garés
   const nParked = a.type === 'strip' ? 1 : 3;
   for (let i = 0; i < nParked; i++) {
-    const p = createPlaneMesh([0xf2d24b, 0x8fd0ff, 0xffffff, 0xff9b8f][Math.floor(r() * 4)], 0x2a4bd8, { detail: false });
-    p.position.set(a.width / 2 + 40, 1.55, -apronLen / 2 + 130 + i * 20);
+    // toute la flotte se croise sur les parkings (petits avions seulement sur les pistes en herbe)
+    const types = a.type === 'strip' ? ['cub', 'moustique', 'faucon'] : AIRCRAFT.map((x) => x.id);
+    const def = aircraftById(types[Math.floor(r() * types.length)]);
+    const tint = def.id === 'cub' ? [0xf2d24b, 0x8fd0ff, 0xffffff, 0xff9b8f][Math.floor(r() * 4)] : def.color;
+    const p = createPlaneMesh(def.id, { color: tint, accent: def.id === 'cub' ? 0x2a4bd8 : def.accent, detail: false });
+    p.position.set(a.width / 2 + 40, def.specs.gear, -apronLen / 2 + 130 + i * 20);
     p.rotation.y = -Math.PI / 2;
     g.add(p);
   }

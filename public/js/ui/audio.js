@@ -53,8 +53,33 @@ export class SoundEngine {
     this.propDepth.gain.value = 0;
     this.prop.connect(this.propDepth).connect(this.engGain.gain);
     this.prop.start();
-    const crackle = this.noise('bandpass', 900, 1.2, this.engFilter);
-    crackle.g.gain.value = 0.35;
+    this.crackle = this.noise('bandpass', 900, 1.2, this.engFilter);
+    this.crackle.g.gain.value = 0.35;
+    // second moteur d'un bimoteur : légèrement désaccordé, d'où le battement caractéristique
+    this.twinGain = ctx.createGain();
+    this.twinGain.gain.value = 0;
+    this.twinGain.connect(this.engFilter);
+    this.engOsc2 = [['sawtooth', 1, 0.45], ['square', 0.5, 0.3]].map(([type, mul, vol]) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      o.connect(g).connect(this.twinGain);
+      o.start();
+      return { o, mul };
+    });
+
+    // ----- réacteurs : sifflement de la turbine + souffle -----
+    this.jetWhine = ctx.createOscillator();
+    this.jetWhine.type = 'sawtooth';
+    this.jetWhineGain = this.gain(0, 'engine');
+    const jw = ctx.createBiquadFilter();
+    jw.type = 'bandpass'; jw.frequency.value = 2400; jw.Q.value = 6;
+    this.jetWhineFilter = jw;
+    this.jetWhine.connect(jw).connect(this.jetWhineGain);
+    this.jetWhine.start();
+    this.jetRoar = this.noise('bandpass', 400, 0.5, this.bus.engine);
+    this.jetRumble = this.noise('lowpass', 120, 0.7, this.bus.engine);
 
     // ----- démarreur -----
     this.starter = ctx.createOscillator();
@@ -124,18 +149,33 @@ export class SoundEngine {
     const inside = view === 'cockpit';
     const atten = inside ? 1 : 1 / (1 + Math.max(0, dist - 15) / 25);
     const on = !paused && !s.crashed;
-    // moteur : 4 cylindres, allumage = régime/30 ; à plein régime ≈ 90 Hz
-    const rpmHz = 9 + s.rpm * 81;
-    for (const { o, mul } of this.engOsc) set(o.frequency, rpmHz * mul, 0.05);
-    set(this.prop.frequency, rpmHz, 0.05);
+    // son propre à chaque avion (aircraft.js) : moteur à pistons (simple ou bimoteur) ou réacteurs
+    const snd = s.def?.sound || { kind: 'piston', base: 9, range: 81 };
+    const jet = snd.kind === 'jet';
     const running = s.engineOn || s.engineStart > 0;
-    const level = running ? 0.06 + s.rpm * 0.16 + s.throttle * 0.05 : s.rpm * 0.03;
-    set(this.engGain.gain, on ? level * atten : 0);
-    set(this.propDepth.gain, on ? level * atten * 0.45 : 0);
+    // moteur à pistons : allumage = régime/30 ; à plein régime ≈ 90 Hz pour l'avion de base
+    const rpmHz = (snd.base ?? 9) + s.rpm * (snd.range ?? 81);
+    for (const { o, mul } of this.engOsc) set(o.frequency, rpmHz * mul, 0.05);
+    for (const { o, mul } of this.engOsc2) set(o.frequency, rpmHz * mul * 1.018, 0.05);
+    set(this.prop.frequency, rpmHz, 0.05);
+    const level = (running ? 0.06 + s.rpm * 0.16 + s.throttle * 0.05 : s.rpm * 0.03) * (snd.loud ?? 1);
+    set(this.engGain.gain, on && !jet ? level * atten : 0);
+    set(this.propDepth.gain, on && !jet ? level * atten * 0.45 : 0);
+    set(this.twinGain.gain, snd.kind === 'twin' ? 0.8 : 0, 0.2);
+    set(this.crackle.g.gain, 0.35 * (snd.rough ?? 1), 0.2);
     set(this.engFilter.frequency, (inside ? 380 : 650) + s.throttle * (inside ? 900 : 1800) + s.rpm * 500);
+    // réacteurs : sifflement qui monte avec le régime, souffle grave à l'extérieur
+    const jr = jet ? s.rpm : 0;
+    set(this.jetWhine.frequency, 500 + jr * 5200, 0.3);
+    set(this.jetWhineFilter.frequency, 900 + jr * 4200, 0.3);
+    set(this.jetWhineGain.gain, on && jet && (running || jr > 0.05) ? (0.012 + jr * 0.05) * atten * (inside ? 0.6 : 1) : 0, 0.2);
+    set(this.jetRoar.g.gain, on && jet ? jr * jr * 0.22 * atten * (inside ? 0.35 : 1) : 0, 0.2);
+    set(this.jetRoar.f.frequency, 250 + jr * 900, 0.3);
+    set(this.jetRumble.g.gain, on && jet ? jr * jr * 0.3 * atten * (inside ? 0.5 : 1) : 0, 0.2);
     // démarreur pendant la mise en route
     const starting = s.engineStart > 0 && !s.engineOn;
-    set(this.starter.frequency, 90 + (1.6 - Math.max(0, s.engineStart)) * 160, 0.2);
+    const startT = s.S?.startTime ?? 1.6;
+    set(this.starter.frequency, (jet ? 300 : 90) + ((startT - Math.max(0, s.engineStart)) / startT) * (jet ? 900 : 256), 0.2);
     set(this.starterGain.gain, on && starting ? 0.05 * atten : 0, 0.05);
     // vent : augmente avec la vitesse (plus étouffé dans le cockpit)
     const v = s.speed;

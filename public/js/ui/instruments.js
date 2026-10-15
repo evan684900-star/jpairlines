@@ -5,7 +5,6 @@
 // - planche de bord 3D du cockpit (six instruments à aiguilles) en texture.
 // Les valeurs affichées suivent l'avion avec un lissage (aiguilles fluides). Lecture seule.
 import * as THREE from 'three';
-import { SPECS } from '../plane.js';
 
 const DEG = 180 / Math.PI;
 const FONT = '"B612 Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
@@ -23,9 +22,9 @@ export function readFlight(plane) {
   return {
     pitch: Math.asin(THREE.MathUtils.clamp(_f.y, -1, 1)) * DEG,
     bank: Math.atan2(-_r.y, _u.y) * DEG,
-    ias: plane.ias, alt: plane.pos.y - SPECS.gear, vs: plane.onGround ? 0 : plane.velocity.y,
+    ias: plane.ias, alt: plane.pos.y - plane.S.gear, vs: plane.onGround ? 0 : plane.velocity.y,
     hdg: plane.headingDeg, slip: plane.beta * DEG, g: plane.gLoad,
-    rpm: plane.rpm, fuel: plane.fuel, throttle: plane.throttle, trim: plane.trim, flaps: plane.flapPos * 10,
+    rpm: plane.rpm, fuel: plane.fuel, throttle: plane.throttle, trim: plane.trim, flaps: plane.flapDeg,
     gear: plane.gearPos, stall: plane.stallWarning, engine: plane.engineOn, onGround: plane.onGround,
   };
 }
@@ -74,6 +73,7 @@ export class Instruments {
   // units : 'metric' | 'aviation'
   // agl : hauteur au-dessus du sol (m), affichée sous la bande d'altitude près du sol
   update(dt, plane, units, drawPanel, agl = 0) {
+    this.S = plane.S; // limites de l'avion piloté (VNE, réservoir, type de moteur)
     const s = this.smooth.step({ ...readFlight(plane), agl }, dt);
     const av = units === 'aviation';
     const u = {
@@ -165,8 +165,8 @@ export class Instruments {
     const spd = s.ias * u.spd;
     this.tape(ctx, 0, 0, tapeW, ah, spd, u.spd === 3.6 ? 10 : 5, u.spd === 3.6 ? 4.2 : 7, u.spdName, (v) => {
       const ms = v / u.spd;
-      if (ms > SPECS.vne) return C.red;
-      if (ms > SPECS.vne * 0.85) return C.amber;
+      if (ms > this.S.vne) return C.red;
+      if (ms > this.S.vne * 0.85) return C.amber;
       return ms < 25 ? null : C.green;
     }, true);
     const alt = s.alt * u.alt;
@@ -263,21 +263,23 @@ export class Instruments {
     ctx.fillStyle = C.panel;
     roundRect(ctx, 0, 0, W, H, 10); ctx.fill();
     const pad = 10, fs = Math.max(10, Math.round(W * 0.08));
-    // régime (cadran)
-    const rpm = s.rpm * 2700;
+    // régime (cadran) : tours/minute pour une hélice, % N1 pour un réacteur
+    const jet = this.S.engine === 'jet';
+    const rpm = jet ? s.rpm * 100 : s.rpm * 2700, top = jet ? 105 : 2900;
     const R = W * 0.3, gx = W / 2, gy = R + 14;
     const a0 = Math.PI * 0.8, a1 = Math.PI * 2.2;
-    const ang = (v) => a0 + (a1 - a0) * Math.min(1, v / 2900);
+    const ang = (v) => a0 + (a1 - a0) * Math.min(1, v / top);
     ctx.lineWidth = 7;
-    for (const [from, to, col] of [[0, 2100, '#2c3a46'], [2100, 2700, C.green], [2700, 2900, C.red]]) {
+    const arcs = jet ? [[0, 70, '#2c3a46'], [70, 100, C.green], [100, 105, C.red]] : [[0, 2100, '#2c3a46'], [2100, 2700, C.green], [2700, 2900, C.red]];
+    for (const [from, to, col] of arcs) {
       ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(gx, gy, R, ang(from), ang(to)); ctx.stroke();
     }
     ctx.strokeStyle = C.text; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + Math.cos(ang(rpm)) * (R - 4), gy + Math.sin(ang(rpm)) * (R - 4)); ctx.stroke();
     ctx.fillStyle = C.text; ctx.font = `700 ${fs + 2}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(Math.round(rpm / 10) * 10), gx, gy + R * 0.55);
+    ctx.fillText(jet ? `${Math.round(rpm)}` : String(Math.round(rpm / 10) * 10), gx, gy + R * 0.55);
     ctx.font = `600 ${fs - 2}px ${FONT}`; ctx.fillStyle = C.cyan;
-    ctx.fillText('TR/MIN', gx, gy + R * 0.95);
+    ctx.fillText(jet ? 'N1 %' : 'TR/MIN', gx, gy + R * 0.95);
     // barres : carburant, gaz, trim
     let y = gy + R + 22;
     const bar = (label, frac, col, text, center = false) => {
@@ -292,7 +294,7 @@ export class Instruments {
       if (center) { const xx = pad + (W - 2 * pad) * frac; ctx.fillRect(xx - 2, y - 2, 4, 11); } else { roundRect(ctx, pad, y, Math.max(7, (W - 2 * pad) * frac), 7, 3.5); ctx.fill(); }
       y += fs * 1.6;
     };
-    const fuelFrac = s.fuel / SPECS.fuelCapacity;
+    const fuelFrac = s.fuel / this.S.fuelCapacity;
     bar('CARB', fuelFrac, fuelFrac < 0.05 ? C.red : fuelFrac < 0.15 ? C.amber : C.green, `${Math.round(s.fuel)} L`);
     bar('GAZ', s.throttle, C.cyan, `${Math.round(s.throttle * 100)} %`);
     bar('TRIM', 0.5 + s.trim, C.text, s.trim > 0.01 ? 'CABRÉ' : s.trim < -0.01 ? 'PIQUÉ' : 'NEUTRE', true);
@@ -362,8 +364,8 @@ export class Instruments {
     }, '');
     dial(cols[2], bot, () => { ticks(12, Math.PI * 0.5, Math.PI * 2.5); needle(Math.PI + THREE.MathUtils.clamp(s.vs / 10, -1, 1) * Math.PI * 0.85); }, u.vsName);
     // moteur : régime et carburant
-    dial(700, top, () => { ticks(14, -Math.PI * 1.25, Math.PI * 0.25); needle(-Math.PI * 1.25 + Math.min(1, s.rpm) * Math.PI * 1.5); }, 'RPM');
-    dial(700, bot, () => { ticks(4, -Math.PI * 0.75, -Math.PI * 0.25); needle(-Math.PI * 0.75 + (s.fuel / SPECS.fuelCapacity) * Math.PI * 0.5, r - 18, 4, '#ffd04a'); }, 'FUEL');
+    dial(700, top, () => { ticks(14, -Math.PI * 1.25, Math.PI * 0.25); needle(-Math.PI * 1.25 + Math.min(1, s.rpm) * Math.PI * 1.5); }, this.S.engine === 'jet' ? 'N1' : 'RPM');
+    dial(700, bot, () => { ticks(4, -Math.PI * 0.75, -Math.PI * 0.25); needle(-Math.PI * 0.75 + (s.fuel / this.S.fuelCapacity) * Math.PI * 0.5, r - 18, 4, '#ffd04a'); }, 'FUEL');
     // voyants
     const lamp = (x, y, on, col, text) => {
       ctx.fillStyle = on ? col : '#2a2a2a'; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
@@ -372,7 +374,7 @@ export class Instruments {
     lamp(830, 70, s.gear > 0.99, '#3cff6a', 'TRAIN');
     lamp(830, 120, s.gear > 0.01 && s.gear < 0.99, '#ff4a3a', 'TRANSIT');
     lamp(830, 170, s.stall, '#ff4a3a', 'STALL');
-    lamp(830, 220, s.fuel < SPECS.fuelCapacity * 0.15, '#ffb000', 'FUEL');
+    lamp(830, 220, s.fuel < this.S.fuelCapacity * 0.15, '#ffb000', 'FUEL');
     lamp(830, 270, s.engine, '#3cff6a', 'MOTEUR');
     this.panelTexture.needsUpdate = true;
   }

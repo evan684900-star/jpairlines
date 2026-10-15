@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import {
   WORLD, HALF, AIRPORTS, LANDMARKS, CITIES, terrainHeight, groundHeight, airportById,
 } from './world.js';
-import { Plane, createPlaneMesh, animatePlaneMesh, SPECS, DIFFICULTY } from './plane.js';
+import { Plane, createPlaneMesh, animatePlaneMesh, DIFFICULTY } from './plane.js';
+import { AIRCRAFT, aircraftById, aircraftIndex, unlockedAircraft } from './aircraft.js';
 import { Terrain, terrainColor } from './terrain.js';
 import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
@@ -44,18 +45,19 @@ function applySettings(key) {
   $('btn-mute').classList.toggle('off', settings.muted);
 }
 
-// ================= Joueur =================
-const plane = new Plane();
-const planeMesh = createPlaneMesh(undefined, undefined, { landingLight: true });
-scene.add(planeMesh);
-
 // ================= Sauvegarde =================
 const SAVE_KEY = 'jpairlines-save';
-let save = { name: '', money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'] };
+let save = { name: '', money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'], aircraft: 'cub' };
 try { Object.assign(save, JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); } catch { /* sauvegarde absente */ }
 if (!airportById(save.lastAirport)) save.lastAirport = 'alpha';
 if (!Array.isArray(save.visited)) save.visited = ['alpha'];
+if (!unlockedAircraft(save).some((a) => a.id === save.aircraft)) save.aircraft = 'cub';
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* stockage indisponible */ } };
+
+// ================= Joueur =================
+const plane = new Plane(save.aircraft);
+let planeMesh = createPlaneMesh(plane.type, { landingLight: true });
+scene.add(planeMesh);
 
 // ================= Quêtes =================
 let quests = null; // créé après le chargement du monde
@@ -66,9 +68,9 @@ function updatePrompt() {
   if (!plane.crashed) {
     const q = quests ? quests.prompt() : '';
     if (q) lines.push(q);
-    if (atAirportStopped() && plane.fuel < SPECS.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
+    if (atAirportStopped() && plane.fuel < plane.S.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
       lines.push(canRefuel()
-        ? `⛽ Maintiens <kbd>K</kbd> pour faire le plein : ${Math.round(plane.fuel)} / ${SPECS.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
+        ? `⛽ Maintiens <kbd>K</kbd> pour faire le plein : ${Math.round(plane.fuel)} / ${plane.S.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
         : '⛽ Coupe le moteur (<kbd>E</kbd>) pour faire le plein');
     }
     if (!lines.length && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
@@ -226,7 +228,7 @@ function respawn(airport, teleport = false) {
   const a = airport || airportById(save.lastAirport) || AIRPORTS[0];
   quests?.onRespawn(plane.crashed, teleport);
   const far = plane.pos.distanceTo(new THREE.Vector3(a.x, a.elev, a.z)) > 4000;
-  const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : SPECS.fuelCapacity;
+  const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : plane.S.fuelCapacity;
   plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
   plane.fuel = keepFuel;
   rig.reset(plane);
@@ -243,6 +245,7 @@ $('btn-camera').onclick = () => press('c');
 $('btn-map').onclick = () => press('m');
 $('btn-journal').onclick = () => press('j');
 $('btn-pause').onclick = () => openPause();
+$('btn-hangar').onclick = () => { openPause(); document.querySelector('.tab[data-tab="tab-hangar"]').click(); };
 $('btn-mute').onclick = () => {
   settings.muted = !settings.muted;
   saveSettings();
@@ -256,6 +259,7 @@ function openPause() {
   paused = true;
   $('pause').classList.remove('hidden');
   renderAirportList();
+  renderHangar();
 }
 $('resume').onclick = closeOverlays;
 for (const b of document.querySelectorAll('.tab')) {
@@ -271,9 +275,11 @@ $('open-help').onclick = () => $('help').classList.remove('hidden');
 buildSettingsForm($('settings-form'), applySettings);
 $('reset-progress').onclick = () => {
   if (!confirm('Effacer argent, quêtes et aéroports visités ?')) return;
-  save = { name: save.name, money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'] };
+  save = { name: save.name, money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'], aircraft: 'cub' };
   persist();
   quests.reset();
+  if (plane.type !== 'cub') setAircraft('cub');
+  renderHangar();
   toast('Progression effacée');
 };
 
@@ -446,8 +452,10 @@ function syncRemotes(list) {
     if (p.id === net.id || !p.p) continue;
     seen.add(p.id);
     let r = remotes.get(p.id);
+    const type = AIRCRAFT[p.a | 0]?.id || 'cub';
+    if (r && r.type !== type) { removeRemote(p.id); r = null; } // il a changé d'avion
     if (!r) {
-      const mesh = createPlaneMesh(REMOTE_COLORS[p.id % REMOTE_COLORS.length], 0x2a4bd8);
+      const mesh = createPlaneMesh(type, { color: REMOTE_COLORS[p.id % REMOTE_COLORS.length] });
       const label = makeLabel(p.name, { size: 0.026 });
       label.position.y = 6;
       label.visible = settings.showNames;
@@ -455,7 +463,7 @@ function syncRemotes(list) {
       mesh.position.fromArray(p.p);
       mesh.quaternion.fromArray(p.q);
       scene.add(mesh);
-      r = { mesh, label, name: p.name, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), st: {} };
+      r = { mesh, label, type, name: p.name, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), st: {} };
       remotes.set(p.id, r);
     }
     r.tp.fromArray(p.p);
@@ -474,7 +482,7 @@ function netTick(now) {
     t: 'state',
     p: plane.pos.toArray().map(r2),
     q: plane.quat.toArray().map((v) => Math.round(v * 1e4) / 1e4),
-    s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0,
+    s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0, a: aircraftIndex(plane.type),
   }));
 }
 
@@ -483,13 +491,79 @@ const setSys = (id, cls) => { const el = $(id); el.classList.remove('on', 'warn'
 let warnKey = '';
 
 const instruments = new Instruments($('pfd'), $('eis'));
-const panelMat = planeMesh.userData.panel.material;
-panelMat.map = panelMat.emissiveMap = instruments.panelTexture;
-panelMat.needsUpdate = true;
+let panelMat = null;
+// la planche de bord du cockpit affiche les instruments animés
+function attachPanel() {
+  panelMat = planeMesh.userData.panel.material;
+  panelMat.map = panelMat.emissiveMap = instruments.panelTexture;
+  panelMat.needsUpdate = true;
+}
+attachPanel();
+
+// ================= Hangar : changer d'avion =================
+// Le nouvel avion est sorti au dernier aéroport (réservoir plein) ; une quête en cours continue
+// si l'on change d'avion arrêté dans un aéroport, sinon elle est annulée (comme un voyage).
+function setAircraft(id) {
+  const def = aircraftById(id);
+  if (!unlockedAircraft(save).includes(def)) return;
+  const here = atAirportStopped() ? plane.landedAt : null;
+  plane.setType(def.id);
+  scene.remove(planeMesh);
+  planeMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  planeMesh = createPlaneMesh(def.id, { landingLight: true });
+  scene.add(planeMesh);
+  attachPanel();
+  save.aircraft = def.id;
+  persist();
+  if (here) {
+    plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine);
+    rig.reset(plane);
+  } else respawn(undefined, true);
+  toast(`${def.name} sorti du hangar !`);
+}
+
+function aircraftStats(a) {
+  const S = a.specs, p = a.perf;
+  const lph = S.fuelFlowIdle + (S.fuelFlowMax - S.fuelFlowIdle) * 0.65;
+  return { range: Math.round(((S.fuelCapacity / lph) * p.cruise) / 10) * 10, hours: S.fuelCapacity / lph };
+}
+
+function renderHangar() {
+  const box = $('hangar-list');
+  box.innerHTML = '';
+  const unlocked = unlockedAircraft(save);
+  for (const a of AIRCRAFT) {
+    const open = unlocked.includes(a);
+    const cur = plane.type === a.id;
+    const st = aircraftStats(a), p = a.perf;
+    const bars = [
+      ['Vitesse', p.vmax / 600], ['Maniabilité', Math.min(1, p.roll / 256)], ['Autonomie', Math.min(1, st.range / 1650)], ['Piste courte', Math.min(1, 128 / p.takeoff)],
+    ];
+    const quest = a.unlock && quests?.byId.get(a.unlock);
+    const card = document.createElement('div');
+    card.className = `aircraft${open ? '' : ' locked'}${cur ? ' current' : ''}`;
+    card.innerHTML = `
+      <div class="ac-head"><span class="ac-swatch" style="background:#${a.color.toString(16).padStart(6, '0')};border-color:#${a.accent.toString(16).padStart(6, '0')}"></span>
+        <div><b>${a.name}</b> <small>${a.role}</small><div class="ac-sub">${a.engineLabel} · ${a.seats} places</div></div></div>
+      <p class="ac-desc">${a.desc}</p>
+      <div class="ac-bars">${bars.map(([n, v]) => `<div><span>${n}</span><i><em style="width:${Math.round(Math.max(0.06, v) * 100)}%"></em></i></div>`).join('')}</div>
+      <div class="ac-specs">Max ${p.vmax} km/h · croisière ${p.cruise} km/h · décroche à ${p.stall} km/h · roulage ${p.takeoff} m · autonomie ${st.range} km (${st.hours.toFixed(1)} h)</div>
+      <div class="ac-action"></div>`;
+    const act = card.querySelector('.ac-action');
+    if (cur) act.innerHTML = '<span class="ac-cur">✈️ Aux commandes</span>';
+    else if (open) {
+      const b = document.createElement('button');
+      b.textContent = 'Piloter cet avion';
+      b.onclick = () => { setAircraft(a.id); closeOverlays(); };
+      act.appendChild(b);
+    } else act.innerHTML = `<span class="ac-lock">🔒 Débloqué par la quête « ${quest ? quest.title : a.unlock} »</span>`;
+    box.appendChild(card);
+  }
+}
 
 function updateHUD(dt) {
   const ground = Math.max(0, groundHeight(plane.pos.x, plane.pos.z));
-  const agl = Math.max(0, plane.pos.y - ground - SPECS.gear);
+  const agl = Math.max(0, plane.pos.y - ground - plane.S.gear);
   instruments.update(dt, plane, settings.units, inCockpit, agl);
   panelMat.emissiveIntensity = 0.15 + gfx.atmo.night * 0.55; // éclairage de la planche de bord la nuit
   $('money').textContent = `${save.money} ₣`;
@@ -498,7 +572,7 @@ function updateHUD(dt) {
   setSys('sys-engine', plane.engineOn ? 'on' : plane.engineStart > 0 ? 'warn' : null);
   const gear = document.querySelector('#sys-gear .gear');
   gear.className = 'gear ' + (plane.gearBroken ? 'moving' : plane.gearPos > 0.99 ? 'down' : plane.gearPos < 0.01 ? 'up' : 'moving');
-  $('flaps-val').textContent = `${Math.round(plane.flapPos * 10)}°`;
+  $('flaps-val').textContent = `${Math.round(plane.flapDeg)}°`;
   setSys('sys-brake', plane.brake ? 'warn' : null);
   setSys('sys-park', plane.parkingBrake ? 'bad' : null);
   setSys('sys-lights', plane.lights ? 'on' : null);
@@ -507,14 +581,17 @@ function updateHUD(dt) {
   const w = [];
   if (!plane.onGround && !plane.crashed) {
     if (plane.stallWarning) w.push(['DÉCROCHAGE', '']);
-    if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0) w.push(['TRAIN !', '']);
-    if (plane.gearPos > 0.3 && plane.ias > SPECS.vGear) w.push(['VITESSE TRAIN', 'amber']);
-    if (plane.ias > SPECS.vne) w.push(['SURVITESSE', '']);
+    const overWater = ground <= 0;
+    if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0 && !(plane.S.amphibious && overWater)) w.push(['TRAIN !', '']);
+    // hydravion : se poser sur l'eau roues sorties le ferait capoter
+    if (plane.S.amphibious && overWater && plane.gearPos > 0.05 && agl < 150 && plane.velocity.y < 0) w.push(['TRAIN SORTI : EAU !', '']);
+    if (plane.gearPos > 0.3 && plane.ias > plane.S.vGear) w.push(['VITESSE TRAIN', 'amber']);
+    if (plane.ias > plane.S.vne) w.push(['SURVITESSE', '']);
     if (Math.abs(plane.gLoad) > 4) w.push([`${plane.gLoad.toFixed(1)} G`, 'amber']);
     if (agl < 60 && plane.velocity.y < -8) w.push(['TERRAIN', '']);
   }
-  if (plane.flapPos > 0.2 && plane.ias > SPECS.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
-  if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < SPECS.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < SPECS.fuelCapacity * 0.05 ? '' : 'amber']);
+  if (plane.flapPos > 0.2 && plane.ias > plane.S.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
+  if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < plane.S.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < plane.S.fuelCapacity * 0.05 ? '' : 'amber']);
   const key = w.map((x) => x[0]).join();
   if (key !== warnKey) {
     warnKey = key;
@@ -563,7 +640,7 @@ function shakeAmount() {
   if (plane.onGround) s += plane.rpm * 0.25 + Math.min(1, plane.speed / 30) * 0.5;
   else s += plane.rpm * 0.08;
   if (plane.stallWarning) s += 0.9;
-  if (plane.ias > SPECS.vne * 0.85) s += (plane.ias - SPECS.vne * 0.85) / (SPECS.vne * 0.15);
+  if (plane.ias > plane.S.vne * 0.85) s += (plane.ias - plane.S.vne * 0.85) / (plane.S.vne * 0.15);
   if (!plane.onGround && w) s += w.storm * 0.5 + w.rain * 0.15;
   return Math.min(1.5, s);
 }
@@ -685,6 +762,11 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   quests = new QuestSystem({
     scene, plane, getSave: () => save, persist, toast, beep, logMsg,
     setPaused: (v) => { paused = v; },
+    // une quête terminée peut débloquer un avion
+    onQuestDone: (q) => {
+      const a = AIRCRAFT.find((x) => x.unlock === q.id);
+      if (a) setTimeout(() => toast(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`), 3200);
+    },
   });
   status('Dessin de la carte…', 82);
   await tick();
@@ -711,4 +793,4 @@ $('start').onclick = () => {
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, gfx, camera, rig, planeMesh, decor, terrain, quests: () => quests };
+window.jp = { plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft };
