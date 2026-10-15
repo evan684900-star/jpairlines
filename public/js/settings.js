@@ -1,4 +1,5 @@
 import { QUALITY_PRESETS, EFFECT_KEYS } from './render/config.js';
+import { SOUND_GROUPS } from './ui/audio.js';
 
 // Paramètres du joueur (sauvegardés dans le navigateur)
 export const SCHEMA = [
@@ -35,8 +36,10 @@ export const SCHEMA = [
   { key: 'showNames', label: 'Noms des joueurs', type: 'check', def: true },
   { key: 'minimap', label: 'Mini-carte', type: 'check', def: true },
   { key: 'showFps', label: 'Compteur d\'images par seconde', type: 'check', def: false },
-  { key: 'volume', label: 'Volume', type: 'range', def: 0.5, min: 0, max: 1, step: 0.05, unit: '' },
+  { section: 'Sons' },
   { key: 'muted', label: 'Couper le son', type: 'check', def: false },
+  { key: 'volume', label: 'Volume général', type: 'range', def: 0.5, min: 0, max: 1, step: 0.05, unit: '' },
+  ...SOUND_GROUPS.map((g) => ({ key: `snd_${g.key}`, label: `· ${g.label}`, type: 'range', def: 100, min: 0, max: 150, step: 5, unit: ' %' })),
 ];
 
 const KEY = 'jpairlines-settings';
@@ -97,6 +100,7 @@ export function buildSettingsForm(container, onChange) {
       input.oninput = () => { settings[s.key] = Number(input.value); val.textContent = input.value + s.unit; saveSettings(); onChange(s.key); };
       wrap.append(input, val);
       row.appendChild(wrap);
+      container.appendChild(row);
       continue;
     }
     row.appendChild(input);

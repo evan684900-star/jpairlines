@@ -37,7 +37,7 @@ function applySettings(key) {
   if (!key || key === 'viewDist') terrain.setViewDistance(settings.viewDist * 1000);
   if (!key || key === 'trees' || key === 'decoDist' || key === 'quality') decor.setOptions({ density: settings.trees, radius: settings.decoDist, q: gfx.cfg });
   if (!key || key === 'showFps') $('fps').classList.toggle('hidden', !settings.showFps);
-  if (!key || key === 'volume' || key === 'muted') sound?.setVolume(settings.volume, settings.muted);
+  if (!key || key === 'volume' || key === 'muted' || key.startsWith('snd_')) sound?.setVolume(settings);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
   if (!key || key === 'muted') $('btn-mute').innerHTML = icon(settings.muted ? 'volume-x' : 'volume-2');
@@ -112,7 +112,7 @@ function logMsg(msg) {
 // sons : créés au premier clic (les navigateurs l'exigent)
 let sound = null;
 function initAudio() {
-  try { sound = new SoundEngine(); sound.setVolume(settings.volume, settings.muted); } catch { sound = null; }
+  try { sound = new SoundEngine(); sound.setVolume(settings); } catch { sound = null; }
 }
 function beep(freq, dur, vol = 0.15) { sound?.beep(freq, dur, vol); }
 

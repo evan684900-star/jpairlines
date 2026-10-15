@@ -94,7 +94,8 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
 | Effets visuels | ombres, post-traitement, bloom, SSAO, rayons et reflets du soleil, aberration chromatique, tremblements, particules |
 | Heure | fixe, cycle jour/nuit de 24 min (le même pour tous) ou heure de l'ordinateur |
 | Météo | changeante ou fixe |
-| Compteur FPS, volume, couper le son | aussi le bouton haut-parleur du HUD |
+| Compteur FPS, volume général, couper le son | aussi le bouton haut-parleur du HUD |
+| Volume par catégorie (0–150 %) | moteur, vent, pluie, tonnerre, train/volets, alarmes, impacts, bips |
 
 Le système « réduire les animations » coupe automatiquement les tremblements, la distorsion et les animations de l'interface.
 Le post-traitement n'est chargé que s'il est activé.
