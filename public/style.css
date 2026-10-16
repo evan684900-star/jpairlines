@@ -259,3 +259,17 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 #quest-step .stage { font-weight: 700; font-size: 0.88em; opacity: 0.85; margin-bottom: 2px; }
 #quest-step .stage span { font-weight: 400; }
 .stages { color: #9fc6e8; }
+
+/* chat multijoueur */
+#chat { position: absolute; left: 14px; top: 92px; width: min(380px, 46vw); display: flex; flex-direction: column; gap: 6px; pointer-events: none; font-size: 13.5px; }
+#chat-lines { display: flex; flex-direction: column; gap: 3px; max-height: 32vh; overflow: hidden; justify-content: flex-end; }
+#chat-lines div { background: var(--glass); padding: 3px 9px; border-radius: 8px; border: 1px solid var(--edge); transition: opacity 1s; word-wrap: break-word; animation: rise 0.3s ease; }
+#chat-lines div.old { opacity: 0; }
+#chat.open #chat-lines { overflow-y: auto; pointer-events: auto; }
+#chat.open #chat-lines div.old { opacity: 1; }
+#chat-lines b { color: var(--accent); margin-right: 4px; }
+#chat-lines .me b { color: #8fd0ff; }
+#chat-lines .info { color: var(--dim); font-style: italic; }
+#chat-form { pointer-events: auto; }
+#chat-input { width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { #chat { top: 70px; font-size: 12px; width: 60vw; } }

@@ -26,6 +26,7 @@ export const ACTIONS = [
   { id: 'refuel', label: 'Faire le plein (maintenir)', def: ['k'] },
   { group: 'Jeu' },
   { id: 'board', label: 'Tableau des missions', def: ['enter'] },
+  { id: 'chat', label: 'Écrire dans le chat', def: ['y'] },
   { id: 'drop', label: 'Larguer un colis', def: ['x'] },
   { id: 'journal', label: 'Journal de quêtes', def: ['j'] },
   { id: 'map', label: 'Grande carte', def: ['m'] },

@@ -194,6 +194,7 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 - **72 quêtes** réparties sur toute la carte, avec des histoires en plusieurs épisodes.
 - **Paramètres** : qualité, distance de vue, densité de végétation, champ de vision, nuages, difficulté (facile / normale / réaliste), carburant, accélération du temps, sensibilité, unités (km/h·m ou nœuds·pieds), volume…
 - **Multijoueur** : on voit les autres avions (leur modèle, train, volets, feux, hélice) et leurs noms.
+- **Chat** : touche **Y** (modifiable) ou bouton bulle — messages à tous les pilotes en ligne, 140 caractères max, anti-spam (1 message/s, 5 par 10 s) et gros mots masqués côté serveur (`chat.js`). Les nouveaux arrivants voient les 30 derniers messages.
 
 ## Structure
 

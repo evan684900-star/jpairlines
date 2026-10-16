@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { handleApi } from './accounts.js';
+import { cleanChat } from './chat.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 100;
@@ -48,6 +49,7 @@ function sendFile(file, res) {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
 const players = new Map();
+const chatHistory = []; // derniers messages, envoyés aux nouveaux arrivants
 let nextId = 1;
 
 const num = (v, min, max) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : 0);
@@ -58,7 +60,8 @@ wss.on('connection', (ws) => {
   const id = nextId++;
   const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0, a: 0 };
   players.set(id, player);
-  ws.send(JSON.stringify({ t: 'welcome', id }));
+  ws.send(JSON.stringify({ t: 'welcome', id, chat: chatHistory }));
+  const sent = []; // horodatage des derniers messages (anti-spam)
 
   ws.on('message', (raw) => {
     let msg;
@@ -71,6 +74,21 @@ wss.on('connection', (ws) => {
       // état visible par les autres : vitesse, régime, train, volets, feux, type d'avion
       for (const k of ['s', 'r', 'g', 'f', 'l']) player[k] = num(msg[k], 0, 1000);
       player.a = Math.round(num(msg.a, 0, 31));
+    } else if (msg.t === 'chat') {
+      const now = Date.now();
+      while (sent.length && now - sent[0] > 10000) sent.shift();
+      if (sent.length >= 5 || (sent.length && now - sent[sent.length - 1] < 1000)) {
+        ws.send(JSON.stringify({ t: 'chat-info', text: 'Doucement ! Attends un peu avant de réécrire.' }));
+        return;
+      }
+      const text = cleanChat(msg.text);
+      if (!text) return;
+      sent.push(now);
+      const line = { id, name: player.name, text, ts: now };
+      chatHistory.push(line);
+      if (chatHistory.length > 30) chatHistory.shift();
+      const data = JSON.stringify({ t: 'chat', ...line });
+      for (const c of wss.clients) if (c.readyState === 1) c.send(data);
     }
   });
   ws.on('close', () => players.delete(id));

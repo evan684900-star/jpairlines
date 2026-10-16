@@ -168,6 +168,7 @@ addEventListener('keydown', (e) => {
   if (is('journal') && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (is('help')) $('help').classList.toggle('hidden');
   if (paused) return;
+  if (is('chat')) { e.preventDefault(); openChat(); return; }
   if (is('camera')) { rig.next(); toast(`Caméra : ${rig.modeName}`); }
   if (is('respawn')) respawn();
   if (is('board') && quests?.canOpenBoard()) quests.openBoard();
@@ -477,13 +478,24 @@ function connect() {
   ws.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.t === 'welcome') net.id = msg.id;
+    if (msg.t === 'welcome') {
+      net.id = msg.id;
+      net.known = null;
+      $('chat-lines').textContent = '';
+      for (const c of msg.chat || []) chatLine(c.name, c.text, 'old');
+    }
     if (msg.t === 'players') syncRemotes(msg.list);
+    if (msg.t === 'chat') {
+      chatLine(msg.name, msg.text, msg.id === net.id ? 'me' : '');
+      if (msg.id !== net.id) beep(990, 0.05, 0.06);
+    }
+    if (msg.t === 'chat-info') chatLine('', msg.text, 'info');
   };
   ws.onclose = () => {
     net.ws = null;
     for (const id of [...remotes.keys()]) removeRemote(id);
     $('online').textContent = 'Solo (hors ligne)';
+    if (chat.open) closeChat();
     setTimeout(connect, net.retry);
     net.retry = Math.min(60000, net.retry * 2);
   };
@@ -496,6 +508,13 @@ function removeRemote(id) {
 }
 
 function syncRemotes(list) {
+  // arrivées et départs annoncés dans le chat (pas au premier passage : ce sont les pilotes déjà là)
+  const now = new Map(list.filter((p) => p.id !== net.id).map((p) => [p.id, p.name]));
+  if (net.known) {
+    for (const [id, name] of now) if (!net.known.has(id)) chatLine('', `${name} a rejoint le ciel`, 'info');
+    for (const [id, name] of net.known) if (!now.has(id)) chatLine('', `${name} a quitté le ciel`, 'info');
+  }
+  net.known = now;
   const seen = new Set();
   for (const p of list) {
     if (p.id === net.id || !p.p) continue;
@@ -522,6 +541,52 @@ function syncRemotes(list) {
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
   $('online').textContent = `${remotes.size + 1} pilote${remotes.size ? 's' : ''} en ligne`;
 }
+
+// ================= Chat =================
+// les messages sont toujours insérés comme du texte (jamais comme du HTML)
+const chat = { open: false };
+function chatLine(name, text, cls = '') {
+  const box = $('chat-lines');
+  const d = document.createElement('div');
+  d.className = cls;
+  if (name) {
+    const b = document.createElement('b');
+    b.textContent = `${name} :`;
+    d.append(b);
+  }
+  d.append(document.createTextNode(text));
+  box.appendChild(d);
+  while (box.children.length > 50) box.firstChild.remove();
+  box.scrollTop = box.scrollHeight;
+  if (!cls.includes('old')) setTimeout(() => d.classList.add('old'), 12000);
+}
+function openChat() {
+  if (!net.ws || net.ws.readyState !== 1) { toast('Chat indisponible : pas de connexion au serveur multijoueur'); return; }
+  chat.open = true;
+  keys.clear(); // sinon une touche de vol enfoncée resterait « bloquée »
+  $('chat').classList.add('open');
+  $('chat-form').classList.remove('hidden');
+  $('chat-input').focus();
+}
+function closeChat() {
+  chat.open = false;
+  $('chat').classList.remove('open');
+  $('chat-form').classList.add('hidden');
+  $('chat-input').blur();
+}
+$('chat-form').onsubmit = (e) => {
+  e.preventDefault();
+  const text = $('chat-input').value.trim();
+  if (text && net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'chat', text: text.slice(0, 140) }));
+  $('chat-input').value = '';
+  closeChat();
+};
+$('chat-input').addEventListener('keydown', (e) => {
+  e.stopPropagation(); // les lettres tapées ne pilotent pas l'avion
+  if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+});
+$('chat-input').addEventListener('blur', () => { if (chat.open) closeChat(); });
+$('btn-chat').onclick = () => (chat.open ? closeChat() : openChat());
 
 function netTick(now) {
   if (!net.ws || net.ws.readyState !== 1 || now - net.lastSend < 100) return;
