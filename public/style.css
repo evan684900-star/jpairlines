@@ -315,3 +315,16 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 @keyframes ld-scroll { from { transform: translateX(0); } to { transform: translateX(-160px); } }
 @keyframes ld-bob { 0%, 100% { transform: translateY(-3px) rotate(-2deg); } 50% { transform: translateY(3px) rotate(2deg); } }
 @keyframes ld-prop { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.2); } }
+
+/* classements */
+.btns { display: flex; gap: 4px; }
+.times { margin-top: 8px; padding: 8px 10px; background: rgba(0,0,0,0.25); border-radius: 8px; font-size: 0.9em; width: 100%; box-sizing: border-box; }
+.times ol { list-style: none; margin: 6px 0; padding: 0; }
+.times li { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.times small { color: var(--dim); }
+#ranking-list { list-style: none; padding: 0; margin: 0; }
+#ranking-list > li { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+.rk-head { display: flex; align-items: center; gap: 8px; }
+.rk-head b { flex: 1; }
+.rk-head small { color: var(--dim); }
+#board-list li { flex-wrap: wrap; }

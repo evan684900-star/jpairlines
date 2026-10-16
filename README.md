@@ -194,6 +194,8 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 - **72 quêtes** réparties sur toute la carte, avec des histoires en plusieurs épisodes.
 - **Paramètres** : qualité, distance de vue, densité de végétation, champ de vision, nuages, difficulté (facile / normale / réaliste), carburant, accélération du temps, sensibilité, unités (km/h·m ou nœuds·pieds), volume…
 - **Multijoueur** : on voit les autres avions (leur modèle, train, volets, feux, hélice) et leurs noms.
+- **Hangar 3D** (bouton avion de la barre d'outils) : fondu au noir, le monde est déchargé (logo de chargement en bas à droite), puis l'avion est au centre d'un vrai hangar. Personnalisation par avion : 3 couleurs + bouts d'hélice, 8 motifs (bande, bicolore, éclair, flammes, damier…), ailes, finition (brillant, mat, métallisé, chromé, nacré), dents de requin, immatriculation, emblème sur la dérive, couleur du fumigène (touche **N** en vol). Les autres joueurs voient ta peinture.
+- **Contre-la-montre et classements** : 3 courses « Contre-la-montre » + toutes les quêtes chronométrées sont classées. Rejouables (10 % de la récompense) ; record perso enregistré, et meilleur temps envoyé au classement en ligne pour les joueurs connectés (`/api/times`, top 10 dans le tableau des missions et l'onglet Classements de la pause).
 - **Chat** : touche **Y** (modifiable) ou bouton bulle — messages à tous les pilotes en ligne, 140 caractères max, anti-spam (1 message/s, 5 par 10 s) et gros mots masqués côté serveur (`chat.js`). Les nouveaux arrivants voient les 30 derniers messages.
 
 ## Structure

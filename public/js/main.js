@@ -17,7 +17,7 @@ import { RockLibrary } from './render/rocks.js';
 import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
-import { QuestSystem } from './quests/engine.js';
+import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
@@ -294,6 +294,7 @@ function openPause() {
   $('pause').classList.remove('hidden');
   renderAirportList();
   renderHangar();
+  renderRanking();
 }
 $('resume').onclick = closeOverlays;
 for (const b of document.querySelectorAll('.tabs .tab')) {
@@ -704,6 +705,60 @@ function renderHangar() {
       act.appendChild(b);
     } else act.innerHTML = `<span class="ac-lock">🔒 Débloqué par la quête « ${quest ? quest.title : a.unlock} »</span>`;
     box.appendChild(card);
+  }
+}
+
+// ================= Missions chronométrées : records et classement en ligne =================
+async function recordTime(q, time) {
+  save.bestTimes ||= {};
+  const prev = save.bestTimes[q.id];
+  const record = !prev || time < prev;
+  if (record) { save.bestTimes[q.id] = Math.round(time * 10) / 10; persist(); }
+  logMsg(`⏱ ${q.title} : ${fmtChrono(time)}${record ? (prev ? ' — nouveau record perso !' : '') : ` (record : ${fmtChrono(prev)})`}`);
+  if (!account.loggedIn) {
+    setTimeout(() => toast('🏆 Connecte-toi (menu principal) pour apparaître au classement en ligne'), 3200);
+    return;
+  }
+  try {
+    const r = await account.submitTime(q.id, Math.round(time * 1000));
+    setTimeout(() => toast(`🏆 Classement « ${q.title} » : ${r.rank}${r.rank === 1 ? 'er' : 'e'} sur ${r.total}${r.best ? '' : ` (ton meilleur temps : ${fmtChrono(r.ms / 1000)})`}`), 3200);
+  } catch (e) { logMsg(`Classement indisponible : ${e.message}`); }
+}
+
+// top 10 d'une quête, affiché dans l'élément donné
+async function showTimes(q, el) {
+  let box = el.querySelector('.times');
+  if (box) { box.remove(); return; }
+  box = document.createElement('div');
+  box.className = 'times';
+  box.textContent = 'Chargement du classement…';
+  el.appendChild(box);
+  try {
+    const r = await account.times(q.id);
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const medal = ['🥇', '🥈', '🥉'];
+    box.innerHTML = `<b>🏆 ${esc(q.title)}</b>`
+      + (r.top.length ? `<ol>${r.top.map((t, i) => `<li><span>${medal[i] || `${i + 1}.`} ${esc(t.name)}</span><span>${fmtChrono(t.ms / 1000)}</span></li>`).join('')}</ol>` : '<p>Personne n\'est encore classé : à toi de jouer !</p>')
+      + (r.me ? `<small>Toi : ${r.me.rank}${r.me.rank === 1 ? 'er' : 'e'} sur ${r.total} · ${fmtChrono(r.me.ms / 1000)}</small>`
+        : `<small>${account.loggedIn ? 'Pas encore de temps enregistré.' : 'Connecte-toi pour être classé.'}${save.bestTimes?.[q.id] ? ` Record perso : ${fmtChrono(save.bestTimes[q.id])}` : ''}</small>`);
+  } catch {
+    box.textContent = 'Classement indisponible (serveur injoignable).';
+  }
+}
+
+// onglet « Classements » de la pause : toutes les missions chronométrées
+function renderRanking() {
+  const list = $('ranking-list');
+  list.innerHTML = '';
+  const ranked = (quests?.quests.filter(isRanked) || []).sort((a, b) => !!b.ranked - !!a.ranked); // contre-la-montre d'abord
+  for (const q of ranked) {
+    const li = document.createElement('li');
+    const best = save.bestTimes?.[q.id];
+    li.innerHTML = `<div class="rk-head"><b></b><small></small><button class="secondary">🏆 Voir</button></div>`;
+    li.querySelector('b').textContent = q.title;
+    li.querySelector('small').textContent = best ? `record perso ${fmtChrono(best)}` : (quests.isDone(q) ? '' : 'pas encore faite');
+    li.querySelector('button').onclick = () => showTimes(q, li);
+    list.appendChild(li);
   }
 }
 
@@ -1137,10 +1192,12 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
     scene, plane, getSave: () => save, persist, toast, beep, logMsg,
     setPaused: (v) => { paused = v; },
     // une quête terminée peut débloquer un avion
-    onQuestDone: (q) => {
+    onQuestDone: (q, res) => {
       const a = AIRCRAFT.find((x) => x.unlock === q.id);
-      if (a) setTimeout(() => toast(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`), 3200);
+      if (a && !res.replay) setTimeout(() => toast(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`), 3200);
+      if (isRanked(q)) recordTime(q, res.time);
     },
+    onShowTimes: (q, li) => showTimes(q, li),
   });
   status('Dessin de la carte…', 82);
   await tick();

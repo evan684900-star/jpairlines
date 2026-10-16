@@ -85,6 +85,10 @@ export class Account {
     this.forget();
   }
 
+  // classements des missions chronométrées
+  submitTime(quest, ms) { return this.api('times', { method: 'POST', body: { quest, ms } }); }
+  times(quest) { return this.api(`times?quest=${encodeURIComponent(quest)}`); }
+
   // envoi de la sauvegarde (regroupé : au plus une fois toutes les 4 s)
   pushSave(save) {
     if (!this.user) return;

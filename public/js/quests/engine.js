@@ -14,6 +14,9 @@ const keyName0 = (id) => (keysFor(id).length ? keyName(keysFor(id)[0]) : '—');
 
 const $ = (id) => document.getElementById(id);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));
+// mission chronométrée avec classement en ligne
+export const isRanked = (q) => !q.job && !!(q.ranked || q.timeLimit || q.bonusTime);
+export const fmtChrono = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const fmtDist = (d) => (d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -304,12 +307,16 @@ export class QuestSystem {
     const item = (q) => {
       const done = this.isDone(q), lock = this.lockReason(q), active = this.active?.q.id === q.id;
       const extra = [q.timeLimit ? `⏱ ${fmtTime(q.timeLimit)}` : '', q.bonusTime ? `bonus +${q.bonusReward} ₣ en moins de ${fmtTime(q.bonusTime)}` : ''].filter(Boolean).join(' · ');
-      const btn = done ? '<span class="tag done">✅ Terminée</span>'
+      const ranked = isRanked(q);
+      const best = s.bestTimes?.[q.id];
+      const btn = done && ranked && !active ? `<span class="btns"><button data-accept="${esc(q.id)}" class="secondary">⏱ Rejouer</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
+        : done ? '<span class="tag done">✅ Terminée</span>'
+        : ranked && !lock && !active ? `<span class="btns"><button data-accept="${esc(q.id)}">Accepter</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
         : active ? '<span class="tag">▶ En cours</span>'
           : lock ? `<span class="tag lock">🔒 ${esc(lock)}</span>`
             : `<button data-accept="${esc(q.id)}">Accepter</button>`;
       return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(q.title)}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
-        <small>${esc(q.desc)}</small>${stagesLine(q)}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
+        <small>${esc(q.desc)}</small>${stagesLine(q)}${ranked ? `<br><small class="extra">⏱ Classée${best ? ` · ton record : ${fmtChrono(best)}` : ''}</small>` : ''}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
     };
     const qs = [...quests].sort((a, b) => this.isDone(a) - this.isDone(b) || a.reward - b.reward);
     $('board-title').textContent = `Tableau des missions — ${place}`;
@@ -325,6 +332,7 @@ export class QuestSystem {
         this.closeBoard();
       };
     }
+    for (const b of $('board-list').querySelectorAll('[data-top]')) b.onclick = () => this.onShowTimes?.(this.byId.get(b.dataset.top), b.closest('li'));
     $('board').classList.remove('hidden');
     this.setPaused(true);
     return true;
@@ -338,7 +346,7 @@ export class QuestSystem {
   start(q) {
     this.abandon(true);
     // needAirborne : il faut décoller avant qu'un atterrissage compte (anti-téléportation)
-    this.active = { q, step: 0, elapsed: 0, timer: 0, touched: false, objects: [], moving: null, needAirborne: this.plane.onGround };
+    this.active = { q, step: 0, elapsed: 0, timer: 0, touched: false, objects: [], moving: null, needAirborne: this.plane.onGround, replay: this.isDone(q) };
     this.refreshClusters();
     this.showStep();
     this.toast(`Nouvelle quête : ${q.title}`);
@@ -467,7 +475,8 @@ export class QuestSystem {
     const q = A.q;
     const s = this.ensureSave();
     const bonus = q.bonusTime && A.elapsed <= q.bonusTime ? q.bonusReward : 0;
-    const gain = q.reward + bonus;
+    // une quête rejouée pour le chrono rapporte 10 % de la récompense
+    const gain = A.replay ? Math.round(q.reward * 0.1) : q.reward + bonus;
     const before = this.rankIndex();
     s.money += gain;
     s.xp += gain;
@@ -475,7 +484,7 @@ export class QuestSystem {
     else if (!s.completed.includes(q.id)) s.completed.push(q.id);
     this.persist();
     this.abandon(true);
-    this.onQuestDone?.(q);
+    this.onQuestDone?.(q, { time: A.elapsed, replay: A.replay });
     this.toast(`✅ ${q.title} terminée ! +${gain} ₣${bonus ? ` (dont bonus chrono ${bonus} ₣)` : ''}`);
     this.beep(880, 0.25);
     const after = this.rankIndex();
@@ -602,6 +611,7 @@ export class QuestSystem {
     if (st.type === 'low') info = `${info ? info + ' · ' : ''}Hauteur : ${Math.max(0, Math.round(agl))} m`;
     if (q.timeLimit) info += ` · ⏱ ${fmtTime(Math.max(0, q.timeLimit - A.elapsed))}`;
     else if (q.bonusTime) info += ` · ⏱ ${fmtTime(A.elapsed)} (bonus < ${fmtTime(q.bonusTime)})`;
+    if (isRanked(q) && !q.bonusTime) info += ` · ⏱ ${fmtChrono(A.elapsed)}`;
     if (hint) info = hint;
     $('quest-dist').textContent = info;
     const bar = $('quest-progress');

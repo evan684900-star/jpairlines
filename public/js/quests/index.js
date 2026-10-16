@@ -6,6 +6,7 @@ import nord from './nord.js';
 import sud from './sud.js';
 import est from './est.js';
 import defis from './defis.js';
+import chrono from './chrono.js';
 
-export const QUEST_FILES = { base, centre, ouest, nord, sud, est, defis };
+export const QUEST_FILES = { base, centre, ouest, nord, sud, est, defis, chrono };
 export const QUESTS = Object.values(QUEST_FILES).flat();

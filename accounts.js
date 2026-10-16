@@ -22,6 +22,7 @@ let db = { users: {}, sessions: {} };
 try { db = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch { /* premier lancement */ }
 db.users ||= {};
 db.sessions ||= {};
+db.times ||= {}; // classements : { idQuête: { idJoueur: { ms, at } } }
 
 // écriture atomique, regroupée (au plus une toutes les 500 ms)
 let saveTimer = null;
@@ -39,6 +40,7 @@ function store() {
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const now = () => Date.now();
 const cleanName = (s) => String(s || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 16) || 'Pilote';
+const QUEST_RE = /^[a-z0-9-]{1,60}$/;
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 
 // scrypt asynchrone : ne bloque pas le relais multijoueur pendant le calcul
@@ -208,8 +210,37 @@ export async function handleApi(req, res) {
       return back(`jp-token=${newSession(user.id)}`), true;
     }
 
+    // classement d'une mission chronométrée (lecture libre ; « me » si connecté)
+    if (route === 'GET /api/times') {
+      const quest = url.searchParams.get('quest') || '';
+      if (!QUEST_RE.test(quest)) return send(res, 400, { error: 'Quête inconnue.' }, h), true;
+      const all = Object.entries(db.times[quest] || {}).filter(([id]) => db.users[id]).sort((a, b) => a[1].ms - b[1].ms);
+      const top = all.slice(0, 10).map(([id, t]) => ({ name: db.users[id].name, ms: t.ms }));
+      const me = userFromRequest(req);
+      const i = me ? all.findIndex(([id]) => id === me.id) : -1;
+      return send(res, 200, { top, total: all.length, me: i >= 0 ? { rank: i + 1, ms: all[i][1].ms } : null }, h), true;
+    }
+
     const user = userFromRequest(req);
     if (!user) return send(res, 401, { error: 'Session expirée, reconnecte-toi.' }, h), true;
+
+    if (route === 'POST /api/times') {
+      const b = await readBody(req);
+      const quest = String(b.quest || ''), ms = Math.round(Number(b.ms));
+      if (!QUEST_RE.test(quest)) return send(res, 400, { error: 'Quête inconnue.' }, h), true;
+      // un temps plausible : entre 20 s et 2 h
+      if (!Number.isFinite(ms) || ms < 20000 || ms > 7200000) return send(res, 400, { error: 'Temps invalide.' }, h), true;
+      if (now() - (user.lastTime || 0) < 5000) return send(res, 429, { error: 'Doucement !' }, h), true;
+      user.lastTime = now();
+      if (!db.times[quest] && Object.keys(db.times).length >= 300) return send(res, 400, { error: 'Quête inconnue.' }, h), true;
+      const board = (db.times[quest] ||= {});
+      const prev = board[user.id];
+      const best = !prev || ms < prev.ms;
+      if (best) board[user.id] = { ms, at: now() };
+      store();
+      const all = Object.values(board).sort((a, c) => a.ms - c.ms);
+      return send(res, 200, { best, ms: board[user.id].ms, rank: all.indexOf(board[user.id]) + 1, total: all.length }, h), true;
+    }
 
     if (route === 'GET /api/me') return send(res, 200, { user: publicUser(user) }, h), true;
     if (route === 'PUT /api/save') {
