@@ -5,7 +5,7 @@ import {
   AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, terrainHeight, airportById, shipPosition, balloonPosition, rng, runwayLocal, onRunway,
 } from '../world.js';
 import { QUESTS } from './index.js';
-import { CATEGORIES, RANKS, nextTo } from './kit.js';
+import { CATEGORIES, RANKS, nextTo, stagesOf } from './kit.js';
 import { makeLabel } from '../objects.js';
 import { TEX } from '../render/textures.js';
 import { AIRCRAFT } from '../aircraft.js';
@@ -20,6 +20,15 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // avion débloqué par une quête (affiché au tableau et dans le journal)
 const unlockOf = (q) => AIRCRAFT.find((a) => a.unlock === q.id);
 const unlockTag = (q) => { const a = unlockOf(q); return a ? ` <span class="unlock">✈️ Débloque : ${a.name} (${a.role.toLowerCase()})</span>` : ''; };
+// étape en cours d'une quête : { n, total, label, sub, subTotal }
+function stageAt(q, step) {
+  const list = stagesOf(q);
+  const i = list.findIndex((s) => step >= s.start && step < s.end);
+  const s = list[i];
+  return { n: i + 1, total: list.length, label: s.label, sub: step - s.start + 1, subTotal: s.end - s.start, last: step === s.end - 1 };
+}
+// déroulé de la quête affiché au tableau et dans le journal
+const stagesLine = (q) => (q.job ? '' : `<br><small class="stages">${stagesOf(q).map((s, i) => `${i + 1}. ${esc(s.label)}`).join(' → ')}</small>`);
 const CAT_ICON = { course: '🏁', livraison: '📦', exploration: '🧭', voltige: '🌀', sauvetage: '🛟', tourisme: '📷', defi: '🏆', transport: '✈️' };
 
 // ---------- Missions de transport du jour (identiques pour tous les joueurs) ----------
@@ -300,7 +309,7 @@ export class QuestSystem {
           : lock ? `<span class="tag lock">🔒 ${esc(lock)}</span>`
             : `<button data-accept="${esc(q.id)}">Accepter</button>`;
       return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(q.title)}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
-        <small>${esc(q.desc)}</small>${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
+        <small>${esc(q.desc)}</small>${stagesLine(q)}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
     };
     const qs = [...quests].sort((a, b) => this.isDone(a) - this.isDone(b) || a.reward - b.reward);
     $('board-title').textContent = `Tableau des missions — ${place}`;
@@ -438,16 +447,20 @@ export class QuestSystem {
       m.position.set(p.x, Math.max(0, terrainHeight(p.x, p.z)) + (terrainHeight(p.x, p.z) < 0 ? 0.2 : 0), p.z);
     }
     $('quest-box').classList.remove('hidden');
-    $('quest-title').textContent = `${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${q.title} (${A.step + 1}/${q.steps.length})`;
-    $('quest-step').textContent = this.stepText(st);
+    const sg = stageAt(q, A.step);
+    $('quest-title').textContent = `${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${q.title}`;
+    $('quest-step').innerHTML = (sg.label ? `<div class="stage">Étape ${sg.n}/${sg.total} — ${esc(sg.label)}${sg.subTotal > 1 ? ` <span>(${sg.sub}/${sg.subTotal})</span>` : ''}</div>` : '')
+      + esc(this.stepText(st));
     $('quest-progress').classList.add('hidden');
   }
 
   completeStep() {
     const A = this.active;
+    const sg = stageAt(A.q, A.step);
     A.step++;
     if (A.step < A.q.steps.length) {
       this.beep(660, 0.12);
+      if (sg.last && sg.label) this.logMsg(`✔ Étape ${sg.n}/${sg.total} terminée : ${sg.label}`);
       this.showStep();
       return;
     }
@@ -689,7 +702,7 @@ export class QuestSystem {
         const icon = isDone ? '✅' : act ? '▶' : lock ? '🔒' : '❗';
         const where = q.airport ? airportById(q.airport).name : this.placeName(q.giver.x, q.giver.z);
         html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(q.title)}</b> <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
-          + `<small>${esc(lock && !isDone ? lock : q.desc)}</small></li>`;
+          + `<small>${esc(lock && !isDone ? lock : q.desc)}</small>${isDone ? '' : stagesLine(q)}</li>`;
       }
       html += '</ul>';
     }

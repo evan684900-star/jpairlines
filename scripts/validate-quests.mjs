@@ -15,7 +15,7 @@ for (const f of FILES) {
     QUEST_FILES[f] = [];
   }
 }
-import { CATEGORIES, RANKS } from '../public/js/quests/kit.js';
+import { CATEGORIES, RANKS, stagesOf } from '../public/js/quests/kit.js';
 import {
   AIRPORTS, SHIPS, BALLOONS, HALF, terrainHeight, airportById, shipPosition, balloonPosition,
 } from '../public/js/world.js';
@@ -35,7 +35,7 @@ const STEP_KEYS = {
   altitude: ['min'], speed: ['min'], low: ['maxAgl', 'duration', 'label', 'x', 'z', 'radius'],
   hold: ['min', 'max', 'duration'], inverted: ['duration'], follow: ['ship', 'balloon', 'distance', 'duration', 'label'],
 };
-const COMMON_KEYS = ['type', 'text', 'spawn'];
+const COMMON_KEYS = ['type', 'text', 'spawn', 'stage'];
 const SPAWNS = ['raft', 'hiker', 'crate', 'smoke', 'flag', 'tent'];
 
 function ringPos(st) {
@@ -207,6 +207,13 @@ for (const { file, q } of all) {
   if (!Array.isArray(q.steps) || !q.steps.length) { err(file, q, 'aucune étape'); continue; }
   if (q.steps.length > 30) warn(file, q, `${q.steps.length} étapes, c'est beaucoup`);
   q.steps.forEach((st, i) => checkStep(file, q, st, i));
+  // 3 ou 4 grandes étapes, chacune nommée une seule fois
+  const stages = stagesOf(q);
+  if (q.steps.some((st) => !st.stage)) err(file, q, 'objectif sans étape (utiliser stage())');
+  if (stages.length < 3 || stages.length > 4) err(file, q, `${stages.length} étape(s) : il en faut 3 ou 4`);
+  const labels = stages.map((s) => s.label);
+  if (new Set(labels).size !== labels.length) err(file, q, 'deux étapes portent le même nom');
+  for (const l of labels) if (l && l.length > 40) err(file, q, `nom d'étape trop long : ${l}`);
   // enchaînement des anneaux
   for (let i = 1; i < q.steps.length; i++) {
     const a = q.steps[i - 1], b = q.steps[i];

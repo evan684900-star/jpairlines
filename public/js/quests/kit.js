@@ -35,6 +35,16 @@
 //
 // Toute étape accepte aussi :
 //   text: 'texte affiché'   (sinon généré automatiquement)
+//   stage: 'Nom de l'étape' (posé par stage(), voir plus bas)
+//
+// ===== Étapes de quête (3 ou 4 par quête) =====
+// Les objectifs sont regroupés en 3 ou 4 grandes étapes qui racontent l'histoire, par exemple :
+//   steps: [
+//     ...stage('Charger le courrier', land('alpha')),
+//     ...stage('Suivre la route aérienne', ringsLine(...)),
+//     ...stage('Livrer à la Capitale', land('capitale')),
+//   ]
+// Le joueur voit « Étape 2/3 — Suivre la route aérienne (anneau 3/5) ».
 //   spawn: 'raft' | 'hiker' | 'crate' | 'smoke' | 'flag' | 'tent'   objet affiché au point de l'étape pendant l'étape
 
 import {
@@ -98,6 +108,20 @@ export function offset(p, distance, headingDeg) {
 export const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 // ----- étapes -----
+// regroupe un ou plusieurs objectifs sous une même étape de quête
+export function stage(label, ...steps) {
+  return steps.flat().map((st) => ({ ...st, stage: label }));
+}
+// découpage d'une quête en étapes : [{ label, start, end }] (objectifs start..end-1)
+export function stagesOf(q) {
+  const out = [];
+  q.steps.forEach((st, i) => {
+    const last = out[out.length - 1];
+    if (st.stage && last && last.label === st.stage) last.end = i + 1;
+    else out.push({ label: st.stage || '', start: i, end: i + 1 });
+  });
+  return out;
+}
 export const land = (airport, extra = {}) => ({ type: 'land', airport, ...extra });
 export const touch = (airport, extra = {}) => ({ type: 'touch', airport, ...extra });
 export const reach = (p, radius, label, extra = {}) => ({ type: 'reach', x: p.x, z: p.z, radius, label, ...extra });
