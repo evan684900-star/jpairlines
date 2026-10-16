@@ -19,7 +19,7 @@ import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
-import { Account, mergeSaves, mountGoogleButton } from './account.js';
+import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
@@ -837,17 +837,19 @@ $('acc-form').onsubmit = async (e) => {
 };
 $('acc-logout').onclick = async () => { await account.logout(); toast('Déconnecté : la progression reste aussi sur cet appareil.'); };
 account.config().then((cfg) => {
-  const ok = mountGoogleButton($('acc-google'), cfg.google, async (credential) => {
-    accMsg('');
-    try {
-      const user = await account.google(credential, ($('pilot-name').value.trim() || save.name || 'Pilote').slice(0, 16), save);
-      adoptAccount(user);
-      toast(`Connecté avec Google : bienvenue, ${user.name} !`);
-    } catch (err) { accMsg(err.message); }
-  });
+  const ok = mountGoogleButton($('acc-google'), cfg.google, account.base);
   $('acc-or').classList.toggle('hidden', !ok);
 });
-account.restore().then((user) => { if (user) adoptAccount(user); });
+// retour de la connexion Google (redirection)
+const back = takeRedirectToken();
+const GOOGLE_ERRORS = { 'google-refuse': 'Connexion Google refusée.', 'google-non-configure': 'Connexion Google non configurée sur le serveur.', 'trop-de-tentatives': 'Trop de tentatives, réessaie dans une minute.' };
+if (back?.token) account.useToken(back.token);
+if (back?.error) accMsg(GOOGLE_ERRORS[back.error] || 'Connexion Google impossible.');
+account.restore().then((user) => {
+  if (!user) return;
+  adoptAccount(user);
+  if (back?.token) toast(`Connecté avec Google : bienvenue, ${user.name} !`);
+});
 addEventListener('pagehide', () => account.flush());
 
 // ================= Démarrage =================

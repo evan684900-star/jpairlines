@@ -41,7 +41,10 @@ elle est fusionnée avec celle du navigateur (aucune quête réussie n'est perdu
 - **Connexion Google** : créer un « ID client OAuth » de type *Application Web* dans la
   [console Google Cloud](https://console.cloud.google.com/apis/credentials), ajouter l'adresse du jeu
   (ex. `https://jpairlines.vercel.app`, et `http://localhost:3000` pour les tests) dans « Origines JavaScript autorisées »,
-  puis lancer le serveur avec `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com npm start`. Le bouton Google apparaît
+  ajouter l'adresse `https://ton-serveur/api/google-redirect` dans « URI de redirection autorisés »
+  (la connexion se fait par redirection, sans fenêtre surgissante bloquée par les navigateurs),
+  puis lancer le serveur avec `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com npm start`
+  (et `GAME_URL=https://ton-jeu/` si le jeu n'est pas sur https://jpairlines.vercel.app). Le bouton Google apparaît
   alors tout seul dans le menu ; sans cette variable, seule la connexion par e-mail est proposée.
 - Variables facultatives : `DATA_DIR` (dossier des comptes), `ALLOWED_ORIGINS` (liste d'adresses autorisées à appeler l'API,
   séparées par des virgules ; vide = toutes, sans risque car l'API n'utilise pas de cookies).

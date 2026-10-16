@@ -56,6 +56,12 @@ export class Account {
     this.onChange(null);
   }
 
+  // jeton reçu au retour de Google (redirection)
+  useToken(token) {
+    this.token = token;
+    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* stockage indisponible */ }
+  }
+
   // reprise de la session enregistrée (au chargement)
   async restore() {
     if (!this.token) return null;
@@ -110,16 +116,26 @@ export function mergeSaves(local, remote) {
   };
 }
 
-// bouton officiel « Se connecter avec Google » (script Google chargé seulement si le serveur est configuré)
-export function mountGoogleButton(el, clientId, onCredential) {
+// bouton officiel « Continuer avec Google » (script Google chargé seulement si le serveur est configuré).
+// Mode redirection : la page part chez Google puis revient connectée, sans fenêtre surgissante
+// (souvent bloquée par les navigateurs). Le retour est lu par takeRedirectToken().
+export function mountGoogleButton(el, clientId, base) {
   if (!clientId) return false;
   const s = document.createElement('script');
   s.src = 'https://accounts.google.com/gsi/client';
   s.async = true;
   s.onload = () => {
-    window.google.accounts.id.initialize({ client_id: clientId, callback: (r) => onCredential(r.credential), ux_mode: 'popup' });
+    window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'redirect', login_uri: `${base}/api/google-redirect` });
     window.google.accounts.id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: 'fr', width: 300 });
   };
   document.head.appendChild(s);
   return true;
+}
+
+// retour de Google : #jp-token=… (connecté) ou #jp-error=… ; l'ancre est aussitôt effacée de l'adresse
+export function takeRedirectToken() {
+  const m = /[#&]jp-(token|error)=([^&]+)/.exec(location.hash);
+  if (!m) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return m[1] === 'token' ? { token: decodeURIComponent(m[2]) } : { error: decodeURIComponent(m[2]) };
 }

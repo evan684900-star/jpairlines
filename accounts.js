@@ -10,6 +10,8 @@ import { promisify } from 'node:util';
 const DATA_DIR = process.env.DATA_DIR || path.join(path.dirname(new URL(import.meta.url).pathname), 'data');
 const FILE = path.join(DATA_DIR, 'accounts.json');
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+// page du jeu où revenir après la connexion Google par redirection
+const GAME_URL = (process.env.GAME_URL || 'https://jpairlines.vercel.app/').replace(/#.*$/, '');
 const SESSION_DAYS = 60;
 const MAX_BODY = 64 * 1024; // une sauvegarde fait quelques Ko
 // pages autorisées à appeler l'API depuis un autre domaine (jeu sur Vercel). Vide = toutes : l'API n'utilise pas
@@ -90,6 +92,18 @@ async function verifyGoogle(credential) {
   return { sub: String(p.sub), email: String(p.email).toLowerCase(), name: p.given_name || p.name || '' };
 }
 
+// compte lié à une identité Google (même adresse vérifiée par Google : on relie le compte existant)
+function googleUser(g, name, save) {
+  let user = Object.values(db.users).find((u) => u.googleSub === g.sub) || Object.values(db.users).find((u) => u.email === g.email);
+  if (!user) {
+    const id = crypto.randomUUID();
+    user = db.users[id] = { id, email: g.email, name: cleanName(name || g.name), created: now(), save: cleanSave(save) };
+  }
+  user.googleSub = g.sub;
+  store();
+  return user;
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -99,7 +113,14 @@ function readBody(req) {
       if (size > MAX_BODY) { reject(new Error('trop gros')); req.destroy(); return; }
       chunks.push(c);
     });
-    req.on('end', () => { try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')); } catch { reject(new Error('json')); } });
+    req.on('end', () => {
+      const text = Buffer.concat(chunks).toString('utf8');
+      try {
+        // formulaire envoyé par Google (redirection) ou JSON envoyé par le jeu
+        if ((req.headers['content-type'] || '').includes('application/x-www-form-urlencoded')) resolve(Object.fromEntries(new URLSearchParams(text)));
+        else resolve(JSON.parse(text || '{}'));
+      } catch { reject(new Error('json')); }
+    });
     req.on('error', reject);
   });
 }
@@ -170,15 +191,21 @@ export async function handleApi(req, res) {
       const b = await readBody(req);
       const g = await verifyGoogle(b.credential);
       if (!g) return send(res, 401, { error: 'Connexion Google refusée.' }, h), true;
-      // même adresse vérifiée par Google : on relie le compte existant
-      let user = Object.values(db.users).find((u) => u.googleSub === g.sub) || Object.values(db.users).find((u) => u.email === g.email);
-      if (!user) {
-        const id = crypto.randomUUID();
-        user = db.users[id] = { id, email: g.email, name: cleanName(b.name || g.name), created: now(), save: cleanSave(b.save) };
-      }
-      user.googleSub = g.sub;
-      store();
+      const user = googleUser(g, b.name, b.save);
       return send(res, 200, { token: newSession(user.id), user: publicUser(user) }, h), true;
+    }
+
+    // connexion Google par redirection (sans fenêtre surgissante) : Google renvoie ici un formulaire,
+    // puis on retourne au jeu avec le jeton dans l'ancre de l'adresse (jamais envoyée à un serveur)
+    if (route === 'POST /api/google-redirect') {
+      const back = (frag) => { res.writeHead(303, { Location: `${GAME_URL}#${frag}`, 'Cache-Control': 'no-store' }); res.end(); };
+      if (limited(ip)) return back('jp-error=trop-de-tentatives'), true;
+      if (!GOOGLE_CLIENT_ID) return back('jp-error=google-non-configure'), true;
+      const b = await readBody(req);
+      const g = await verifyGoogle(b.credential);
+      if (!g) return back('jp-error=google-refuse'), true;
+      const user = googleUser(g);
+      return back(`jp-token=${newSession(user.id)}`), true;
     }
 
     const user = userFromRequest(req);
