@@ -48,3 +48,20 @@ export function cleanLivery(l) {
     smoke: color(l.smoke, d.smoke),
   };
 }
+
+// ----- Boutique du hangar -----
+// Chaque élément s'achète une seule fois puis sert sur tous les avions. Clés : 'color:#rrggbb', 'custom-color',
+// 'pattern:x', 'wings:x', 'finish:x', 'emblem:x', 'teeth', 'reg', 'smoke'. Les couleurs et motifs d'origine sont gratuits.
+const P = {
+  'custom-color': 2000, teeth: 1000, reg: 500, smoke: 1500,
+  'pattern:uni': 200, 'pattern:pointe': 300, 'pattern:bande': 400, 'pattern:bicolore': 400, 'pattern:eclair': 700, 'pattern:damier': 800, 'pattern:flammes': 900,
+  'wings:uni': 150, 'wings:bouts': 300, 'wings:bandes': 500, 'wings:damier': 600,
+  'finish:mat': 400, 'finish:metal': 800, 'finish:chrome': 2000, 'finish:nacre': 2500,
+  'emblem:etoile': 300, 'emblem:eclair': 300, 'emblem:coeur': 300, 'emblem:numero': 400, 'emblem:cocarde': 500, 'emblem:aile': 600, 'emblem:couronne': 700,
+};
+const FREE_COLORS = ['#f4f1ea', '#1c1e22', '#f2c21b', '#ffffff'];
+export function priceOf(key) {
+  if (key.startsWith('color:')) return FREE_COLORS.includes(key.slice(6)) ? 0 : 150;
+  return P[key] ?? 0;
+}
+export const PRICE_LABEL = (n) => `${n.toLocaleString('fr-FR')} ₣`;

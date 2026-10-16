@@ -21,7 +21,7 @@ import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
-import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES } from './livery.js';
+import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, priceOf, PRICE_LABEL } from './livery.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
@@ -64,7 +64,7 @@ const persist = () => {
 
 // personnalisation de chaque avion (hangar)
 if (!save.liveries || typeof save.liveries !== 'object') save.liveries = {};
-const liveryOf = (id) => cleanLivery(save.liveries[id]);
+const liveryOf = (id) => cleanLivery((save.liveries || {})[id]);
 
 // ================= Joueur =================
 const plane = new Plane(save.aircraft);
@@ -190,6 +190,7 @@ addEventListener('keydown', (e) => {
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
   if (is('smoke')) {
+    if (!isOwned('smoke')) { toast('💨 Achète le fumigène au hangar (onglet Fumigène)'); return; }
     plane.smokeOn = !plane.smokeOn;
     toast(plane.smokeOn ? '💨 Fumigène allumé (couleur réglable au hangar)' : 'Fumigène coupé');
   }
@@ -826,13 +827,52 @@ async function exitHangar(fly) {
   });
 }
 
+// ----- boutique : chaque élément s'achète une fois (argent du jeu) puis sert sur tous les avions -----
+const isOwned = (key) => priceOf(key) === 0 || (save.owned || []).includes(key);
+// clés à posséder pour une modification de la peinture
+function missingFor(patch) {
+  const out = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (['body', 'accent', 'stripe', 'tips', 'emblemColor', 'smoke'].includes(k) && v) out.push(SWATCHES.includes(v) || v === '#ffffff' ? `color:${v}` : 'custom-color');
+    if (k === 'pattern' || k === 'wings' || k === 'finish' || k === 'emblem') out.push(`${k}:${v}`);
+    if (k === 'sharkTeeth' && v) out.push('teeth');
+    if (k === 'reg' && v) out.push('reg');
+  }
+  return [...new Set(out)].filter((key) => !isOwned(key));
+}
+
 // modifie la peinture de l'avion affiché (enregistrée tout de suite, modèle reconstruit un peu après)
 function setLivery(patch) {
   const id = hg.type;
+  save.liveries ||= {};
   save.liveries[id] = cleanLivery({ ...liveryOf(id), ...patch });
   persist();
+  hg.pending = null;
   clearTimeout(hg.timer);
   hg.timer = setTimeout(() => hangar.setPlane(id, liveryOf(id), true), 60);
+  renderHangarUI();
+}
+// choix d'un élément : appliqué s'il est possédé, sinon aperçu sur l'avion + proposition d'achat
+function choose(patch, label) {
+  const missing = missingFor(patch);
+  if (!missing.length) return setLivery(patch);
+  hg.pending = { patch, keys: missing, label, price: missing.reduce((n, k) => n + priceOf(k), 0) };
+  clearTimeout(hg.timer);
+  hg.timer = setTimeout(() => hangar.setPlane(hg.type, cleanLivery({ ...liveryOf(hg.type), ...patch }), true), 60);
+  renderHangarUI();
+}
+function buyPending() {
+  const p = hg.pending;
+  if (!p || save.money < p.price) return;
+  save.money -= p.price;
+  save.owned = [...new Set([...(save.owned || []), ...p.keys])];
+  beep(880, 0.12);
+  toast(`🛒 ${p.label} acheté : −${PRICE_LABEL(p.price)}`);
+  setLivery(p.patch);
+}
+function cancelPending() {
+  hg.pending = null;
+  hangar.setPlane(hg.type, liveryOf(hg.type), true);
   renderHangarUI();
 }
 
@@ -840,47 +880,62 @@ function renderHangarUI() {
   const def = aircraftById(hg.type);
   const open = unlockedAircraft(save).includes(def);
   const L = liveryOf(hg.type);
+  const view = hg.pending ? cleanLivery({ ...L, ...hg.pending.patch }) : L; // ce qu'on voit (aperçu compris)
   $('hg-title').textContent = def.name;
   const quest = def.unlock && quests?.byId.get(def.unlock);
   $('hg-sub').innerHTML = open ? `${def.role} · ${def.engineLabel}` : `<span class="hg-locked">🔒 Débloqué par la quête « ${quest ? quest.title : def.unlock} »</span>`;
+  $('hg-money').textContent = `💰 ${PRICE_LABEL(save.money)}`;
   $('hg-fly').textContent = hg.type === plane.type ? '✈️ Reprendre le vol' : '✈️ Piloter cet avion';
   $('hg-fly').disabled = !open;
   for (const b of document.querySelectorAll('[data-hg]')) b.classList.toggle('active', b.dataset.hg === hg.tab);
   const body = $('hg-body');
+  const buy = $('hg-buy');
+  if (hg.pending) {
+    const p = hg.pending, ok = save.money >= p.price;
+    buy.innerHTML = `<div><b>${p.label}</b> — ${PRICE_LABEL(p.price)}${ok ? '' : `<br><small>Il te manque ${PRICE_LABEL(p.price - save.money)}</small>`}</div>`
+      + `<button id="hg-buy-ok" ${ok ? '' : 'disabled'}>Acheter</button><button id="hg-buy-no" class="secondary">Annuler</button>`;
+    buy.classList.remove('hidden');
+    $('hg-buy-ok').onclick = buyPending;
+    $('hg-buy-no').onclick = cancelPending;
+  } else buy.classList.add('hidden');
   if (!open) {
     body.innerHTML = '<p class="sub">Termine la quête indiquée pour débloquer cet avion et le personnaliser.</p>';
     return;
   }
   const hexOf = (n) => `#${n.toString(16).padStart(6, '0')}`;
-  const colorRow = (key, label, orig) => {
-    const cur = L[key] || orig;
-    return `<h4>${label}</h4><div class="hg-sw" data-color="${key}">`
-      + (orig && key !== 'tips' && key !== 'smoke' && key !== 'emblemColor' ? `<button class="orig${L[key] ? '' : ' on'}" data-v="">D'origine</button>` : '')
-      + SWATCHES.map((c) => `<button style="background:${c}" class="${L[key] === c ? 'on' : ''}" data-v="${c}" title="${c}"></button>`).join('')
-      + `<input type="color" value="${cur}" title="Autre couleur"></div>`;
-  };
-  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${L[key] === k ? 'on' : ''}" data-v="${k}">${n}</button>`).join('')}</div>`;
-  let html = '';
+  const tag = (key) => (isOwned(key) ? '' : `<em class="price">${PRICE_LABEL(priceOf(key))}</em>`);
+  const colorRow = (key, label, orig) => `<h4>${label}</h4><div class="hg-sw" data-color="${key}">`
+    + (['body', 'accent', 'stripe'].includes(key) ? `<button class="orig${view[key] ? '' : ' on'}" data-v="">D'origine</button>` : '')
+    + SWATCHES.map((c) => `<button style="background:${c}" class="${view[key] === c ? 'on' : ''}${isOwned(`color:${c}`) ? '' : ' lock'}" data-v="${c}" title="${isOwned(`color:${c}`) ? c : `${c} · ${PRICE_LABEL(priceOf(`color:${c}`))}`}"></button>`).join('')
+    + (isOwned('custom-color') ? `<input type="color" value="${view[key] || orig}" title="Couleur sur mesure">` : `<button class="orig custom" title="Débloque toutes les couleurs">🎨 Sur mesure ${tag('custom-color')}</button>`)
+    + '</div>';
+  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${view[key] === k ? 'on' : ''}" data-v="${k}" data-n="${n}">${n}${tag(`${key}:${k}`)}</button>`).join('')}</div>`;
+  let html = `<p class="sub shop-note">Chaque élément s'achète une fois et sert ensuite sur tous tes avions. Clique pour l'essayer.</p>`;
   if (hg.tab === 'couleurs') {
-    html = colorRow('body', 'Couleur principale', hexOf(def.color)) + colorRow('accent', 'Couleur secondaire', hexOf(def.accent))
+    html += colorRow('body', 'Couleur principale', hexOf(def.color)) + colorRow('accent', 'Couleur secondaire', hexOf(def.accent))
       + colorRow('stripe', 'Couleur des filets', hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', 'Bouts d\'hélice', L.tips);
   } else if (hg.tab === 'motifs') {
-    html = chips('pattern', PATTERNS, 'Motif du fuselage') + chips('wings', WINGS, 'Ailes') + chips('finish', FINISHES, 'Finition de la peinture')
-      + `<h4>Nez</h4><div class="hg-chips"><button id="hg-teeth" class="${L.sharkTeeth ? 'on' : ''}">🦈 Dents de requin</button></div>`;
+    html += chips('pattern', PATTERNS, 'Motif du fuselage') + chips('wings', WINGS, 'Ailes') + chips('finish', FINISHES, 'Finition de la peinture')
+      + `<h4>Nez</h4><div class="hg-chips"><button id="hg-teeth" class="${view.sharkTeeth ? 'on' : ''}">🦈 Dents de requin${tag('teeth')}</button></div>`;
   } else if (hg.tab === 'deco') {
-    html = `<h4>Immatriculation (7 caractères max)</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${L.reg}">`
+    html += `<h4>Immatriculation (7 caractères max) ${tag('reg')}</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${view.reg}">`
       + chips('emblem', EMBLEMS, 'Emblème sur la dérive') + colorRow('emblemColor', 'Couleur de l\'emblème', L.emblemColor)
-      + (L.emblem === 'numero' ? `<h4>Numéro de course</h4><input type="number" id="hg-num" min="0" max="99" value="${L.number}">` : '');
+      + (view.emblem === 'numero' ? `<h4>Numéro de course</h4><input type="number" id="hg-num" min="0" max="99" value="${view.number}">` : '');
   } else {
-    html = colorRow('smoke', 'Couleur du fumigène', L.smoke)
-      + `<p class="sub">En vol, appuie sur ${kbd('smoke')} pour allumer ou couper le fumigène et dessiner dans le ciel.</p>`;
+    html += isOwned('smoke')
+      ? colorRow('smoke', 'Couleur du fumigène', L.smoke) + `<p class="sub">En vol, appuie sur ${kbd('smoke')} pour allumer ou couper le fumigène et dessiner dans le ciel.</p>`
+      : `<h4>Fumigène de voltige</h4><p class="sub">Dessine dans le ciel avec une traînée de fumée colorée (touche ${kbd('smoke')} en vol).</p>
+         <div class="hg-chips"><button id="hg-smoke">💨 Installer le fumigène${tag('smoke')}</button></div>`;
   }
   body.innerHTML = html;
   for (const row of body.querySelectorAll('[data-color]')) {
     const key = row.dataset.color;
-    for (const b of row.querySelectorAll('button')) b.onclick = () => setLivery({ [key]: b.dataset.v || null });
+    for (const b of row.querySelectorAll('button:not(.custom)')) b.onclick = () => choose({ [key]: b.dataset.v || null }, `Couleur ${b.dataset.v}`);
+    for (const b of row.querySelectorAll('.custom')) b.onclick = () => { hg.pending = { patch: {}, keys: ['custom-color'], label: 'Couleurs sur mesure', price: priceOf('custom-color') }; renderHangarUI(); };
     const inp = row.querySelector('input');
+    if (!inp) continue;
     inp.oninput = () => {
+      save.liveries ||= {};
       save.liveries[hg.type] = cleanLivery({ ...liveryOf(hg.type), [key]: inp.value });
       persist();
       clearTimeout(hg.timer);
@@ -888,29 +943,35 @@ function renderHangarUI() {
     };
     inp.onchange = () => renderHangarUI();
   }
-  for (const row of body.querySelectorAll('[data-chip]')) for (const b of row.querySelectorAll('button')) b.onclick = () => setLivery({ [row.dataset.chip]: b.dataset.v });
-  if ($('hg-teeth')) $('hg-teeth').onclick = () => setLivery({ sharkTeeth: !L.sharkTeeth });
-  if ($('hg-reg')) $('hg-reg').onchange = () => setLivery({ reg: $('hg-reg').value });
-  if ($('hg-num')) $('hg-num').onchange = () => setLivery({ number: Math.round(Number($('hg-num').value)) || 0 });
+  for (const row of body.querySelectorAll('[data-chip]')) for (const b of row.querySelectorAll('button')) b.onclick = () => choose({ [row.dataset.chip]: b.dataset.v }, b.dataset.n);
+  if ($('hg-teeth')) $('hg-teeth').onclick = () => choose({ sharkTeeth: !view.sharkTeeth }, 'Dents de requin');
+  if ($('hg-reg')) $('hg-reg').onchange = () => choose({ reg: $('hg-reg').value }, 'Immatriculation personnalisée');
+  if ($('hg-num')) $('hg-num').onchange = () => choose({ number: Math.round(Number($('hg-num').value)) || 0 }, 'Numéro de course');
+  if ($('hg-smoke')) $('hg-smoke').onclick = () => { hg.pending = { patch: {}, keys: ['smoke'], label: 'Fumigène de voltige', price: priceOf('smoke') }; renderHangarUI(); };
 }
 
 for (const b of document.querySelectorAll('[data-hg]')) b.onclick = () => { hg.tab = b.dataset.hg; renderHangarUI(); };
 const cycleAircraft = (d) => {
   const i = AIRCRAFT.findIndex((a) => a.id === hg.type);
   hg.type = AIRCRAFT[(i + d + AIRCRAFT.length) % AIRCRAFT.length].id;
+  hg.pending = null;
   hangar.setPlane(hg.type, liveryOf(hg.type));
   renderHangarUI();
 };
 $('hg-prev').onclick = () => cycleAircraft(-1);
 $('hg-next').onclick = () => cycleAircraft(1);
-$('hg-fly').onclick = () => exitHangar(true);
-$('hg-exit').onclick = () => exitHangar(false);
-$('hg-reset').onclick = () => { delete save.liveries[hg.type]; persist(); hangar.setPlane(hg.type, liveryOf(hg.type), true); renderHangarUI(); };
+$('hg-fly').onclick = () => { hg.pending = null; exitHangar(true); };
+$('hg-exit').onclick = () => { hg.pending = null; exitHangar(false); };
+$('hg-reset').onclick = () => { if (save.liveries) delete save.liveries[hg.type]; hg.pending = null; persist(); hangar.setPlane(hg.type, liveryOf(hg.type), true); renderHangarUI(); };
+// au hasard : seulement parmi ce que le joueur possède déjà
 $('hg-random').onclick = () => {
   const r = (list) => list[Math.floor(Math.random() * list.length)];
+  const colors = SWATCHES.filter((c) => isOwned(`color:${c}`));
+  const opts = (key, list) => list.map(([k]) => k).filter((k) => isOwned(`${key}:${k}`));
   setLivery({
-    body: r(SWATCHES), accent: r(SWATCHES), stripe: r(SWATCHES), tips: r(SWATCHES), pattern: r(PATTERNS)[0], wings: r(WINGS)[0],
-    finish: r(FINISHES)[0], emblem: r(EMBLEMS)[0], emblemColor: r(SWATCHES), number: Math.floor(Math.random() * 100), sharkTeeth: Math.random() < 0.25,
+    body: r(colors), accent: r(colors), stripe: r(colors), tips: r(colors), pattern: r(opts('pattern', PATTERNS)), wings: r(opts('wings', WINGS)),
+    finish: r(opts('finish', FINISHES)), emblem: r(opts('emblem', EMBLEMS)), emblemColor: r(colors), number: Math.floor(Math.random() * 100),
+    sharkTeeth: isOwned('teeth') && Math.random() < 0.3,
   });
 };
 

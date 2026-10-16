@@ -328,3 +328,15 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 .rk-head b { flex: 1; }
 .rk-head small { color: var(--dim); }
 #board-list li { flex-wrap: wrap; }
+
+/* boutique du hangar */
+.hg-money { color: #ffd23f; margin-left: 6px; white-space: nowrap; }
+.hg-sw button.lock { opacity: 0.55; position: relative; }
+.hg-sw button.lock::after { content: '🔒'; position: absolute; inset: 0; font-size: 10px; display: grid; place-items: center; }
+.hg-chips .price, h4 .price { font-style: normal; font-size: 0.8em; margin-left: 5px; padding: 1px 5px; border-radius: 6px; background: rgba(255,210,63,0.18); color: #ffd23f; }
+.hg-chips button.on .price { background: rgba(0,0,0,0.2); color: #1a1a1a; }
+#hg-buy { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-radius: 10px; background: rgba(255,210,63,0.12); border: 1px solid rgba(255,210,63,0.4); }
+#hg-buy > div { flex: 1; font-size: 0.9em; }
+#hg-buy small { color: #ffb4a8; }
+#hg-buy button { padding: 7px 10px; font-size: 0.85em; }
+.shop-note { margin: 0 0 4px; font-size: 0.82em; }

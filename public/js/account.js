@@ -115,6 +115,8 @@ export function mergeSaves(local, remote) {
     ...remote,
     completed: union(remote.completed, local.completed),
     visited: union(remote.visited, local.visited),
+    owned: union(remote.owned, local.owned), // achats du hangar
+    liveries: { ...(local.liveries || {}), ...(remote.liveries || {}) },
     money: Math.max(remote.money || 0, local.money || 0),
     xp: Math.max(remote.xp || 0, local.xp || 0),
   };
