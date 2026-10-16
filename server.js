@@ -62,6 +62,7 @@ wss.on('connection', (ws) => {
   players.set(id, player);
   ws.send(JSON.stringify({ t: 'welcome', id, chat: chatHistory }));
   const sent = []; // horodatage des derniers messages (anti-spam)
+  const recentText = []; // derniers messages du joueur (mot envoyé lettre par lettre)
 
   ws.on('message', (raw) => {
     let msg;
@@ -81,9 +82,14 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ t: 'chat-info', text: 'Doucement ! Attends un peu avant de réécrire.' }));
         return;
       }
-      const text = cleanChat(msg.text);
-      if (!text) return;
+      const text = cleanChat(msg.text, recentText);
+      if (!text) {
+        if (typeof msg.text === 'string' && msg.text.trim()) ws.send(JSON.stringify({ t: 'chat-info', text: 'Message bloqué : langage interdit.' }));
+        return;
+      }
       sent.push(now);
+      recentText.push(text);
+      if (recentText.length > 5) recentText.shift();
       const line = { id, name: player.name, text, ts: now };
       chatHistory.push(line);
       if (chatHistory.length > 30) chatHistory.shift();
