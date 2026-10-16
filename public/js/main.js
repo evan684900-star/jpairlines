@@ -18,6 +18,7 @@ import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
+import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton } from './account.js';
 
 const $ = (id) => document.getElementById(id);
@@ -75,13 +76,13 @@ function updatePrompt() {
     if (q) lines.push(q);
     if (atAirportStopped() && plane.fuel < plane.S.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
       lines.push(canRefuel()
-        ? `⛽ Maintiens <kbd>K</kbd> pour faire le plein : ${Math.round(plane.fuel)} / ${plane.S.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
-        : '⛽ Coupe le moteur (<kbd>E</kbd>) pour faire le plein');
+        ? `⛽ Maintiens ${kbd('refuel')} pour faire le plein : ${Math.round(plane.fuel)} / ${plane.S.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
+        : `⛽ Coupe le moteur (${kbd('engine')}) pour faire le plein`);
     }
     if (!lines.length && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
-      lines.push('Appuie sur <kbd>E</kbd> pour démarrer le moteur · <kbd>H</kbd> commandes');
+      lines.push(`Appuie sur ${kbd('engine')} pour démarrer le moteur · ${kbd('help')} commandes`);
     } else if (!lines.length && plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
-      lines.push('Le frein de parking est serré : appuie sur <kbd>P</kbd>');
+      lines.push(`Le frein de parking est serré : appuie sur ${kbd('parking')}`);
     }
   }
   const html = lines.join('<br>');
@@ -139,8 +140,19 @@ function closeOverlays() {
 
 addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
+  // choix d'une nouvelle touche dans l'onglet « Touches »
+  if (capturing) {
+    e.preventDefault();
+    if (k !== 'escape') {
+      const taken = bindKey(capturing, k);
+      if (taken.length) toast(`${keyName(k)} retirée de : ${taken.join(', ')}`);
+    }
+    capturing = null;
+    renderKeys();
+    return;
+  }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-  if (k.startsWith('arrow') || k === ' ' || k === 'enter') e.preventDefault();
+  if (k.startsWith('arrow') || k === ' ' || k === 'enter' || k === 'tab') e.preventDefault();
   keys.add(k);
   if (e.repeat || !started) return;
   if (k === 'escape') {
@@ -148,24 +160,25 @@ addEventListener('keydown', (e) => {
     else openPause();
     return;
   }
-  if (k === 'm') {
+  const is = (id) => isKey(id, k);
+  if (is('map')) {
     const nowHidden = $('bigmap').classList.toggle('hidden');
     if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); }
   }
-  if (k === 'j' && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
-  if (k === 'h') $('help').classList.toggle('hidden');
+  if (is('journal') && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
+  if (is('help')) $('help').classList.toggle('hidden');
   if (paused) return;
-  if (k === 'c') { rig.next(); toast(`Caméra : ${rig.modeName}`); }
-  if (k === 'r') respawn();
-  if (k === 'enter' && quests?.canOpenBoard()) quests.openBoard();
-  if (k === 'x') quests?.requestDrop();
+  if (is('camera')) { rig.next(); toast(`Caméra : ${rig.modeName}`); }
+  if (is('respawn')) respawn();
+  if (is('board') && quests?.canOpenBoard()) quests.openBoard();
+  if (is('drop')) quests?.requestDrop();
   if (plane.crashed) return;
-  if (k === 'e') plane.toggleEngine();
-  if (k === 'f') plane.setFlaps(1);
-  if (k === 'v') plane.setFlaps(-1);
-  if (k === 'g') plane.toggleGear();
-  if (k === 'p') plane.toggleParking();
-  if (k === 'l') plane.toggleLights();
+  if (is('engine')) plane.toggleEngine();
+  if (is('flapsDown')) plane.setFlaps(1);
+  if (is('flapsUp')) plane.setFlaps(-1);
+  if (is('gear')) plane.toggleGear();
+  if (is('parking')) plane.toggleParking();
+  if (is('lights')) plane.toggleLights();
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -182,17 +195,17 @@ canvas.addEventListener('wheel', (e) => { rig.dist = THREE.MathUtils.clamp(rig.d
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
-  const has = (...ks) => ks.some((k) => keys.has(k));
-  let pitch = (has('arrowdown') ? 1 : 0) - (has('arrowup') ? 1 : 0);
+  const on = (id) => (keysFor(id).some((k) => keys.has(k)) ? 1 : 0); // touches choisies par le joueur
+  let pitch = on('pitchUp') - on('pitchDown');
   if (settings.invertPitch) pitch = -pitch;
   return {
     pitch,
-    roll: (has('arrowright') ? 1 : 0) - (has('arrowleft') ? 1 : 0),
-    yaw: (has('d') ? 1 : 0) - (has('q', 'a') ? 1 : 0),
-    throttle: (has('z', 'w', 'shift') ? 1 : 0) - (has('s', 'control') ? 1 : 0),
-    brake: has(' '),
-    trim: (has('t') ? 1 : 0) - (has('b') ? 1 : 0),
-    refuel: has('k'),
+    roll: on('rollRight') - on('rollLeft'),
+    yaw: on('yawRight') - on('yawLeft'),
+    throttle: on('throttleUp') - on('throttleDown'),
+    brake: !!on('brake'),
+    trim: on('trimUp') - on('trimDown'),
+    refuel: !!on('refuel'),
   };
 }
 
@@ -275,6 +288,36 @@ for (const b of document.querySelectorAll('.tabs .tab')) {
 }
 $('tab-help').innerHTML = $('help-template').innerHTML;
 document.querySelector('#help .help-content').innerHTML = $('help-template').innerHTML;
+
+// ================= Touches modifiables =================
+let capturing = null; // action en attente d'une nouvelle touche
+function helpTable() {
+  let html = '';
+  for (const a of ACTIONS) {
+    if (a.group) { html += `<tr><th colspan="2">${a.group}</th></tr>`; continue; }
+    const ks = keysFor(a.id).map((k) => `<kbd>${keyName(k)}</kbd>`).join(' · ') || '—';
+    html += `<tr><td>${ks}</td><td>${a.label}</td></tr>`;
+  }
+  return html + '<tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr><tr><td>molette · clic-glisser</td><td>Zoom · tourner autour de l\'avion</td></tr>';
+}
+function renderKeys() {
+  for (const t of document.querySelectorAll('.keys-dyn')) t.innerHTML = helpTable();
+  const box = $('keys-list');
+  box.innerHTML = '';
+  for (const a of ACTIONS) {
+    if (a.group) { const h = document.createElement('h3'); h.textContent = a.group; box.appendChild(h); continue; }
+    const row = document.createElement('div');
+    row.className = 'keyrow';
+    const chips = keysFor(a.id).map((k) => `<button class="keychip" data-k="${encodeURIComponent(k)}" title="Retirer cette touche">${keyName(k)} <i>×</i></button>`).join('');
+    const wait = capturing === a.id;
+    row.innerHTML = `<span>${a.label}</span><div>${chips}<button class="keyadd${wait ? ' wait' : ''}">${wait ? 'Appuie sur une touche… (Échap : annuler)' : '+ Ajouter'}</button></div>`;
+    for (const c of row.querySelectorAll('.keychip')) c.onclick = () => { unbindKey(a.id, decodeURIComponent(c.dataset.k)); renderKeys(); };
+    row.querySelector('.keyadd').onclick = (e) => { e.currentTarget.blur(); capturing = capturing === a.id ? null : a.id; renderKeys(); };
+    box.appendChild(row);
+  }
+}
+$('keys-reset').onclick = () => { resetKeys(); capturing = null; renderKeys(); toast('Touches par défaut rétablies'); };
+renderKeys();
 document.querySelector('#help .close-help').onclick = () => $('help').classList.add('hidden');
 $('open-help').onclick = () => $('help').classList.remove('hidden');
 buildSettingsForm($('settings-form'), applySettings);

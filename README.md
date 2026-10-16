@@ -113,6 +113,7 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
 | Effets visuels | ombres, post-traitement, bloom, SSAO, rayons et reflets du soleil, aberration chromatique, tremblements, particules |
 | Heure | fixe, cycle jour/nuit de 24 min (le même pour tous) ou heure de l'ordinateur |
 | Météo | changeante ou fixe |
+| Touches | toutes modifiables (Pause → Touches), plusieurs touches par action |
 | Compteur FPS, volume général, couper le son | aussi le bouton haut-parleur du HUD |
 | Volume par catégorie (0–150 %) | moteur, vent, pluie, tonnerre, train/volets, alarmes, impacts, bips |
 

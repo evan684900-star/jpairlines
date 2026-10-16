@@ -143,6 +143,7 @@
         <button data-tab="tab-settings" class="tab active">Paramètres</button>
         <button data-tab="tab-hangar" class="tab">Hangar</button>
         <button data-tab="tab-travel" class="tab">Aéroports</button>
+        <button data-tab="tab-keys" class="tab">Touches</button>
         <button data-tab="tab-help" class="tab">Commandes</button>
       </div>
       <div id="tab-settings" class="tab-body"><div id="settings-form"></div>
@@ -156,6 +157,11 @@
         <p class="sub">Réapparais dans un aéroport où tu t'es déjà posé.</p>
         <ul id="airport-list"></ul>
       </div>
+      <div id="tab-keys" class="tab-body hidden">
+        <p class="sub">Clique sur « + Ajouter » puis appuie sur la touche voulue. Clique sur une touche pour la retirer. Une touche déjà utilisée ailleurs y est retirée automatiquement. <kbd>Échap</kbd> reste la touche de pause.</p>
+        <div id="keys-list"></div>
+        <p><button id="keys-reset" class="secondary">Rétablir les touches par défaut</button></p>
+      </div>
       <div id="tab-help" class="tab-body hidden"></div>
       <button id="resume"><i data-icon="play"></i> Reprendre</button>
     </div>
@@ -164,29 +170,8 @@
   <div id="help" class="overlay hidden"><div class="panel glass wide"><h2>Commandes</h2><div class="help-content"></div><button class="close-help">Fermer</button></div></div>
 
   <template id="help-template">
-    <table class="keys">
-      <tr><th colspan="2">Pilotage</th></tr>
-      <tr><td><kbd>Z</kbd>/<kbd>W</kbd> · <kbd>S</kbd></td><td>Plus / moins de gaz</td></tr>
-      <tr><td><kbd>↓</kbd> · <kbd>↑</kbd></td><td>Cabrer (monter) · piquer (descendre)</td></tr>
-      <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>S'incliner (ailerons)</td></tr>
-      <tr><td><kbd>Q</kbd>/<kbd>A</kbd> · <kbd>D</kbd></td><td>Palonnier / direction au sol</td></tr>
-      <tr><td><kbd>T</kbd> · <kbd>B</kbd></td><td>Trim nez haut · nez bas</td></tr>
-      <tr><th colspan="2">Systèmes</th></tr>
-      <tr><td><kbd>E</kbd></td><td>Démarrer / couper le moteur</td></tr>
-      <tr><td><kbd>F</kbd> · <kbd>V</kbd></td><td>Sortir / rentrer les volets (crans selon l'avion)</td></tr>
-      <tr><td><kbd>G</kbd></td><td>Sortir / rentrer le train d'atterrissage</td></tr>
-      <tr><td><kbd>Espace</kbd></td><td>Freins (maintenir)</td></tr>
-      <tr><td><kbd>P</kbd></td><td>Frein de parking</td></tr>
-      <tr><td><kbd>L</kbd></td><td>Feux de navigation</td></tr>
-      <tr><td><kbd>K</kbd> (maintenir)</td><td>Faire le plein : arrêté dans un aéroport, moteur coupé (1 ₣ le litre)</td></tr>
-      <tr><th colspan="2">Jeu</th></tr>
-      <tr><td><kbd>Entrée</kbd></td><td>Tableau des missions (près d'une balise « ! » ou arrêté dans un aéroport)</td></tr>
-      <tr><td><kbd>X</kbd></td><td>Larguer un colis (missions de largage)</td></tr>
-      <tr><td><kbd>J</kbd> · <kbd>M</kbd></td><td>Journal de quêtes · grande carte</td></tr>
-      <tr><td><kbd>C</kbd> · molette · clic-glisser</td><td>Caméra (poursuite, cockpit, orbite libre, spectateur) · zoom · tourner autour de l'avion</td></tr>
-      <tr><td><kbd>R</kbd></td><td>Réapparaître au dernier aéroport</td></tr>
-      <tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr>
-    </table>
+    <table class="keys keys-dyn"></table>
+    <p class="sub">Toutes les touches se changent dans Pause → <b>Touches</b>.</p>
     <p><b>Décollage :</b> <kbd>E</kbd> moteur, <kbd>P</kbd> desserrer le frein, volets 10° (<kbd>F</kbd>), plein gaz, garder l'axe au palonnier ; vers 100 km/h tirer doucement (<kbd>↓</kbd>) pour lever la roue avant, l'avion décolle tout seul. Monter vers 130 km/h, puis rentrer le train (<kbd>G</kbd>) et les volets (<kbd>V</kbd>).</p>
     <p><b>Atterrissage :</b> réduire les gaz, train sorti sous 210 km/h, volets sous 165 km/h, approche à ~120 km/h en descendant de 3 à 4 m/s, ailes à plat. Juste au-dessus de la piste, cabrer un peu (arrondi) pour toucher doucement (moins de 4 m/s en normal), puis freiner.</p>
     <p><b>Physique :</b> l'avion vole vraiment (portance, traînée, inertie) : il tourne en s'inclinant, décroche vers 90 km/h (75 km/h volets sortis), monte moins bien en altitude, et accélère en piqué. Le trim (<kbd>T</kbd>/<kbd>B</kbd>) règle la vitesse à laquelle il vole « tout seul ».</p>

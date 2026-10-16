@@ -9,6 +9,8 @@ import { CATEGORIES, RANKS, nextTo } from './kit.js';
 import { makeLabel } from '../objects.js';
 import { TEX } from '../render/textures.js';
 import { AIRCRAFT } from '../aircraft.js';
+import { kbd, keysFor, keyName } from '../keybinds.js';
+const keyName0 = (id) => (keysFor(id).length ? keyName(keysFor(id)[0]) : '—');
 
 const $ = (id) => document.getElementById(id);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));
@@ -382,7 +384,7 @@ export class QuestSystem {
       case 'land': return `Pose-toi sur la piste de ${airportById(st.airport).name} (cadre vert) et arrête-toi complètement`;
       case 'touch': return `Toucher-décoller à ${airportById(st.airport).name} (touche la piste puis remets les gaz)`;
       case 'reach': return `Rejoins : ${st.label}${st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : ''}${st.minAgl ? ` (au moins ${st.minAgl} m au-dessus du sol)` : ''}`;
-      case 'drop': return `Largue le colis (X) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''} · vise avec la croix blanche`;
+      case 'drop': return `Largue le colis (${keyName0('drop')}) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''} · vise avec la croix blanche`;
       case 'altitude': return `Monte au-dessus de ${st.min} m`;
       case 'speed': return `Atteins ${kmh(st.min)}`;
       case 'low': return `Vole à moins de ${st.maxAgl} m du sol pendant ${st.duration} s${st.label ? ` (${st.label})` : ''}`;
@@ -504,7 +506,7 @@ export class QuestSystem {
           const here = onRunway(pos.x, pos.z)?.id === st.airport;
           if (here && A.needAirborne) hint = 'Décolle d\'abord, puis reviens te poser';
           else if (here) {
-            hint = `Arrête-toi : gaz à zéro (S) et freins (Espace) · ${kmh} km/h`;
+            hint = `Arrête-toi : gaz à zéro (${keyName0('throttleDown')}) et freins (${keyName0('brake')}) · ${kmh} km/h`;
             progress = Math.min(1, Math.max(0, 1 - (plane.speed - 3) / 25));
           } else if (hd < airportById(st.airport).reach) hint = 'Tu es hors de la piste : roule jusqu\'au cadre vert';
         }
@@ -653,9 +655,9 @@ export class QuestSystem {
     const { airport, cluster } = this.boardContext();
     if (cluster) {
       const n = cluster.available;
-      return `<kbd>Entrée</kbd> ${n === 1 ? `<b>${esc(cluster.quests.find((q) => this.isAvailable(q)).title)}</b>` : `${n} quêtes disponibles ici`}${airport ? ' + missions de transport' : ''}`;
+      return `${kbd('board')} ${n === 1 ? `<b>${esc(cluster.quests.find((q) => this.isAvailable(q)).title)}</b>` : `${n} quêtes disponibles ici`}${airport ? ' + missions de transport' : ''}`;
     }
-    if (airport) return `<kbd>Entrée</kbd> tableau des missions de ${esc(airport.name)}`;
+    if (airport) return `${kbd('board')} tableau des missions de ${esc(airport.name)}`;
     return '';
   }
 
