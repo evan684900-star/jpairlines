@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, AIRPORTS, LANDMARKS, CITIES, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
+  WORLD, AIRPORTS, LANDMARKS, CITIES, TOWNS, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
   terrainHeight, groundHeight, rng, shipPosition, balloonPosition, turbinePositions,
 } from './world.js';
 import { createPlaneMesh } from './plane.js';
@@ -496,6 +496,7 @@ export function buildWorldObjects(scene) {
   const r = rng(4242);
   for (const a of AIRPORTS) buildAirport(scene, a, r, anim);
   buildCities(scene);
+  for (const t of TOWNS) addLabel(scene, t.name, t.x, terrainHeight(t.x, t.z) + 160, t.z, 9000, { color: '#f4ead2', size: 0.022 });
   for (const l of LANDMARKS) buildLandmark(scene, l, anim);
   buildShips(scene, anim);
   buildBalloons(scene, anim);

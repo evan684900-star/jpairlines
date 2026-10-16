@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  WORLD, HALF, AIRPORTS, LANDMARKS, CITIES, terrainHeight, groundHeight, airportById,
+  WORLD, HALF, AIRPORTS, LANDMARKS, CITIES, TOWNS, terrainHeight, groundHeight, airportById,
 } from './world.js';
 import { Plane, createPlaneMesh, animatePlaneMesh, DIFFICULTY } from './plane.js';
 import { AIRCRAFT, aircraftById, aircraftIndex, unlockedAircraft } from './aircraft.js';
@@ -92,7 +92,7 @@ function updatePrompt() {
 
 function nearestPlaceName(x, z) {
   let best = null, bd = Infinity;
-  for (const p of [...AIRPORTS, ...LANDMARKS, ...CITIES]) {
+  for (const p of [...AIRPORTS, ...LANDMARKS, ...CITIES, ...TOWNS]) {
     const d = Math.hypot(p.x - x, p.z - z);
     if (d < bd) { bd = d; best = p; }
   }
@@ -408,6 +408,7 @@ function drawMap(cv, cx, cz, span, full) {
   if (full) {
     for (const l of LANDMARKS) text('◆ ' + l.name, toX(l.x) - 5, toY(l.z) + 4, '#ffe9b0');
     for (const c of CITIES) text(c.name, toX(c.x) - 20, toY(c.z) - 8, '#ffffff');
+    if (span < 45000) for (const t of TOWNS) text('• ' + t.name, toX(t.x) - 4, toY(t.z) + 4, '#e8dcc0');
   }
   quests?.drawMap(ctx, toX, toY, full, span, text);
   for (const r of remotes.values()) {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD, AIRPORTS, CITIES, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
+import { WORLD, AIRPORTS, CITIES, TOWNS, climate, snowLine, fbm, rng, groundHeight, terrainHeight, runwayLocal } from './world.js';
 import { injectShared } from './render/shared.js';
 import { variantsOf, TREE_STRIDE } from './render/trees.js';
 import { WALL_COLORS, ROOF_COLORS } from './render/buildings.js';
@@ -81,8 +81,24 @@ function inExcludedZone(x, z) {
     if (Math.abs(u) < a.width / 2 + a.pad + 40 && Math.abs(v) < a.length / 2 + 300) return true;
   }
   for (const c of CITIES) if (Math.hypot(x - c.x, z - c.z) < c.radius) return true;
+  for (const t of TOWNS) if (Math.hypot(x - t.x, z - t.z) < t.radius * 0.85) return true;
   return false;
 }
+
+// maisons d'un village (positions fixes, tirées une fois pour toutes) : rues en damier autour de la place
+const TOWN_HOUSES = TOWNS.map((t, i) => {
+  const r = rng(900 + i), out = [];
+  const grid = 34, c = Math.cos(t.angle), s = Math.sin(t.angle);
+  for (let k = 0; k < t.n * 4 && out.length < t.n; k++) {
+    const gx = Math.round(((r() - 0.5) * 2 * t.radius) / grid) * grid + (r() - 0.5) * 8;
+    const gz = Math.round(((r() - 0.5) * 2 * t.radius) / grid) * grid + (r() - 0.5) * 8;
+    const d = Math.hypot(gx, gz) / t.radius;
+    if (d > 1 || r() > 1.15 - d * 0.9 || (Math.abs(gx) < 14 && Math.abs(gz) < 14)) continue; // la place reste libre
+    const x = t.x + gx * c - gz * s, z = t.z + gx * s + gz * c;
+    out.push({ x, z, rot: -t.angle + Math.floor(r() * 4) * Math.PI / 2, type: Math.floor(r() * 6), k: 0.9 + r() * 0.25, wall: Math.floor(r() * 64), roof: Math.floor(r() * 64) });
+  }
+  return out;
+});
 
 // Campagne (hors forêts) : arbres isolés, buissons, rochers, palmiers des côtes, cactus du désert
 function chooseSparse(x, z, h, r) {
@@ -161,10 +177,10 @@ function buildChunkDecor(ci, cj, opts, libs) {
   }
 
   // villages
-  const vCount = Math.round(160 * Math.min(density, 1.5));
+  const vCount = Math.round(230 * Math.min(density, 1.5));
   for (let k = 0; k < vCount; k++) {
     const x = x0 + r() * CH, z = z0 + r() * CH;
-    if (fbm(x / 2600, z / 2600, 2, 300) < 0.66) continue;
+    if (fbm(x / 2600, z / 2600, 2, 300) < 0.62) continue;
     const h = terrainHeight(x, z);
     if (h < 4 || h > 1200) continue;
     if (Math.abs(terrainHeight(x + 15, z) - h) + Math.abs(terrainHeight(x, z + 15) - h) > 4) continue;
@@ -174,6 +190,24 @@ function buildChunkDecor(ci, cj, opts, libs) {
     const k2 = 0.9 + r() * 0.25;
     m.compose(p.set(x, groundHeight(x, z) - 0.3, z), q.setFromAxisAngle(up, Math.floor(r() * 4) * Math.PI / 2 + (fbm(x / 400, z / 400, 1, 9) - 0.5)), s.set(k2, k2, k2));
     houses.push({ m: m.clone(), type, wall: WALL_COLORS[Math.floor(r() * WALL_COLORS.length)], roof: ROOF_COLORS[Math.floor(r() * ROOF_COLORS.length)] });
+  }
+
+  // villages nommés : toutes leurs maisons qui tombent dans ce morceau de terrain
+  for (const list of TOWN_HOUSES) {
+    for (const hs of list) {
+      if (hs.x < x0 || hs.x >= x0 + CH || hs.z < z0 || hs.z >= z0 + CH) continue;
+      const h = terrainHeight(hs.x, hs.z);
+      if (h < 3 || Math.abs(terrainHeight(hs.x + 12, hs.z) - h) + Math.abs(terrainHeight(hs.x, hs.z + 12) - h) > 6) continue;
+      let onRunway = false;
+      for (const a of AIRPORTS) {
+        if (Math.abs(hs.x - a.x) > a.reach || Math.abs(hs.z - a.z) > a.reach) continue;
+        const { u, v } = runwayLocal(a, hs.x, hs.z);
+        if (Math.abs(u) < a.width / 2 + a.pad + 40 && Math.abs(v) < a.length / 2 + 300) onRunway = true;
+      }
+      if (onRunway) continue;
+      m.compose(p.set(hs.x, groundHeight(hs.x, hs.z) - 0.3, hs.z), q.setFromAxisAngle(up, hs.rot), s.set(hs.k, hs.k, hs.k));
+      houses.push({ m: m.clone(), type: hs.type, wall: WALL_COLORS[hs.wall % WALL_COLORS.length], roof: ROOF_COLORS[hs.roof % ROOF_COLORS.length] });
+    }
   }
 
   data = data.slice(0, n * TREE_STRIDE);

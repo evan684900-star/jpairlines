@@ -286,6 +286,18 @@ function shipRoute(r, x, z) {
   while (radius > 400 && !ok(radius)) radius *= 0.7;
   return radius > 400 ? { x: c.x, z: c.z, radius, speed: 6 + r() * 6, phase: r() * Math.PI * 2, dir: r() < 0.5 ? 1 : -1 } : null;
 }
+// Villages : maisons groupées le long de rues, près des aéroports sans ville et dans les campagnes
+// (les maisons sont posées par decor.js, les noms affichés par objects.js)
+export const TOWNS = [
+  ['Givre-le-Bourg', 'givre'], ['Hameau des Glaces', 'glacier'], ['Ksar des Dunes', 'dunes'], ['Village de Corail', 'corail'],
+  ['Cendreville', 'volcan'], ['Verte-sur-Prés', 'verte'], ['Miroir-les-Bains', 'lac'], ['Falaise-Haute', 'falaises'], ['Port-Palmes', 'palmes'],
+  ['Saint-Aubin', null, [5000, 6000]], ['Les Granges', null, [-9000, 2000]], ['Montrouge', null, [16000, -14000]], ['Beaulieu', null, [-2000, 12000]],
+].map(([name, airport, at], i) => {
+  const near = airport ? pick(airportById(airport), 950, 350) : { x: at[0], z: at[1] };
+  const p = findFlat(near.x, near.z, 1800, 6);
+  return { name, x: p.x, z: p.z, radius: 380 + (i % 3) * 60, n: 55 + (i % 4) * 12, angle: (i * 0.7) % Math.PI };
+});
+
 export const SHIPS = (() => {
   const r = rng(555);
   const out = [];
