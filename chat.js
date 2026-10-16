@@ -8,7 +8,7 @@ const BAD = [
   'ntm', 'fdp', 'pd', 'tg', 'ta gueule', 'bite', 'couille', 'chier', 'abruti', 'debile', 'gogol', 'negre', 'bougnoule',
   'fuck', 'fucking', 'shit', 'bitch', 'asshole', 'dick', 'cunt', 'nigger', 'nigga', 'fag', 'faggot', 'whore', 'slut',
 ];
-const fold = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const fold = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const BAD_RE = new RegExp(`(^|[^\\p{L}\\p{N}])(${BAD.map((w) => w.replace(/ /g, '\\s+')).join('|')})(?=$|[^\\p{L}\\p{N}])`, 'gu');
 
 export function cleanChat(raw) {
