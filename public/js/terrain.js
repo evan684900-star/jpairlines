@@ -231,6 +231,15 @@ export class Terrain {
     while (this.queue.length && performance.now() - t0 < budgetMs) this.build(this.queue.shift());
   }
 
+  // décharge tout le relief (hangar) : il sera reconstruit au retour
+  unload() {
+    for (const ch of this.chunks.values()) { this.scene.remove(ch.mesh); ch.mesh.geometry.dispose(); }
+    this.chunks.clear();
+    this.queue = [];
+    this.center = null;
+    this.version++;
+  }
+
   // construit d'un coup ce qui est autour du joueur (au démarrage / téléportation)
   buildAround(x, z, maxDist = Infinity) {
     this.plan(Math.floor(x / CH), Math.floor(z / CH));

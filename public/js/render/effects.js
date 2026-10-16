@@ -276,6 +276,17 @@ export class Effects {
           this.smoke.emit(_v, _w, { life: 1.4, size: 0.25, grow: 3, color: new THREE.Color(0.55, 0.57, 0.62), alpha: 0.1 + (1 - plane.rpm) * 0.08, drag: 0.8, rise: 0.3 });
         }
       }
+      // fumigène de voltige (touche N), couleur choisie au hangar
+      if (plane.smokeOn && !plane.onGround && !plane.crashed) {
+        this.acc.smokeTrail = (this.acc.smokeTrail || 0) + dt * 55;
+        while (this.acc.smokeTrail > 1) {
+          this.acc.smokeTrail--;
+          this.world(mesh, u.exhaust, _v);
+          _v.addScaledVector(plane.velocity, -Math.random() * dt);
+          _w.set((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0).addScaledVector(plane.velocity, 0.15);
+          this.smoke.emit(_v, _w, { life: 9, size: 1.1, grow: 5, color: plane.smokeColor || new THREE.Color(1, 1, 1), alpha: 0.75, drag: 1.2, rise: 0.15 });
+        }
+      }
       // poussière au roulage (beaucoup plus sur l'herbe et la terre) et souffle de l'hélice
       const wet = plane.onWater; // hydravion sur l'eau : gerbes d'écume au lieu de poussière
       if (plane.onGround && (wet ? plane.speed > 3 : plane.speed > 4 || plane.rpm > 0.5)) {

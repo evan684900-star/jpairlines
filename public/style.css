@@ -273,3 +273,45 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 #chat-form { pointer-events: auto; }
 #chat-input { width: 100%; box-sizing: border-box; }
 @media (max-width: 760px) { #chat { top: 70px; font-size: 12px; width: 60vw; } }
+
+/* ===== hangar 3D ===== */
+#hangar3d { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+#hangar3d > * { pointer-events: auto; }
+.hg-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 12px; }
+.hg-name { text-align: center; min-width: 220px; }
+.hg-name b { display: block; font-size: 1.15em; color: var(--accent); }
+.hg-name small { color: var(--dim); }
+#hg-panel { position: absolute; right: 14px; top: 80px; bottom: 80px; width: min(340px, 92vw); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hg-tabs { display: flex; gap: 4px; }
+.hg-tabs button { flex: 1; padding: 7px 4px; font-size: 0.85em; background: rgba(255,255,255,0.06); color: var(--text); box-shadow: none; }
+.hg-tabs button.active { background: var(--accent); color: #1a1a1a; }
+#hg-body { flex: 1; overflow-y: auto; padding-right: 4px; }
+#hg-body h4 { margin: 10px 0 6px; font-size: 0.9em; color: var(--dim); font-weight: 600; }
+.hg-sw { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.hg-sw button { width: 24px; height: 24px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); box-shadow: none; }
+.hg-sw button.on { border-color: #fff; transform: scale(1.15); }
+.hg-sw input[type=color] { width: 30px; height: 26px; padding: 0; border: none; background: none; cursor: pointer; }
+.hg-sw .orig { width: auto; border-radius: 8px; padding: 0 8px; font-size: 0.75em; background: rgba(255,255,255,0.08); color: var(--text); }
+.hg-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.hg-chips button { padding: 6px 10px; font-size: 0.82em; background: rgba(255,255,255,0.07); color: var(--text); box-shadow: none; }
+.hg-chips button.on { background: var(--accent); color: #1a1a1a; }
+#hg-body input[type=text], #hg-body input[type=number] { width: 100%; box-sizing: border-box; }
+.hg-actions { display: flex; gap: 6px; }
+.hg-actions button { flex: 1; font-size: 0.85em; }
+.hg-bottom { position: absolute; left: 14px; bottom: 14px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.hg-hint { color: #fff; opacity: 0.75; font-size: 0.85em; text-shadow: 0 1px 3px #000; }
+.hg-locked { color: #ffb4a8; font-size: 0.9em; }
+@media (max-width: 760px) { #hg-panel { top: auto; bottom: 64px; height: 42vh; right: 8px; left: 8px; width: auto; } .hg-hint { display: none; } }
+
+/* fondu noir et logo de chargement (avion au-dessus des nuages) */
+#fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; z-index: 60; }
+#fade.on { opacity: 1; pointer-events: auto; }
+#loading { position: fixed; right: 22px; bottom: 22px; z-index: 61; display: flex; flex-direction: column; align-items: center; gap: 6px; color: #dfe7ee; font-size: 13px; letter-spacing: 0.08em; }
+#loading svg { border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); }
+#loading .ld-clouds { animation: ld-scroll 3.2s linear infinite; }
+#loading .ld-clouds.near { animation-duration: 1.6s; }
+#loading .ld-plane { animation: ld-bob 1.4s ease-in-out infinite; transform-origin: 80px 40px; }
+#loading .ld-prop { animation: ld-prop 0.12s linear infinite; transform-origin: 104.8px 40px; }
+@keyframes ld-scroll { from { transform: translateX(0); } to { transform: translateX(-160px); } }
+@keyframes ld-bob { 0%, 100% { transform: translateY(-3px) rotate(-2deg); } 50% { transform: translateY(3px) rotate(2deg); } }
+@keyframes ld-prop { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.2); } }

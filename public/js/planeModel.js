@@ -1,6 +1,7 @@
 // Modèles 3D des avions, construits à partir de leur description (aircraft.js) : nez vers -Z.
 import * as THREE from 'three';
 import { aircraftById } from './aircraft.js';
+import { cleanLivery } from './livery.js';
 
 // Relie des anneaux de points (même nombre de points) en une surface lisse
 // glassOf(i, j, p) (optionnel) : sommets de vitre ; la géométrie a alors 2 groupes (0 = carrosserie, 1 = vitres)
@@ -139,19 +140,28 @@ function rod(a, b, r, mat, flat = 2.2) {
 
 // type : identifiant de l'avion (aircraft.js)
 // opts.color / opts.accent : peinture (sinon celle de l'avion) ; opts.detail : intérieur, pilote, halos
-// opts.landingLight : vrai phare (avion du joueur)
+// opts.landingLight : vrai phare (avion du joueur) ; opts.livery : personnalisation du hangar (livery.js)
 export function createPlaneMesh(type = 'cub', opts = {}) {
   const def = aircraftById(type);
   const MD = def.model;
-  const color = opts.color ?? def.color, accent = opts.accent ?? def.accent;
+  const LV = cleanLivery(opts.livery);
+  const hex = (c) => (c ? parseInt(c.slice(1), 16) : null);
+  const color = hex(LV.body) ?? opts.color ?? def.color, accent = hex(LV.accent) ?? opts.accent ?? def.accent;
   const detail = opts.detail ?? true;
   const g = new THREE.Group();
-  // peinture vernie (vernis = clearcoat), métal brossé, caoutchouc, plexiglas
-  const paintProps = { vertexColors: true, roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 };
+  // peinture : vernie (clearcoat) par défaut, ou finition choisie au hangar
+  const FINISH = {
+    brillant: { roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 },
+    mat: { roughness: 0.82, metalness: 0, clearcoat: 0, clearcoatRoughness: 1 },
+    metal: { roughness: 0.32, metalness: 0.75, clearcoat: 0.6, clearcoatRoughness: 0.15 },
+    chrome: { roughness: 0.07, metalness: 1, clearcoat: 0.3, clearcoatRoughness: 0.05 },
+    nacre: { roughness: 0.25, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, iridescence: 1, iridescenceIOR: 1.35, iridescenceThicknessRange: [200, 600] },
+  }[LV.finish];
+  const paintProps = { vertexColors: true, ...FINISH };
   const paint = new THREE.MeshPhysicalMaterial({ ...paintProps, side: THREE.DoubleSide });
   const paintOut = new THREE.MeshPhysicalMaterial({ ...paintProps, side: THREE.BackSide }); // surfaces fermées vues de l'extérieur
-  const bodyMat = new THREE.MeshPhysicalMaterial({ color, roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 });
-  const accentMat = new THREE.MeshPhysicalMaterial({ color: accent, roughness: 0.36, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.12 });
+  const bodyMat = new THREE.MeshPhysicalMaterial({ color, ...FINISH });
+  const accentMat = new THREE.MeshPhysicalMaterial({ color: accent, ...FINISH });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1b1d21, roughness: 0.55, metalness: 0.2 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xc4cad1, roughness: 0.22, metalness: 1 });
   const chrome = new THREE.MeshStandardMaterial({ color: 0xe8ebee, roughness: 0.08, metalness: 1 });
@@ -162,7 +172,8 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   });
   // habitacle : léger éclairage propre (lumière renvoyée par les vitres et la planche)
   const cabin = new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.85, metalness: 0, emissive: 0x1d2024 });
-  const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(def.acc2 ?? 0x1d3f7a);
+  const BODY = new THREE.Color(color), ACC = new THREE.Color(accent), ACC2 = new THREE.Color(hex(LV.stripe) ?? def.acc2 ?? 0x1d3f7a);
+  const WHITE = new THREE.Color(0xf4f4f0), BLACK = new THREE.Color(0x18191c), MOUTH = new THREE.Color(0x7a0f14);
   const FRAME = new THREE.Color(0x2a2f36);
   const pick = (k) => (k === 'acc' ? ACC : k === 'acc2' ? ACC2 : BODY);
 
@@ -188,12 +199,46 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     const post = gl.posts.some((pz) => Math.abs(z - pz) < 0.04) && ny > gl.sides[0].ny0 + 0.04;
     return (windshield || side) && !post;
   } : null;
+  // motif de peinture du fuselage (z : du nez, négatif, vers la queue ; ny : hauteur relative, -1 en bas, 1 en haut)
+  const zNose = MD.fuse[0][0], zTail = MD.fuse[MD.fuse.length - 1][0], len = zTail - zNose;
+  const paintFuse = (c, z, ny, p) => {
+    const u = (z - zNose) / len; // 0 au nez, 1 à la queue
+    const ang = Math.atan2(p.y, p.x);
+    c.copy(BODY);
+    switch (LV.pattern) {
+      case 'origine': for (const [a, b, k, zMin] of MD.stripes || []) if (ny > a && ny < b && z > zMin) c.copy(pick(k)); break;
+      case 'bande': if (Math.abs(ny + 0.05) < 0.16) c.copy(ACC); else if (Math.abs(ny + 0.05) < 0.22) c.copy(ACC2); break;
+      case 'bicolore': if (ny < -0.08) c.copy(ACC); else if (ny < 0.0) c.copy(ACC2); break;
+      case 'eclair': {
+        const zig = 0.28 * (Math.abs(((u * 7) % 2) - 1) * 2 - 1);
+        if (Math.abs(ny - zig) < 0.1 && u > 0.08) c.copy(ACC);
+        else if (Math.abs(ny - zig) < 0.15 && u > 0.08) c.copy(ACC2);
+        break;
+      }
+      case 'flammes': {
+        const edge = 0.32 + 0.07 * Math.sin(ny * 11) + 0.04 * Math.sin(ny * 23 + 1);
+        if (u < edge - 0.08) c.copy(ACC2); else if (u < edge) c.copy(ACC);
+        break;
+      }
+      case 'damier': if (u > 0.45 && (Math.floor(u * 22) + Math.floor((ang + Math.PI) / (Math.PI / 6))) % 2) c.copy(ACC); break;
+      case 'pointe': if (u < 0.14 || u > 0.86) c.copy(ACC); else if (u < 0.17 || u > 0.83) c.copy(ACC2); break;
+      default: break;
+    }
+    // dents de requin sous le nez : une bouche rouge sombre bordée de dents blanches en triangle
+    if (LV.sharkTeeth && u > 0.02 && u < 0.26 && ny < 0) {
+      const t = (u - 0.02) / 0.24;
+      const open = 0.3 * Math.sin(t * Math.PI), d = Math.abs(ny + 0.42);
+      if (d < open) {
+        const tooth = 1 - Math.abs(((t * 10) % 1) - 0.5) * 2;
+        c.copy(open - d < open * 0.6 * tooth ? WHITE : MOUTH);
+      }
+    }
+  };
   const fuseGeo = loft(rings, (c, i, j, p) => {
     const [z, , h, yc] = keysZ[Math.min(i, keysZ.length - 1)];
     const ny = (p.y - yc) / h;
     if (isGlass && isGlass(i, j, p)) { c.copy(FRAME); return; }
-    c.copy(BODY);
-    for (const [a, b, k, zMin] of MD.stripes || []) if (ny > a && ny < b && z > zMin) c.copy(pick(k));
+    paintFuse(c, z, ny, { x: p.x, y: p.y - yc });
   }, true, isGlass);
   const hidden = new THREE.MeshBasicMaterial({ visible: false });
   const fuse = new THREE.Mesh(fuseGeo, isGlass ? [paintOut, glassMat] : paintOut);
@@ -226,8 +271,18 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   const half = W.xs || [...new Set([W.half, W.half - 0.3, (W.half + W.taperFrom) / 2, W.taperFrom, W.taperFrom / 2, 0].map((v) => Math.round(v * 100) / 100))]
     .filter((v) => v >= 0 && v <= W.half).sort((a, b) => b - a);
   const wingXs = [...half.map((v) => -v), ...half.slice(0, -1).reverse()];
+  const paintWing = (c, p) => {
+    const s = Math.abs(p.x);
+    switch (LV.wings) {
+      case 'uni': c.copy(BODY); break;
+      case 'bouts': c.copy(s > W.half * 0.72 ? ACC : s > W.half * 0.68 ? ACC2 : BODY); break;
+      case 'damier': c.copy(s > W.half * 0.6 && (Math.floor(s / 0.35) + Math.floor((p.z - W.le) / 0.35)) % 2 ? ACC : s > W.half * 0.6 ? WHITE : BODY); break;
+      case 'bandes': { const k = Math.floor((s - W.half * 0.3) / 0.28); c.copy(s > W.half * 0.3 && k < 5 ? (k % 2 ? BLACK : WHITE) : BODY); break; }
+      default: c.copy(s > W.accentFrom ? ACC : BODY);
+    }
+  };
   const wing = new THREE.Mesh(loft(wingXs.map((x) => wingRing(x, Math.abs(x) > W.half - 0.2 ? W.tipThick : W.thick)),
-    (c, i, j, p) => c.copy(Math.abs(p.x) > W.accentFrom ? ACC : BODY)), paint);
+    (c, i, j, p) => paintWing(c, p)), paint);
   g.add(wing);
   if (W.winglets) {
     for (const s of [-1, 1]) {
@@ -292,7 +347,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
 
   // ----- moteurs : hélices (nez ou nacelles d'aile) -----
   const props = [];
-  const tipMat = new THREE.MeshStandardMaterial({ color: 0xf2c21b, roughness: 0.5 });
+  const tipMat = new THREE.MeshStandardMaterial({ color: hex(LV.tips), roughness: 0.5 });
   for (const pc of MD.props || []) {
     const r = pc.r, sp = pc.spinner ?? 1;
     if (pc.nacelle) {
@@ -571,12 +626,40 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     g.add(landingLight, landingLight.target);
   }
 
+  // ----- décalcomanies : immatriculation sur le fuselage, emblème sur la dérive -----
+  const reg = LV.reg || `F-JP${def.id.slice(0, 2).toUpperCase()}`;
+  const zr = zNose + len * 0.66;
+  const fr = MD.fuse.find((k, i) => MD.fuse[i + 1] && zr >= k[0] && zr <= MD.fuse[i + 1][0]) || MD.fuse[0];
+  const hr = fr[2], wr0 = fuseWidthAt(MD.fuse, zr);
+  const regTex = decalTexture('reg', reg, LV, BODY);
+  const regH = Math.max(0.12, hr * 0.55), regW = regH * 4;
+  const decals = [];
+  for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(regW, regH), decalMat(regTex));
+    m.position.set(s * (wr0 + 0.012), fr[3] + hr * 0.05, zr);
+    m.rotation.y = s * Math.PI / 2;
+    g.add(m);
+    decals.push(m);
+  }
+  if (LV.emblem !== 'aucun') {
+    const em = decalTexture('emblem', LV.emblem, LV, BODY);
+    const fy = F.y0 + (F.y1 - F.y0) * 0.45, ft = (fy - F.y0) / (F.y1 - F.y0), fc = lerp(F.root, F.tip, ft), fle = lerp(F.le0, F.le1, ft);
+    const sz = Math.min((F.y1 - F.y0) * 0.55, fc * 0.6);
+    for (const s of [-1, 1]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(sz, sz), decalMat(em));
+      m.position.set(s * (fc * 0.05 + 0.012), fy, fle + fc * 0.36);
+      m.rotation.y = s * Math.PI / 2;
+      g.add(m);
+      decals.push(m);
+    }
+  }
+
   g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial) && !Array.isArray(o.material)) { o.castShadow = true; o.receiveShadow = true; } });
   fuse.castShadow = true;
   const ex = MD.exhaust;
   g.userData = {
     type: def.id, props, fans, flapL, flapR, ailL, ailR, elevator, rudder, legs, lights, strobe, landing, landingLight,
-    fuse, interior, pilot, panel, yokes,
+    fuse, interior, pilot, panel, yokes, decals,
     // points utiles aux effets et à la caméra (repère de l'avion)
     eye: new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
     exhaust: new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
@@ -586,10 +669,82 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   return g;
 }
 
+// Textures des décalcomanies (dessinées sur un canvas)
+const decalCache = new Map();
+function decalTexture(kind, value, LV, BODY) {
+  const lum = BODY.r * 0.3 + BODY.g * 0.59 + BODY.b * 0.11;
+  const ink = lum > 0.5 ? '#16181c' : '#f4f4f0';
+  const key = `${kind}|${value}|${LV.emblemColor}|${LV.number}|${ink}`;
+  if (decalCache.has(key)) return decalCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = kind === 'reg' ? 512 : 256;
+  c.height = kind === 'reg' ? 128 : 256;
+  const x = c.getContext('2d');
+  if (kind === 'reg') {
+    x.fillStyle = ink;
+    x.font = 'bold 92px "Arial Narrow", Arial, sans-serif';
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(value, 256, 68, 500);
+  } else {
+    const col = LV.emblemColor;
+    x.translate(128, 128);
+    x.lineJoin = 'round';
+    x.fillStyle = col;
+    x.strokeStyle = ink;
+    x.lineWidth = 8;
+    const path = new Path2D();
+    if (value === 'etoile') {
+      for (let k = 0; k < 10; k++) { const r = k % 2 ? 46 : 112, a = (k / 10) * Math.PI * 2 - Math.PI / 2; k ? path.lineTo(Math.cos(a) * r, Math.sin(a) * r) : path.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+      path.closePath();
+    } else if (value === 'eclair') {
+      [[20, -118], [-62, 14], [-6, 14], [-30, 118], [62, -20], [6, -20], [34, -118]].forEach(([a, b], k) => (k ? path.lineTo(a, b) : path.moveTo(a, b)));
+      path.closePath();
+    } else if (value === 'coeur') {
+      path.moveTo(0, 100);
+      path.bezierCurveTo(-150, 0, -90, -120, 0, -50);
+      path.bezierCurveTo(90, -120, 150, 0, 0, 100);
+    } else if (value === 'cocarde' || value === 'numero') {
+      path.arc(0, 0, 112, 0, Math.PI * 2);
+    } else if (value === 'couronne') {
+      [[-100, 70], [-110, -60], [-50, 0], [0, -95], [50, 0], [110, -60], [100, 70]].forEach(([a, b], k) => (k ? path.lineTo(a, b) : path.moveTo(a, b)));
+      path.closePath();
+    } else if (value === 'aile') {
+      path.moveTo(-120, -10);
+      path.quadraticCurveTo(-60, -70, 0, -20);
+      path.quadraticCurveTo(60, -70, 120, -10);
+      path.quadraticCurveTo(60, 10, 0, 40);
+      path.quadraticCurveTo(-60, 10, -120, -10);
+    }
+    x.stroke(path);
+    x.fill(path);
+    if (value === 'cocarde') {
+      x.fillStyle = '#f4f4f0'; x.beginPath(); x.arc(0, 0, 74, 0, Math.PI * 2); x.fill();
+      x.fillStyle = col; x.beginPath(); x.arc(0, 0, 38, 0, Math.PI * 2); x.fill();
+    }
+    if (value === 'numero' || value === 'aile') {
+      x.fillStyle = value === 'numero' ? ink : ink;
+      x.font = `bold ${value === 'numero' ? 130 : 54}px Arial, sans-serif`;
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      x.fillText(value === 'numero' ? String(LV.number) : 'JP', 0, value === 'numero' ? 8 : 6);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  decalCache.set(key, t);
+  return t;
+}
+function decalMat(map) {
+  return new THREE.MeshStandardMaterial({ map, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+}
+
 // Vue cockpit : on cache la carrosserie qui gênerait (fuselage extérieur, pilote) et on garde l'intérieur
 export function setCockpitView(mesh, inside) {
   const u = mesh.userData;
   u.fuse.visible = !inside;
+  for (const d of u.decals || []) d.visible = !inside;
   if (u.pilot) u.pilot.visible = !inside;
 }
 

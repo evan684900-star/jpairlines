@@ -20,6 +20,8 @@ import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
+import { Hangar } from './hangar.js';
+import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES } from './livery.js';
 
 const $ = (id) => document.getElementById(id);
 const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
@@ -60,9 +62,14 @@ const persist = () => {
   account?.pushSave(save); // copie en ligne si l'on est connecté
 };
 
+// personnalisation de chaque avion (hangar)
+if (!save.liveries || typeof save.liveries !== 'object') save.liveries = {};
+const liveryOf = (id) => cleanLivery(save.liveries[id]);
+
 // ================= Joueur =================
 const plane = new Plane(save.aircraft);
-let planeMesh = createPlaneMesh(plane.type, { landingLight: true });
+let planeMesh = createPlaneMesh(plane.type, { landingLight: true, livery: liveryOf(plane.type) });
+plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);
 scene.add(planeMesh);
 
 // ================= Quêtes =================
@@ -152,6 +159,8 @@ addEventListener('keydown', (e) => {
     return;
   }
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (hg.busy) return;
+  if (hg.active) { if (k === 'escape') exitHangar(false); return; }
   if (k.startsWith('arrow') || k === ' ' || k === 'enter' || k === 'tab') e.preventDefault();
   keys.add(k);
   if (e.repeat || !started) return;
@@ -180,6 +189,10 @@ addEventListener('keydown', (e) => {
   if (is('gear')) plane.toggleGear();
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
+  if (is('smoke')) {
+    plane.smokeOn = !plane.smokeOn;
+    toast(plane.smokeOn ? '💨 Fumigène allumé (couleur réglable au hangar)' : 'Fumigène coupé');
+  }
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
@@ -189,10 +202,11 @@ canvas.addEventListener('pointerdown', (e) => { orbit.dragging = true; canvas.se
 canvas.addEventListener('pointerup', () => { orbit.dragging = false; });
 canvas.addEventListener('pointermove', (e) => {
   if (!orbit.dragging) return;
+  if (hg.active) { hangar.drag(e.movementX, e.movementY); return; }
   orbit.yaw -= e.movementX * 0.006;
   orbit.pitch = THREE.MathUtils.clamp(orbit.pitch - e.movementY * 0.004, -0.6, 1.2);
 });
-canvas.addEventListener('wheel', (e) => { rig.dist = THREE.MathUtils.clamp(rig.dist * (e.deltaY > 0 ? 1.12 : 0.89), 9, 120); }, { passive: true });
+canvas.addEventListener('wheel', (e) => { if (hg.active) { hangar.zoom(e.deltaY > 0 ? 1.1 : 0.9); return; } rig.dist = THREE.MathUtils.clamp(rig.dist * (e.deltaY > 0 ? 1.12 : 0.89), 9, 120); }, { passive: true });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
@@ -264,7 +278,8 @@ $('btn-camera').onclick = () => press('c');
 $('btn-map').onclick = () => press('m');
 $('btn-journal').onclick = () => press('j');
 $('btn-pause').onclick = () => openPause();
-$('btn-hangar').onclick = () => { openPause(); document.querySelector('.tab[data-tab="tab-hangar"]').click(); };
+$('btn-hangar').onclick = () => enterHangar();
+$('open-hangar3d').onclick = () => enterHangar();
 $('btn-mute').onclick = () => {
   settings.muted = !settings.muted;
   saveSettings();
@@ -459,7 +474,11 @@ bigCanvas.addEventListener('pointermove', (e) => {
 
 // ================= Multijoueur =================
 const remotes = new Map();
-const net = { ws: null, id: null, lastSend: 0, retry: 2000 };
+const net = { ws: null, id: null, lastSend: 0, retry: 2000, liveries: new Map() };
+// peinture de mon avion envoyée aux autres joueurs (à la connexion et à chaque changement)
+function sendLivery() {
+  if (net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'livery', l: liveryOf(plane.type) }));
+}
 const REMOTE_COLORS = [0xffc4a3, 0xb5e3a1, 0xa3c9ff, 0xf7a3d9, 0xfff19c, 0xc2a3ff];
 
 function wsUrl() {
@@ -474,7 +493,7 @@ function connect() {
   let ws;
   try { ws = new WebSocket(url); } catch { return; }
   net.ws = ws;
-  ws.onopen = () => { net.retry = 2000; ws.send(JSON.stringify({ t: 'hello', name: save.name })); };
+  ws.onopen = () => { net.retry = 2000; ws.send(JSON.stringify({ t: 'hello', name: save.name })); sendLivery(); };
   ws.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
@@ -483,6 +502,11 @@ function connect() {
       net.known = null;
       $('chat-lines').textContent = '';
       for (const c of msg.chat || []) chatLine(c.name, c.text, 'old');
+      net.liveries = new Map(Object.entries(msg.liveries || {}).map(([k, v]) => [Number(k), v]));
+    }
+    if (msg.t === 'livery') {
+      net.liveries.set(msg.id, msg.l);
+      if (remotes.has(msg.id)) removeRemote(msg.id); // recréé avec sa nouvelle peinture
     }
     if (msg.t === 'players') syncRemotes(msg.list);
     if (msg.t === 'chat') {
@@ -523,7 +547,7 @@ function syncRemotes(list) {
     const type = AIRCRAFT[p.a | 0]?.id || 'cub';
     if (r && r.type !== type) { removeRemote(p.id); r = null; } // il a changé d'avion
     if (!r) {
-      const mesh = createPlaneMesh(type, { color: REMOTE_COLORS[p.id % REMOTE_COLORS.length] });
+      const mesh = createPlaneMesh(type, { color: REMOTE_COLORS[p.id % REMOTE_COLORS.length], livery: net.liveries.get(p.id) });
       const label = makeLabel(p.name, { size: 0.026 });
       label.position.y = 6;
       label.visible = settings.showNames;
@@ -617,16 +641,24 @@ attachPanel();
 // ================= Hangar : changer d'avion =================
 // Le nouvel avion est sorti au dernier aéroport (réservoir plein) ; une quête en cours continue
 // si l'on change d'avion arrêté dans un aéroport, sinon elle est annulée (comme un voyage).
+// (re)construit le modèle de l'avion du joueur avec sa peinture du hangar
+function rebuildPlaneMesh() {
+  scene.remove(planeMesh);
+  planeMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  planeMesh = createPlaneMesh(plane.type, { landingLight: true, livery: liveryOf(plane.type) });
+  planeMesh.position.copy(plane.pos);
+  planeMesh.quaternion.copy(plane.quat);
+  scene.add(planeMesh);
+  attachPanel();
+  plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);
+  sendLivery();
+}
 function setAircraft(id) {
   const def = aircraftById(id);
   if (!unlockedAircraft(save).includes(def)) return;
   const here = atAirportStopped() ? plane.landedAt : null;
   plane.setType(def.id);
-  scene.remove(planeMesh);
-  planeMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-  planeMesh = createPlaneMesh(def.id, { landingLight: true });
-  scene.add(planeMesh);
-  attachPanel();
+  rebuildPlaneMesh();
   save.aircraft = def.id;
   persist();
   if (here) {
@@ -674,6 +706,158 @@ function renderHangar() {
     box.appendChild(card);
   }
 }
+
+// ================= Hangar 3D (personnalisation) =================
+// Fondu au noir, le monde est déchargé, logo de chargement, puis on se retrouve dans le hangar.
+const hangar = new Hangar(renderer);
+const hg = { active: false, busy: false, type: null, tab: 'couleurs', timer: null };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+addEventListener('resize', () => hangar.resize());
+
+async function transition(work) {
+  hg.busy = true;
+  $('fade').classList.add('on');
+  await wait(650);
+  $('loading').classList.remove('hidden');
+  const t0 = performance.now();
+  try { await work(); } finally {
+    const rest = 1000 - (performance.now() - t0);
+    if (rest > 0) await wait(rest);
+    $('loading').classList.add('hidden');
+    $('fade').classList.remove('on');
+    hg.busy = false;
+  }
+}
+
+async function enterHangar() {
+  if (hg.active || hg.busy || !started || plane.crashed) return;
+  closeOverlays();
+  if (chat.open) closeChat();
+  paused = true;
+  keys.clear();
+  await transition(async () => {
+    hangar.build();
+    hangar.resize();
+    hg.type = plane.type;
+    hangar.setPlane(hg.type, liveryOf(hg.type));
+    terrain.unload();
+    decor.unload();
+    hg.active = true;
+    $('hud').classList.add('hidden');
+    $('hangar3d').classList.remove('hidden');
+    renderHangarUI();
+    await nextFrame();
+    await nextFrame();
+  });
+}
+
+async function exitHangar(fly) {
+  if (!hg.active || hg.busy) return;
+  await transition(async () => {
+    hg.active = false;
+    $('hangar3d').classList.add('hidden');
+    $('hud').classList.remove('hidden');
+    if (fly && hg.type !== plane.type && unlockedAircraft(save).includes(aircraftById(hg.type))) setAircraft(hg.type);
+    else rebuildPlaneMesh();
+    // rechargement du monde autour de l'avion pendant que l'écran est noir
+    terrain.buildAround(plane.pos.x, plane.pos.z, 3);
+    for (let i = 0; i < 8; i++) {
+      terrain.update(plane.pos.x, plane.pos.z, 30);
+      decor.update(plane.pos.x, plane.pos.z, 40, 0, camera.position);
+      await nextFrame();
+    }
+    paused = false;
+  });
+}
+
+// modifie la peinture de l'avion affiché (enregistrée tout de suite, modèle reconstruit un peu après)
+function setLivery(patch) {
+  const id = hg.type;
+  save.liveries[id] = cleanLivery({ ...liveryOf(id), ...patch });
+  persist();
+  clearTimeout(hg.timer);
+  hg.timer = setTimeout(() => hangar.setPlane(id, liveryOf(id), true), 60);
+  renderHangarUI();
+}
+
+function renderHangarUI() {
+  const def = aircraftById(hg.type);
+  const open = unlockedAircraft(save).includes(def);
+  const L = liveryOf(hg.type);
+  $('hg-title').textContent = def.name;
+  const quest = def.unlock && quests?.byId.get(def.unlock);
+  $('hg-sub').innerHTML = open ? `${def.role} · ${def.engineLabel}` : `<span class="hg-locked">🔒 Débloqué par la quête « ${quest ? quest.title : def.unlock} »</span>`;
+  $('hg-fly').textContent = hg.type === plane.type ? '✈️ Reprendre le vol' : '✈️ Piloter cet avion';
+  $('hg-fly').disabled = !open;
+  for (const b of document.querySelectorAll('[data-hg]')) b.classList.toggle('active', b.dataset.hg === hg.tab);
+  const body = $('hg-body');
+  if (!open) {
+    body.innerHTML = '<p class="sub">Termine la quête indiquée pour débloquer cet avion et le personnaliser.</p>';
+    return;
+  }
+  const hexOf = (n) => `#${n.toString(16).padStart(6, '0')}`;
+  const colorRow = (key, label, orig) => {
+    const cur = L[key] || orig;
+    return `<h4>${label}</h4><div class="hg-sw" data-color="${key}">`
+      + (orig && key !== 'tips' && key !== 'smoke' && key !== 'emblemColor' ? `<button class="orig${L[key] ? '' : ' on'}" data-v="">D'origine</button>` : '')
+      + SWATCHES.map((c) => `<button style="background:${c}" class="${L[key] === c ? 'on' : ''}" data-v="${c}" title="${c}"></button>`).join('')
+      + `<input type="color" value="${cur}" title="Autre couleur"></div>`;
+  };
+  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${L[key] === k ? 'on' : ''}" data-v="${k}">${n}</button>`).join('')}</div>`;
+  let html = '';
+  if (hg.tab === 'couleurs') {
+    html = colorRow('body', 'Couleur principale', hexOf(def.color)) + colorRow('accent', 'Couleur secondaire', hexOf(def.accent))
+      + colorRow('stripe', 'Couleur des filets', hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', 'Bouts d\'hélice', L.tips);
+  } else if (hg.tab === 'motifs') {
+    html = chips('pattern', PATTERNS, 'Motif du fuselage') + chips('wings', WINGS, 'Ailes') + chips('finish', FINISHES, 'Finition de la peinture')
+      + `<h4>Nez</h4><div class="hg-chips"><button id="hg-teeth" class="${L.sharkTeeth ? 'on' : ''}">🦈 Dents de requin</button></div>`;
+  } else if (hg.tab === 'deco') {
+    html = `<h4>Immatriculation (7 caractères max)</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${L.reg}">`
+      + chips('emblem', EMBLEMS, 'Emblème sur la dérive') + colorRow('emblemColor', 'Couleur de l\'emblème', L.emblemColor)
+      + (L.emblem === 'numero' ? `<h4>Numéro de course</h4><input type="number" id="hg-num" min="0" max="99" value="${L.number}">` : '');
+  } else {
+    html = colorRow('smoke', 'Couleur du fumigène', L.smoke)
+      + `<p class="sub">En vol, appuie sur ${kbd('smoke')} pour allumer ou couper le fumigène et dessiner dans le ciel.</p>`;
+  }
+  body.innerHTML = html;
+  for (const row of body.querySelectorAll('[data-color]')) {
+    const key = row.dataset.color;
+    for (const b of row.querySelectorAll('button')) b.onclick = () => setLivery({ [key]: b.dataset.v || null });
+    const inp = row.querySelector('input');
+    inp.oninput = () => {
+      save.liveries[hg.type] = cleanLivery({ ...liveryOf(hg.type), [key]: inp.value });
+      persist();
+      clearTimeout(hg.timer);
+      hg.timer = setTimeout(() => hangar.setPlane(hg.type, liveryOf(hg.type), true), 120);
+    };
+    inp.onchange = () => renderHangarUI();
+  }
+  for (const row of body.querySelectorAll('[data-chip]')) for (const b of row.querySelectorAll('button')) b.onclick = () => setLivery({ [row.dataset.chip]: b.dataset.v });
+  if ($('hg-teeth')) $('hg-teeth').onclick = () => setLivery({ sharkTeeth: !L.sharkTeeth });
+  if ($('hg-reg')) $('hg-reg').onchange = () => setLivery({ reg: $('hg-reg').value });
+  if ($('hg-num')) $('hg-num').onchange = () => setLivery({ number: Math.round(Number($('hg-num').value)) || 0 });
+}
+
+for (const b of document.querySelectorAll('[data-hg]')) b.onclick = () => { hg.tab = b.dataset.hg; renderHangarUI(); };
+const cycleAircraft = (d) => {
+  const i = AIRCRAFT.findIndex((a) => a.id === hg.type);
+  hg.type = AIRCRAFT[(i + d + AIRCRAFT.length) % AIRCRAFT.length].id;
+  hangar.setPlane(hg.type, liveryOf(hg.type));
+  renderHangarUI();
+};
+$('hg-prev').onclick = () => cycleAircraft(-1);
+$('hg-next').onclick = () => cycleAircraft(1);
+$('hg-fly').onclick = () => exitHangar(true);
+$('hg-exit').onclick = () => exitHangar(false);
+$('hg-reset').onclick = () => { delete save.liveries[hg.type]; persist(); hangar.setPlane(hg.type, liveryOf(hg.type), true); renderHangarUI(); };
+$('hg-random').onclick = () => {
+  const r = (list) => list[Math.floor(Math.random() * list.length)];
+  setLivery({
+    body: r(SWATCHES), accent: r(SWATCHES), stripe: r(SWATCHES), tips: r(SWATCHES), pattern: r(PATTERNS)[0], wings: r(WINGS)[0],
+    finish: r(FINISHES)[0], emblem: r(EMBLEMS)[0], emblemColor: r(SWATCHES), number: Math.floor(Math.random() * 100), sharkTeeth: Math.random() < 0.25,
+  });
+};
 
 function updateHUD(dt) {
   const ground = Math.max(0, groundHeight(plane.pos.x, plane.pos.z));
@@ -772,6 +956,14 @@ function frame(now) {
   const realDt = Math.min(0.05, rawDt);
   last = now;
   const wallT = Date.now() / 1000; // horloge commune : bateaux et montgolfières identiques pour tous
+
+  // hangar : le monde est déchargé, on n'affiche que la scène du hangar
+  if (hg.active) {
+    hangar.update(realDt);
+    renderer.toneMappingExposure = 1;
+    hangar.render();
+    return;
+  }
 
   if (started) {
     if (!paused && !plane.crashed) {

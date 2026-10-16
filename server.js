@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { handleApi } from './accounts.js';
 import { cleanChat } from './chat.js';
+import { cleanLivery } from './public/js/livery.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 100;
@@ -60,7 +61,8 @@ wss.on('connection', (ws) => {
   const id = nextId++;
   const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0, a: 0 };
   players.set(id, player);
-  ws.send(JSON.stringify({ t: 'welcome', id, chat: chatHistory }));
+  const liveries = Object.fromEntries([...players.values()].filter((p) => p.livery).map((p) => [p.id, p.livery]));
+  ws.send(JSON.stringify({ t: 'welcome', id, chat: chatHistory, liveries }));
   const sent = []; // horodatage des derniers messages (anti-spam)
   const recentText = []; // derniers messages du joueur (mot envoyé lettre par lettre)
 
@@ -75,6 +77,14 @@ wss.on('connection', (ws) => {
       // état visible par les autres : vitesse, régime, train, volets, feux, type d'avion
       for (const k of ['s', 'r', 'g', 'f', 'l']) player[k] = num(msg[k], 0, 1000);
       player.a = Math.round(num(msg.a, 0, 31));
+    } else if (msg.t === 'livery') {
+      // peinture de l'avion (hangar), vérifiée puis relayée à tous
+      const now = Date.now();
+      if (now - (player.liveryAt || 0) < 500) return;
+      player.liveryAt = now;
+      player.livery = cleanLivery(msg.l);
+      const data = JSON.stringify({ t: 'livery', id, l: player.livery });
+      for (const c of wss.clients) if (c.readyState === 1) c.send(data);
     } else if (msg.t === 'chat') {
       const now = Date.now();
       while (sent.length && now - sent[0] > 10000) sent.shift();
@@ -104,7 +114,7 @@ wss.on('connection', (ws) => {
 // diffusion à 10 Hz
 setInterval(() => {
   if (!wss.clients.size) return;
-  const data = JSON.stringify({ t: 'players', list: [...players.values()] });
+  const data = JSON.stringify({ t: 'players', list: [...players.values()].map(({ livery, liveryAt, ...p }) => p) });
   for (const c of wss.clients) if (c.readyState === 1) c.send(data);
 }, 100);
 

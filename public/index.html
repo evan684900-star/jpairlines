@@ -158,6 +158,7 @@
       </div>
       <div id="tab-hangar" class="tab-body hidden">
         <p class="sub">Ta flotte. Les nouveaux avions se débloquent en réussissant certaines quêtes. Changer d'avion arrêté dans un aéroport garde ta quête en cours ; ailleurs, il t'attend à ton dernier aéroport.</p>
+        <p><button id="open-hangar3d">🛠 Entrer dans le hangar (personnaliser son avion)</button></p>
         <div id="hangar-list"></div>
       </div>
       <div id="tab-travel" class="tab-body hidden">
@@ -183,6 +184,48 @@
     <p><b>Atterrissage :</b> réduire les gaz, train sorti sous 210 km/h, volets sous 165 km/h, approche à ~120 km/h en descendant de 3 à 4 m/s, ailes à plat. Juste au-dessus de la piste, cabrer un peu (arrondi) pour toucher doucement (moins de 4 m/s en normal), puis freiner.</p>
     <p><b>Physique :</b> l'avion vole vraiment (portance, traînée, inertie) : il tourne en s'inclinant, décroche vers 90 km/h (75 km/h volets sortis), monte moins bien en altitude, et accélère en piqué. Le trim (<kbd>T</kbd>/<kbd>B</kbd>) règle la vitesse à laquelle il vole « tout seul ».</p>
   </template>
+
+  <!-- Hangar 3D : personnalisation de l'avion -->
+  <div id="hangar3d" class="hidden">
+    <div class="hg-top glass">
+      <button id="hg-prev" class="secondary" title="Avion précédent">◀</button>
+      <div class="hg-name"><b id="hg-title"></b><small id="hg-sub"></small></div>
+      <button id="hg-next" class="secondary" title="Avion suivant">▶</button>
+    </div>
+    <div id="hg-panel" class="glass">
+      <div class="hg-tabs">
+        <button data-hg="couleurs" class="active">Couleurs</button>
+        <button data-hg="motifs">Motifs</button>
+        <button data-hg="deco">Décos</button>
+        <button data-hg="fumee">Fumigène</button>
+      </div>
+      <div id="hg-body"></div>
+      <div class="hg-actions">
+        <button id="hg-reset" class="secondary">Peinture d'origine</button>
+        <button id="hg-random" class="secondary">🎲 Au hasard</button>
+      </div>
+    </div>
+    <div class="hg-bottom">
+      <span class="hg-hint">Fais glisser pour tourner autour · molette pour zoomer</span>
+      <button id="hg-fly">✈️ Piloter cet avion</button>
+      <button id="hg-exit" class="secondary">Sortir du hangar</button>
+    </div>
+  </div>
+  <div id="fade"></div>
+  <div id="loading" class="hidden" aria-label="Chargement">
+    <svg viewBox="0 0 160 90" width="160" height="90">
+      <defs><clipPath id="ld-clip"><rect width="160" height="90" rx="14" /></clipPath></defs>
+      <g clip-path="url(#ld-clip)">
+        <rect width="160" height="90" fill="#1d4f86" />
+        <rect width="160" height="90" fill="url(#ld-sky)" />
+        <linearGradient id="ld-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d6fb5" /><stop offset="1" stop-color="#9cc8ee" /></linearGradient>
+        <g class="ld-clouds far"><path d="M0 70 q12 -14 26 -4 q10 -12 24 -2 q14 -10 26 2 q12 -10 24 0 q14 -12 30 2 q14 -8 30 2 V90 H0 Z" fill="#dbe9f6" /><path transform="translate(160 0)" d="M0 70 q12 -14 26 -4 q10 -12 24 -2 q14 -10 26 2 q12 -10 24 0 q14 -12 30 2 q14 -8 30 2 V90 H0 Z" fill="#dbe9f6" /></g>
+        <g class="ld-clouds near"><path d="M0 80 q16 -16 34 -4 q12 -12 30 0 q18 -14 34 0 q14 -10 30 0 q16 -12 32 2 V90 H0 Z" fill="#fff" /><path transform="translate(160 0)" d="M0 80 q16 -16 34 -4 q12 -12 30 0 q18 -14 34 0 q14 -10 30 0 q16 -12 32 2 V90 H0 Z" fill="#fff" /></g>
+        <g class="ld-plane"><path d="M54 40 l40 -2 q8 0 10 3 q-2 3 -10 3 l-40 -1 z" fill="#f4f1ea" /><path d="M70 39 l-8 -14 h6 l14 14 z M70 44 l-6 12 h6 l12 -12 z" fill="#f5b532" /><path d="M54 40 l-6 -8 h5 l7 8 z" fill="#f5b532" /><circle cx="98" cy="40" r="1.6" fill="#1d4f86" /><rect x="104" y="33" width="1.6" height="14" rx="0.8" fill="#333" class="ld-prop" /></g>
+      </g>
+    </svg>
+    <span>Chargement…</span>
+  </div>
 
   <div id="crash" class="overlay hidden">
     <div class="panel glass">

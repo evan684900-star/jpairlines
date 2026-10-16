@@ -272,6 +272,14 @@ export class Decor {
     });
   }
 
+  // décharge tout le décor (hangar) : il sera reconstruit au retour
+  unload() {
+    for (const g of this.groups.values()) this.dispose(g);
+    this.groups.clear();
+    this.queue = [];
+    this.center = null;
+  }
+
   // camPos : position de la caméra (arbres 3D autour d'elle)
   update(x, z, budgetMs = 4, dt = 0, camPos = null) {
     if (!this.libs) return;

@@ -23,6 +23,7 @@ export const ACTIONS = [
   { id: 'gear', label: 'Train d\'atterrissage', def: ['g'] },
   { id: 'parking', label: 'Frein de parking', def: ['p'] },
   { id: 'lights', label: 'Feux de navigation', def: ['l'] },
+  { id: 'smoke', label: 'Fumigène de voltige', def: ['n'] },
   { id: 'refuel', label: 'Faire le plein (maintenir)', def: ['k'] },
   { group: 'Jeu' },
   { id: 'board', label: 'Tableau des missions', def: ['enter'] },
