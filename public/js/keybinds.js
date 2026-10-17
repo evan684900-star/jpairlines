@@ -1,6 +1,8 @@
 // Touches modifiables : chaque action a une ou plusieurs touches (enregistrées dans le navigateur).
 // Les touches sont stockées comme e.key en minuscules ('z', 'arrowup', ' ', 'shift'…).
 // Échap reste toujours la touche de pause (pour ne jamais rester bloqué).
+import { t } from './i18n.js';
+
 const KEY = 'jpairlines-keys';
 
 export const ACTIONS = [
@@ -50,14 +52,14 @@ const store = () => { try { localStorage.setItem(KEY, JSON.stringify(binds)); } 
 
 export const keysFor = (id) => binds[id] || [];
 export const isKey = (id, k) => keysFor(id).includes(k);
-export const actionLabel = (id) => LIST.find((a) => a.id === id)?.label || id;
+export const actionLabel = (id) => t(LIST.find((a) => a.id === id)?.label || id);
 
 // associe une touche à une action ; elle est retirée des autres actions (renvoie leurs noms)
 export function bindKey(id, k) {
   if (k === 'escape') return [];
   const taken = [];
   for (const a of LIST) {
-    if (a.id !== id && binds[a.id].includes(k)) { binds[a.id] = binds[a.id].filter((x) => x !== k); taken.push(a.label); }
+    if (a.id !== id && binds[a.id].includes(k)) { binds[a.id] = binds[a.id].filter((x) => x !== k); taken.push(t(a.label)); }
   }
   if (!binds[id].includes(k)) binds[id] = [...binds[id], k].slice(-4);
   store();
@@ -71,6 +73,6 @@ const NAMES = {
   ' ': 'Espace', enter: 'Entrée', shift: 'Maj', control: 'Ctrl', alt: 'Alt', tab: 'Tab', backspace: 'Retour', meta: 'Cmd',
   arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', pageup: 'Page ↑', pagedown: 'Page ↓', home: 'Début', end: 'Fin', insert: 'Inser', delete: 'Suppr',
 };
-export const keyName = (k) => NAMES[k] || (k.length === 1 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1));
+export const keyName = (k) => (NAMES[k] && t(NAMES[k])) || (k.length === 1 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1));
 // première touche d'une action, en <kbd> (pour les messages à l'écran)
 export const kbd = (id) => `<kbd>${keysFor(id).length ? keyName(keysFor(id)[0]) : '—'}</kbd>`;

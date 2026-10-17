@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { groundHeight, onRunway, runwayPoint } from './world.js';
 import { aircraftById } from './aircraft.js';
+import { t } from './i18n.js';
 
 export { createPlaneMesh, animatePlaneMesh } from './planeModel.js';
 
@@ -124,7 +125,7 @@ export class Plane {
     if (engineOn) { this.engineOn = true; this.rpm = 0.15; }
   }
 
-  emit(msg) { this.events.push(msg); }
+  emit(msg) { this.events.push(t(msg)); }
 
   // ----- commandes des systèmes -----
   toggleEngine() {
@@ -143,7 +144,7 @@ export class Plane {
     const n = this.S.flapNotches;
     if (n.length < 2) return this.emit('Pas de volets sur cet avion');
     this.flaps = clamp(this.flaps + delta, 0, n.length - 1);
-    this.emit(`Volets ${n[this.flaps]}°`);
+    this.emit(t('Volets {deg}°', { deg: n[this.flaps] }));
   }
   toggleGear() {
     if (!this.S.retractable) return this.emit('Train fixe sur cet avion');
@@ -381,7 +382,7 @@ export class Plane {
           if (pt.kind === 'tail') continue;
           if (pt.kind === 'belly' && this.velocity.length() > 2) return this.crash('L\'hydravion a piqué dans l\'eau !');
           if (pt.kind === 'float') {
-            if (_vp.y < -diff.crashVs * 1.4) return this.crash(`Amerrissage trop brutal (${(-_vp.y).toFixed(1)} m/s)`);
+            if (_vp.y < -diff.crashVs * 1.4) return this.crash(t('Amerrissage trop brutal ({vs} m/s)', { vs: (-_vp.y).toFixed(1) }));
             onWater = true;
             wheelsDown++;
           }
@@ -393,7 +394,7 @@ export class Plane {
         }
         if (!pt.kind) {
           // roue : contrôle de la violence de l'impact
-          if (_vp.y < -diff.crashVs) return this.crash(`Atterrissage trop brutal (${(-_vp.y).toFixed(1)} m/s)`);
+          if (_vp.y < -diff.crashVs) return this.crash(t('Atterrissage trop brutal ({vs} m/s)', { vs: (-_vp.y).toFixed(1) }));
           if (pen > 0.45) return this.crash('Le train s\'est effondré');
           wheelsDown++;
         }
@@ -432,7 +433,7 @@ export class Plane {
     // facteur de charge
     _tmp.copy(_F).addScaledVector(UPV, m * G);
     this.gLoad = _tmp.dot(_up) / (m * G);
-    if (airborne && Math.abs(this.gLoad) > diff.gLimit * S.gTol) return this.crash(`Structure rompue : ${this.gLoad.toFixed(1)} g !`);
+    if (airborne && Math.abs(this.gLoad) > diff.gLimit * S.gTol) return this.crash(t('Structure rompue : {g} g !', { g: this.gLoad.toFixed(1) }));
     if (diff.damage && this.ias > S.vne * (diff.gLimit < 7 ? 1.1 : 1.2)) return this.crash('Vitesse excessive : la structure a cédé !');
 
     // ----- intégration (Euler semi-implicite) -----
@@ -466,7 +467,7 @@ export class Plane {
 
   crash(reason) {
     this.crashed = true;
-    this.crashReason = reason;
+    this.crashReason = t(reason);
     this.velocity.set(0, 0, 0);
     this.omega.set(0, 0, 0);
     this.speed = 0;

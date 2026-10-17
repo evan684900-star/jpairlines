@@ -5,6 +5,7 @@
 // - planche de bord 3D du cockpit (six instruments à aiguilles) en texture.
 // Les valeurs affichées suivent l'avion avec un lissage (aiguilles fluides). Lecture seule.
 import * as THREE from 'three';
+import { t } from '../i18n.js';
 
 const DEG = 180 / Math.PI;
 const FONT = '"B612 Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace';
@@ -174,7 +175,7 @@ export class Instruments {
     if (s.agl < 750) {
       ctx.font = `700 ${Math.round(ah * 0.05)}px ${FONT}`;
       ctx.textAlign = 'center'; ctx.fillStyle = s.agl < 60 && !s.onGround ? C.amber : C.green;
-      ctx.fillText(`SOL ${Math.round(s.agl * u.alt)}`, W - tapeW / 2, 14);
+      ctx.fillText(`${t('SOL')} ${Math.round(s.agl * u.alt)}`, W - tapeW / 2, 14);
     }
     // variomètre
     const vs = s.vs * u.vs;
@@ -279,7 +280,7 @@ export class Instruments {
     ctx.fillStyle = C.text; ctx.font = `700 ${fs + 2}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(jet ? `${Math.round(rpm)}` : String(Math.round(rpm / 10) * 10), gx, gy + R * 0.55);
     ctx.font = `600 ${fs - 2}px ${FONT}`; ctx.fillStyle = C.cyan;
-    ctx.fillText(jet ? 'N1 %' : 'TR/MIN', gx, gy + R * 0.95);
+    ctx.fillText(jet ? 'N1 %' : t('TR/MIN'), gx, gy + R * 0.95);
     // barres : carburant, gaz, trim
     let y = gy + R + 22;
     const bar = (label, frac, col, text, center = false) => {
@@ -295,11 +296,11 @@ export class Instruments {
       y += fs * 1.6;
     };
     const fuelFrac = s.fuel / this.S.fuelCapacity;
-    bar('CARB', fuelFrac, fuelFrac < 0.05 ? C.red : fuelFrac < 0.15 ? C.amber : C.green, `${Math.round(s.fuel)} L`);
-    bar('GAZ', s.throttle, C.cyan, `${Math.round(s.throttle * 100)} %`);
-    bar('TRIM', 0.5 + s.trim, C.text, s.trim > 0.01 ? 'CABRÉ' : s.trim < -0.01 ? 'PIQUÉ' : 'NEUTRE', true);
+    bar(t('CARB'), fuelFrac, fuelFrac < 0.05 ? C.red : fuelFrac < 0.15 ? C.amber : C.green, `${Math.round(s.fuel)} L`);
+    bar(t('GAZ'), s.throttle, C.cyan, `${Math.round(s.throttle * 100)} %`);
+    bar('TRIM', 0.5 + s.trim, C.text, t(s.trim > 0.01 ? 'CABRÉ' : s.trim < -0.01 ? 'PIQUÉ' : 'NEUTRE'), true);
     // volets
-    ctx.textAlign = 'left'; ctx.fillStyle = C.dim; ctx.fillText('VOLETS', pad, y);
+    ctx.textAlign = 'left'; ctx.fillStyle = C.dim; ctx.fillText(t('VOLETS'), pad, y);
     ctx.textAlign = 'right'; ctx.fillStyle = C.text; ctx.fillText(`${Math.round(s.flaps)}°`, W - pad, y);
   }
 
@@ -371,11 +372,11 @@ export class Instruments {
       ctx.fillStyle = on ? col : '#2a2a2a'; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#c8ced6'; ctx.font = '600 15px sans-serif'; ctx.textAlign = 'left'; ctx.fillText(text, x + 20, y + 5);
     };
-    lamp(830, 70, s.gear > 0.99, '#3cff6a', 'TRAIN');
+    lamp(830, 70, s.gear > 0.99, '#3cff6a', t('TRAIN'));
     lamp(830, 120, s.gear > 0.01 && s.gear < 0.99, '#ff4a3a', 'TRANSIT');
     lamp(830, 170, s.stall, '#ff4a3a', 'STALL');
     lamp(830, 220, s.fuel < this.S.fuelCapacity * 0.15, '#ffb000', 'FUEL');
-    lamp(830, 270, s.engine, '#3cff6a', 'MOTEUR');
+    lamp(830, 270, s.engine, '#3cff6a', t('MOTEUR'));
     this.panelTexture.needsUpdate = true;
   }
 }

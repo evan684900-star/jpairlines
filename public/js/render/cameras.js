@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { groundHeight } from '../world.js';
 import { setCockpitView } from '../planeModel.js';
+import { t } from '../i18n.js';
 
 export const CAMERA_MODES = [
   { id: 'chase', name: 'Poursuite' },
@@ -35,7 +36,7 @@ export class CameraRig {
     this.fov = 65;
   }
 
-  get modeName() { return CAMERA_MODES[this.mode].name; }
+  get modeName() { return t(CAMERA_MODES[this.mode].name); }
 
   next() {
     this.prevMode = this.mode;

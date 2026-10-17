@@ -10,6 +10,7 @@ import { makeLabel } from '../objects.js';
 import { TEX } from '../render/textures.js';
 import { AIRCRAFT } from '../aircraft.js';
 import { kbd, keysFor, keyName } from '../keybinds.js';
+import { t } from '../i18n.js';
 const keyName0 = (id) => (keysFor(id).length ? keyName(keysFor(id)[0]) : '—');
 
 const $ = (id) => document.getElementById(id);
@@ -22,7 +23,7 @@ const fmtDist = (d) => (d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // avion débloqué par une quête (affiché au tableau et dans le journal)
 const unlockOf = (q) => AIRCRAFT.find((a) => a.unlock === q.id);
-const unlockTag = (q) => { const a = unlockOf(q); return a ? ` <span class="unlock">✈️ Débloque : ${a.name} (${a.role.toLowerCase()})</span>` : ''; };
+const unlockTag = (q) => { const a = unlockOf(q); return a ? ` <span class="unlock">✈️ ${t('Débloque : {name} ({role})', { name: a.name, role: t(a.role).toLowerCase() })}</span>` : ''; };
 // étape en cours d'une quête : { n, total, label, sub, subTotal }
 function stageAt(q, step) {
   const list = stagesOf(q);
@@ -31,7 +32,7 @@ function stageAt(q, step) {
   return { n: i + 1, total: list.length, label: s.label, sub: step - s.start + 1, subTotal: s.end - s.start, last: step === s.end - 1 };
 }
 // déroulé de la quête affiché au tableau et dans le journal
-const stagesLine = (q) => (q.job ? '' : `<br><small class="stages">${stagesOf(q).map((s, i) => `${i + 1}. ${esc(s.label)}`).join(' → ')}</small>`);
+const stagesLine = (q) => (q.job ? '' : `<br><small class="stages">${stagesOf(q).map((s, i) => `${i + 1}. ${esc(t(s.label))}`).join(' → ')}</small>`);
 const CAT_ICON = { course: '🏁', livraison: '📦', exploration: '🧭', voltige: '🌀', sauvetage: '🛟', tourisme: '📷', defi: '🏆', transport: '✈️' };
 
 // ---------- Missions de transport du jour (identiques pour tous les joueurs) ----------
@@ -58,14 +59,14 @@ export function jobsFor(a, day = dayKey()) {
     let reward = Math.round((120 + d * 0.022) / 10) * 10;
     const job = {
       id: `job:${a.id}:${day}:${k}`, job: true, category: 'transport', airport: a.id,
-      title: `${cargo.icon} ${cargo.name} → ${dest.name}`,
-      desc: `Transporte ${cargo.what} de ${a.name} à ${dest.name} (${(d / 1000).toFixed(1)} km).`,
+      title: `${cargo.icon} ${t(cargo.name)} → ${dest.name}`,
+      desc: t('Transporte {what} de {from} à {to} ({km} km).', { what: t(cargo.what), from: a.name, to: dest.name, km: (d / 1000).toFixed(1) }),
       steps: [{ type: 'land', airport: dest.id }],
     };
     if (cargo.urgent) {
       job.timeLimit = Math.round(d / 42 + 240);
       reward = Math.round((reward * 1.4) / 10) * 10;
-      job.desc += ` Urgent : ${fmtTime(job.timeLimit)} maximum !`;
+      job.desc += ` ${t('Urgent : {time} maximum !', { time: fmtTime(job.timeLimit) })}`;
     }
     job.reward = reward;
     jobs.push(job);
@@ -223,8 +224,8 @@ export class QuestSystem {
   isDone(q) { return q.job ? this.ensureSave().jobs.done.includes(q.id) : this.ensureSave().completed.includes(q.id); }
   lockReason(q) {
     const missing = [q.requires].flat().filter(Boolean).filter((id) => !this.save.completed.includes(id));
-    if (missing.length) return `Termine d'abord « ${missing.map((id) => this.byId.get(id)?.title || id).join(' », « ')} »`;
-    if (q.minRank && this.rankIndex() < q.minRank) return `Rang requis : ${RANKS[q.minRank].name}`;
+    if (missing.length) return t('Termine d\'abord « {list} »', { list: missing.map((id) => t(this.byId.get(id)?.title || id)).join(t(' », « ')) });
+    if (q.minRank && this.rankIndex() < q.minRank) return t('Rang requis : {rank}', { rank: t(RANKS[q.minRank].name) });
     return '';
   }
   isAvailable(q) { return !this.isDone(q) && !this.lockReason(q); }
@@ -267,7 +268,7 @@ export class QuestSystem {
       const avail = c.quests.filter((q) => this.isAvailable(q) && this.active?.q !== q);
       c.available = avail.length;
       c.group.visible = avail.length > 0;
-      const text = avail.length === 1 ? `! ${avail[0].title}` : `! ${avail.length} quêtes`;
+      const text = avail.length === 1 ? `! ${t(avail[0].title)}` : `! ${t('{n} quêtes', { n: avail.length })}`;
       if (c.labelText !== text) {
         if (c.label) c.group.remove(c.label);
         c.label = makeLabel(text, { color: '#ffd23f', size: 0.027, depthTest: false });
@@ -306,23 +307,23 @@ export class QuestSystem {
     const s = this.ensureSave();
     const item = (q) => {
       const done = this.isDone(q), lock = this.lockReason(q), active = this.active?.q.id === q.id;
-      const extra = [q.timeLimit ? `⏱ ${fmtTime(q.timeLimit)}` : '', q.bonusTime ? `bonus +${q.bonusReward} ₣ en moins de ${fmtTime(q.bonusTime)}` : ''].filter(Boolean).join(' · ');
+      const extra = [q.timeLimit ? `⏱ ${fmtTime(q.timeLimit)}` : '', q.bonusTime ? t('bonus +{reward} ₣ en moins de {time}', { reward: q.bonusReward, time: fmtTime(q.bonusTime) }) : ''].filter(Boolean).join(' · ');
       const ranked = isRanked(q);
       const best = s.bestTimes?.[q.id];
-      const btn = done && ranked && !active ? `<span class="btns"><button data-accept="${esc(q.id)}" class="secondary">⏱ Rejouer</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
-        : done ? '<span class="tag done">✅ Terminée</span>'
-        : ranked && !lock && !active ? `<span class="btns"><button data-accept="${esc(q.id)}">Accepter</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
-        : active ? '<span class="tag">▶ En cours</span>'
+      const btn = done && ranked && !active ? `<span class="btns"><button data-accept="${esc(q.id)}" class="secondary">⏱ ${t('Rejouer')}</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
+        : done ? `<span class="tag done">✅ ${t('Terminée')}</span>`
+        : ranked && !lock && !active ? `<span class="btns"><button data-accept="${esc(q.id)}">${t('Accepter')}</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
+        : active ? `<span class="tag">▶ ${t('En cours')}</span>`
           : lock ? `<span class="tag lock">🔒 ${esc(lock)}</span>`
-            : `<button data-accept="${esc(q.id)}">Accepter</button>`;
-      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(q.title)}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
-        <small>${esc(q.desc)}</small>${stagesLine(q)}${ranked ? `<br><small class="extra">⏱ Classée${best ? ` · ton record : ${fmtChrono(best)}` : ''}</small>` : ''}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
+            : `<button data-accept="${esc(q.id)}">${t('Accepter')}</button>`;
+      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(t(q.title))}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
+        <small>${esc(t(q.desc))}</small>${stagesLine(q)}${ranked ? `<br><small class="extra">⏱ ${t('Classée')}${best ? ` · ${t('ton record : {time}', { time: fmtChrono(best) })}` : ''}</small>` : ''}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
     };
     const qs = [...quests].sort((a, b) => this.isDone(a) - this.isDone(b) || a.reward - b.reward);
-    $('board-title').textContent = `Tableau des missions — ${place}`;
-    $('board-rank').textContent = `${RANKS[this.rankIndex()].name} · ${s.xp} XP`;
-    $('board-list').innerHTML = (qs.length ? `<h3>Quêtes</h3><ul>${qs.map(item).join('')}</ul>` : '')
-      + (jobs.length ? `<h3>Missions de transport du jour</h3><ul>${jobs.map(item).join('')}</ul>` : '');
+    $('board-title').textContent = t('Tableau des missions — {place}', { place });
+    $('board-rank').textContent = `${t(RANKS[this.rankIndex()].name)} · ${s.xp} XP`;
+    $('board-list').innerHTML = (qs.length ? `<h3>${t('Quêtes')}</h3><ul>${qs.map(item).join('')}</ul>` : '')
+      + (jobs.length ? `<h3>${t('Missions de transport du jour')}</h3><ul>${jobs.map(item).join('')}</ul>` : '');
     this.boardJobs = jobs;
     for (const b of $('board-list').querySelectorAll('[data-accept]')) {
       b.onclick = () => {
@@ -349,7 +350,7 @@ export class QuestSystem {
     this.active = { q, step: 0, elapsed: 0, timer: 0, touched: false, objects: [], moving: null, needAirborne: this.plane.onGround, replay: this.isDone(q) };
     this.refreshClusters();
     this.showStep();
-    this.toast(`Nouvelle quête : ${q.title}`);
+    this.toast(t('Nouvelle quête : {title}', { title: t(q.title) }));
     this.beep(520, 0.15);
   }
   abandon(silent = false) {
@@ -359,12 +360,12 @@ export class QuestSystem {
     $('quest-box').classList.add('hidden');
     $('arrow').classList.add('hidden');
     this.refreshClusters();
-    if (!silent) this.toast('Quête abandonnée');
+    if (!silent) this.toast(t('Quête abandonnée'));
   }
   fail(reason) {
     const q = this.active?.q;
     this.abandon(true);
-    this.toast(`❌ ${q ? q.title : 'Quête'} : ${reason}`);
+    this.toast(`❌ ${q ? t(q.title) : t('Quête')} : ${t(reason)}`);
     this.beep(160, 0.5, 0.25);
   }
   clearObjects() {
@@ -394,20 +395,20 @@ export class QuestSystem {
   }
 
   stepText(st) {
-    if (st.text) return st.text;
+    if (st.text) return t(st.text);
     const kmh = (v) => `${v} km/h`;
     switch (st.type) {
-      case 'ring': return 'Passe dans l\'anneau jaune';
-      case 'land': return `Pose-toi sur la piste de ${airportById(st.airport).name} (cadre vert) et arrête-toi complètement`;
-      case 'touch': return `Toucher-décoller à ${airportById(st.airport).name} (touche la piste puis remets les gaz)`;
-      case 'reach': return `Rejoins : ${st.label}${st.maxAgl ? ` (à moins de ${st.maxAgl} m du sol)` : ''}${st.minAgl ? ` (au moins ${st.minAgl} m au-dessus du sol)` : ''}`;
-      case 'drop': return `Largue le colis (${keyName0('drop')}) sur : ${st.label}${st.maxAgl ? ` — à moins de ${st.maxAgl} m du sol` : ''} · vise avec la croix blanche`;
-      case 'altitude': return `Monte au-dessus de ${st.min} m`;
-      case 'speed': return `Atteins ${kmh(st.min)}`;
-      case 'low': return `Vole à moins de ${st.maxAgl} m du sol pendant ${st.duration} s${st.label ? ` (${st.label})` : ''}`;
-      case 'hold': return `Tiens ton altitude entre ${st.min} et ${st.max} m pendant ${st.duration} s`;
-      case 'inverted': return `Vole sur le dos pendant ${st.duration} s`;
-      case 'follow': return `Reste à moins de ${st.distance} m de : ${st.label} (${st.duration} s)`;
+      case 'ring': return t('Passe dans l\'anneau jaune');
+      case 'land': return t('Pose-toi sur la piste de {airport} (cadre vert) et arrête-toi complètement', { airport: airportById(st.airport).name });
+      case 'touch': return t('Toucher-décoller à {airport} (touche la piste puis remets les gaz)', { airport: airportById(st.airport).name });
+      case 'reach': return t('Rejoins : {label}', { label: t(st.label) }) + (st.maxAgl ? ` ${t('(à moins de {m} m du sol)', { m: st.maxAgl })}` : '') + (st.minAgl ? ` ${t('(au moins {m} m au-dessus du sol)', { m: st.minAgl })}` : '');
+      case 'drop': return t('Largue le colis ({key}) sur : {label}', { key: keyName0('drop'), label: t(st.label) }) + (st.maxAgl ? ` — ${t('à moins de {m} m du sol', { m: st.maxAgl })}` : '') + ` · ${t('vise avec la croix blanche')}`;
+      case 'altitude': return t('Monte au-dessus de {m} m', { m: st.min });
+      case 'speed': return t('Atteins {speed}', { speed: kmh(st.min) });
+      case 'low': return t('Vole à moins de {m} m du sol pendant {s} s', { m: st.maxAgl, s: st.duration }) + (st.label ? ` (${t(st.label)})` : '');
+      case 'hold': return t('Tiens ton altitude entre {min} et {max} m pendant {s} s', { min: st.min, max: st.max, s: st.duration });
+      case 'inverted': return t('Vole sur le dos pendant {s} s', { s: st.duration });
+      case 'follow': return t('Reste à moins de {m} m de : {label} ({s} s)', { m: st.distance, label: t(st.label), s: st.duration });
       default: return '';
     }
   }
@@ -456,8 +457,8 @@ export class QuestSystem {
     }
     $('quest-box').classList.remove('hidden');
     const sg = stageAt(q, A.step);
-    $('quest-title').textContent = `${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${q.title}`;
-    $('quest-step').innerHTML = (sg.label ? `<div class="stage">Étape ${sg.n}/${sg.total} — ${esc(sg.label)}${sg.subTotal > 1 ? ` <span>(${sg.sub}/${sg.subTotal})</span>` : ''}</div>` : '')
+    $('quest-title').textContent = `${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${t(q.title)}`;
+    $('quest-step').innerHTML = (sg.label ? `<div class="stage">${t('Étape {n}/{total}', { n: sg.n, total: sg.total })} — ${esc(t(sg.label))}${sg.subTotal > 1 ? ` <span>(${sg.sub}/${sg.subTotal})</span>` : ''}</div>` : '')
       + esc(this.stepText(st));
     $('quest-progress').classList.add('hidden');
   }
@@ -468,7 +469,7 @@ export class QuestSystem {
     A.step++;
     if (A.step < A.q.steps.length) {
       this.beep(660, 0.12);
-      if (sg.last && sg.label) this.logMsg(`✔ Étape ${sg.n}/${sg.total} terminée : ${sg.label}`);
+      if (sg.last && sg.label) this.logMsg(`✔ ${t('Étape {n}/{total} terminée : {label}', { n: sg.n, total: sg.total, label: t(sg.label) })}`);
       this.showStep();
       return;
     }
@@ -485,10 +486,10 @@ export class QuestSystem {
     this.persist();
     this.abandon(true);
     this.onQuestDone?.(q, { time: A.elapsed, replay: A.replay });
-    this.toast(`✅ ${q.title} terminée ! +${gain} ₣${bonus ? ` (dont bonus chrono ${bonus} ₣)` : ''}`);
+    this.toast(`✅ ${t('{title} terminée ! +{gain} ₣', { title: t(q.title), gain })}${bonus ? ` ${t('(dont bonus chrono {bonus} ₣)', { bonus })}` : ''}`);
     this.beep(880, 0.25);
     const after = this.rankIndex();
-    if (after > before) setTimeout(() => this.toast(`🎖 Nouveau rang : ${RANKS[after].name} !`), 3000);
+    if (after > before) setTimeout(() => this.toast(`🎖 ${t('Nouveau rang : {rank} !', { rank: t(RANKS[after].name) })}`), 3000);
   }
 
   requestDrop() {
@@ -526,11 +527,11 @@ export class QuestSystem {
         if (!done && plane.onGround && !plane.crashed) {
           const kmh = Math.round(plane.speed * 3.6);
           const here = onRunway(pos.x, pos.z)?.id === st.airport;
-          if (here && A.needAirborne) hint = 'Décolle d\'abord, puis reviens te poser';
+          if (here && A.needAirborne) hint = t('Décolle d\'abord, puis reviens te poser');
           else if (here) {
-            hint = `Arrête-toi : gaz à zéro (${keyName0('throttleDown')}) et freins (${keyName0('brake')}) · ${kmh} km/h`;
+            hint = t('Arrête-toi : gaz à zéro ({thr}) et freins ({brake}) · {kmh} km/h', { thr: keyName0('throttleDown'), brake: keyName0('brake'), kmh });
             progress = Math.min(1, Math.max(0, 1 - (plane.speed - 3) / 25));
-          } else if (hd < airportById(st.airport).reach) hint = 'Tu es hors de la piste : roule jusqu\'au cadre vert';
+          } else if (hd < airportById(st.airport).reach) hint = t('Tu es hors de la piste : roule jusqu\'au cadre vert');
         }
         break;
       }
@@ -561,9 +562,9 @@ export class QuestSystem {
           this.dropRequested = false;
           this.spawnDrop();
           const miss = Math.hypot(A.impact.x - p.x, A.impact.z - p.z);
-          if (st.maxAgl && agl >= st.maxAgl) this.logMsg(`Trop haut ! Descends sous ${st.maxAgl} m du sol`);
+          if (st.maxAgl && agl >= st.maxAgl) this.logMsg(t('Trop haut ! Descends sous {m} m du sol', { m: st.maxAgl }));
           else if (miss < st.radius) done = true;
-          else this.logMsg(`Raté ! Le colis tombe à ${fmtDist(miss)} de la cible`);
+          else this.logMsg(t('Raté ! Le colis tombe à {dist} de la cible', { dist: fmtDist(miss) }));
         }
         break;
       }
@@ -605,12 +606,12 @@ export class QuestSystem {
       $('arrow').style.transform = `rotate(${rel}deg)`;
     } else $('arrow').classList.add('hidden');
     let info = p ? fmtDist(Math.hypot(p.x - pos.x, p.z - pos.z)) : '';
-    if (st.type === 'ring' && p) info += ` · anneau à ${Math.round(p.y)} m`;
-    if (st.type === 'altitude' || st.type === 'hold') info = `Altitude : ${Math.round(pos.y)} m`;
-    if (st.type === 'speed') info = `Vitesse : ${Math.round(plane.speed * 3.6)} km/h`;
-    if (st.type === 'low') info = `${info ? info + ' · ' : ''}Hauteur : ${Math.max(0, Math.round(agl))} m`;
+    if (st.type === 'ring' && p) info += ` · ${t('anneau à {m} m', { m: Math.round(p.y) })}`;
+    if (st.type === 'altitude' || st.type === 'hold') info = t('Altitude : {m} m', { m: Math.round(pos.y) });
+    if (st.type === 'speed') info = t('Vitesse : {kmh} km/h', { kmh: Math.round(plane.speed * 3.6) });
+    if (st.type === 'low') info = `${info ? info + ' · ' : ''}${t('Hauteur : {m} m', { m: Math.max(0, Math.round(agl)) })}`;
     if (q.timeLimit) info += ` · ⏱ ${fmtTime(Math.max(0, q.timeLimit - A.elapsed))}`;
-    else if (q.bonusTime) info += ` · ⏱ ${fmtTime(A.elapsed)} (bonus < ${fmtTime(q.bonusTime)})`;
+    else if (q.bonusTime) info += ` · ⏱ ${fmtTime(A.elapsed)} (${t('bonus')} < ${fmtTime(q.bonusTime)})`;
     if (isRanked(q) && !q.bonusTime) info += ` · ⏱ ${fmtChrono(A.elapsed)}`;
     if (hint) info = hint;
     $('quest-dist').textContent = info;
@@ -667,7 +668,7 @@ export class QuestSystem {
   // une téléportation volontaire l'annule
   onRespawn(crashed, teleport) {
     if (!this.active) return;
-    if (teleport || !crashed) { this.abandon(true); this.toast('Quête annulée (réapparition)'); return; }
+    if (teleport || !crashed) { this.abandon(true); this.toast(t('Quête annulée (réapparition)')); return; }
     this.active.needAirborne = true;
     this.active.touched = false;
   }
@@ -678,9 +679,9 @@ export class QuestSystem {
     const { airport, cluster } = this.boardContext();
     if (cluster) {
       const n = cluster.available;
-      return `${kbd('board')} ${n === 1 ? `<b>${esc(cluster.quests.find((q) => this.isAvailable(q)).title)}</b>` : `${n} quêtes disponibles ici`}${airport ? ' + missions de transport' : ''}`;
+      return `${kbd('board')} ${n === 1 ? `<b>${esc(t(cluster.quests.find((q) => this.isAvailable(q)).title))}</b>` : t('{n} quêtes disponibles ici', { n })}${airport ? ` + ${t('missions de transport')}` : ''}`;
     }
-    if (airport) return `${kbd('board')} tableau des missions de ${esc(airport.name)}`;
+    if (airport) return `${kbd('board')} ${t('tableau des missions de {airport}', { airport: esc(airport.name) })}`;
     return '';
   }
 
@@ -698,21 +699,21 @@ export class QuestSystem {
     const r = this.rankIndex();
     const next = RANKS[r + 1];
     const done = this.quests.filter((q) => this.isDone(q)).length;
-    $('journal-rank').innerHTML = `<b>${RANKS[r].name}</b> · ${s.xp} XP${next ? ` — prochain rang : ${next.name} (${next.xp} XP)` : ''}`
+    $('journal-rank').innerHTML = `<b>${t(RANKS[r].name)}</b> · ${s.xp} XP${next ? ` — ${t('prochain rang : {rank} ({xp} XP)', { rank: t(next.name), xp: next.xp })}` : ''}`
       + `<div class="bar"><div style="width:${next ? Math.min(100, ((s.xp - RANKS[r].xp) / (next.xp - RANKS[r].xp)) * 100) : 100}%"></div></div>`
-      + `<small>${done} / ${this.quests.length} quêtes terminées · ${s.jobs.done.length} mission(s) de transport aujourd'hui</small>`;
+      + `<small>${t('{done} / {total} quêtes terminées · {jobs} mission(s) de transport aujourd\'hui', { done, total: this.quests.length, jobs: s.jobs.done.length })}</small>`;
     const groups = {};
     for (const q of this.quests) (groups[q.category] ||= []).push(q);
     let html = '';
     for (const [cat, list] of Object.entries(groups)) {
       const n = list.filter((q) => this.isDone(q)).length;
-      html += `<h3>${CAT_ICON[cat] || ''} ${CATEGORIES[cat] || cat} <small>${n}/${list.length}</small></h3><ul>`;
+      html += `<h3>${CAT_ICON[cat] || ''} ${t(CATEGORIES[cat] || cat)} <small>${n}/${list.length}</small></h3><ul>`;
       for (const q of list) {
         const isDone = this.isDone(q), lock = this.lockReason(q), act = this.active?.q.id === q.id;
         const icon = isDone ? '✅' : act ? '▶' : lock ? '🔒' : '❗';
         const where = q.airport ? airportById(q.airport).name : this.placeName(q.giver.x, q.giver.z);
-        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(q.title)}</b> <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
-          + `<small>${esc(lock && !isDone ? lock : q.desc)}</small>${isDone ? '' : stagesLine(q)}</li>`;
+        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(t(q.title))}</b> <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
+          + `<small>${esc(lock && !isDone ? lock : t(q.desc))}</small>${isDone ? '' : stagesLine(q)}</li>`;
       }
       html += '</ul>';
     }
@@ -724,7 +725,7 @@ export class QuestSystem {
     for (const c of this.clusters) {
       if (!c.available) continue;
       text('!', toX(c.x) - 2, toY(c.z) + 4, '#ffd23f');
-      if (full && span < 40000) text(c.available === 1 ? c.quests.find((q) => this.isAvailable(q)).title : `${c.available} quêtes`, toX(c.x) + 6, toY(c.z) + 16, '#ffd23f');
+      if (full && span < 40000) text(c.available === 1 ? t(c.quests.find((q) => this.isAvailable(q)).title) : t('{n} quêtes', { n: c.available }), toX(c.x) + 6, toY(c.z) + 16, '#ffd23f');
     }
     if (!this.active) return;
     const p = this.stepPoint(this.active.q.steps[this.active.step]);

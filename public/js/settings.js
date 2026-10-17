@@ -1,5 +1,6 @@
 import { QUALITY_PRESETS, EFFECT_KEYS } from './render/config.js';
 import { SOUND_GROUPS } from './ui/audio.js';
+import { t } from './i18n.js';
 
 // Paramètres du joueur (sauvegardés dans le navigateur)
 export const SCHEMA = [
@@ -64,19 +65,19 @@ export function buildSettingsForm(container, onChange) {
   for (const s of SCHEMA) {
     if (s.section) {
       const h = document.createElement('h3');
-      h.textContent = s.section;
+      h.textContent = t(s.section);
       container.appendChild(h);
       continue;
     }
     const row = document.createElement('label');
     row.className = 'setting';
     const name = document.createElement('span');
-    name.textContent = s.label;
+    name.textContent = s.label.startsWith('· ') ? `· ${t(s.label.slice(2))}` : t(s.label);
     row.appendChild(name);
     let input;
     if (s.type === 'select') {
       input = document.createElement('select');
-      for (const [v, t] of s.options) input.add(new Option(t, v));
+      for (const [v, txt] of s.options) input.add(new Option(t(txt), v));
       input.value = settings[s.key];
       input.onchange = () => {
         settings[s.key] = input.value;

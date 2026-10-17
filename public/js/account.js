@@ -1,6 +1,7 @@
 // Compte joueur (côté jeu) : connexion par e-mail + mot de passe ou Google, et sauvegarde de la progression
 // sur le serveur Node (accounts.js). Sans compte, tout reste dans le navigateur comme avant.
 import { MULTIPLAYER_URL, ACCOUNT_URL } from './config.js';
+import { t, LANG } from './i18n.js';
 
 const TOKEN_KEY = 'jpairlines-token';
 
@@ -32,12 +33,12 @@ export class Account {
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch {
-      throw new Error('Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).');
+      throw new Error(t('Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).'));
     }
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
       if (r.status === 401 && this.token && path !== 'login') this.forget();
-      throw new Error(data.error || `Erreur ${r.status}`);
+      throw new Error(data.error ? t(data.error) : t('Erreur {status}', { status: r.status }));
     }
     return data;
   }
@@ -132,7 +133,7 @@ export function mountGoogleButton(el, clientId, base) {
   s.async = true;
   s.onload = () => {
     window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'redirect', login_uri: `${base}/api/google-redirect` });
-    window.google.accounts.id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: 'fr', width: 300 });
+    window.google.accounts.id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: LANG, width: 300 });
   };
   document.head.appendChild(s);
   return true;

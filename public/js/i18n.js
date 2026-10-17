@@ -18,7 +18,7 @@ function detect() {
   } catch { /* stockage indisponible */ }
   return /^fr\b/i.test(navigator.language || 'fr') ? 'fr' : 'en';
 }
-export const LANG = typeof navigator === 'undefined' ? 'fr' : detect();
+export const LANG = typeof window === 'undefined' ? 'fr' : detect(); // scripts Node : français
 export const isEN = LANG === 'en';
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
