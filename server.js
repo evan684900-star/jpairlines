@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { handleApi } from './accounts.js';
+import { handleApi, userCount } from './accounts.js';
+import { Stats } from './stats.js';
 import { cleanChat } from './chat.js';
 import { cleanLivery } from './public/js/livery.js';
 
@@ -24,8 +25,13 @@ const THREE_FILE = path.join(THREE_DIR, 'build/three.module.js');
 const ADDONS = path.join(THREE_DIR, 'examples/jsm');
 
 const server = http.createServer(async (req, res) => {
-  if (await handleApi(req, res)) return; // comptes joueurs (/api/…)
   const url = new URL(req.url, 'http://localhost');
+  // statistiques de fréquentation (chiffres globaux, aucune donnée personnelle)
+  if (url.pathname === '/api/stats') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify(stats.summary(players.size, userCount())));
+  }
+  if (await handleApi(req, res)) return; // comptes joueurs (/api/…)
   if (url.pathname === '/health') { res.writeHead(200); return res.end('ok'); }
   // three.js est servi directement depuis node_modules (en local, sans build)
   if (url.pathname === '/vendor/three.module.js') return sendFile(THREE_FILE, res);
@@ -50,6 +56,8 @@ function sendFile(file, res) {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 2048 });
 const players = new Map();
+const stats = new Stats();
+// le nombre de joueurs connectés compte aussi les départs (pour le pic et les minutes de jeu)
 const chatHistory = []; // derniers messages, envoyés aux nouveaux arrivants
 let nextId = 1;
 
@@ -61,6 +69,7 @@ wss.on('connection', (ws) => {
   const id = nextId++;
   const player = { id, name: 'Pilote', p: null, q: null, s: 0, r: 0, g: 1, f: 0, l: 0, a: 0 };
   players.set(id, player);
+  stats.join(players.size);
   const liveries = Object.fromEntries([...players.values()].filter((p) => p.livery).map((p) => [p.id, p.livery]));
   ws.send(JSON.stringify({ t: 'welcome', id, chat: chatHistory, liveries }));
   const sent = []; // horodatage des derniers messages (anti-spam)
@@ -85,6 +94,8 @@ wss.on('connection', (ws) => {
       player.livery = cleanLivery(msg.l);
       const data = JSON.stringify({ t: 'livery', id, l: player.livery });
       for (const c of wss.clients) if (c.readyState === 1) c.send(data);
+    } else if (msg.t === 'quest' && typeof msg.id === 'string') {
+      stats.quest(msg.id);
     } else if (msg.t === 'chat') {
       const now = Date.now();
       while (sent.length && now - sent[0] > 10000) sent.shift();
@@ -98,6 +109,7 @@ wss.on('connection', (ws) => {
         return;
       }
       sent.push(now);
+      stats.chat();
       recentText.push(text);
       if (recentText.length > 5) recentText.shift();
       const line = { id, name: player.name, text, ts: now };
@@ -107,7 +119,7 @@ wss.on('connection', (ws) => {
       for (const c of wss.clients) if (c.readyState === 1) c.send(data);
     }
   });
-  ws.on('close', () => players.delete(id));
+  ws.on('close', () => { players.delete(id); stats.setOnline(players.size); });
   ws.on('error', () => players.delete(id));
 });
 

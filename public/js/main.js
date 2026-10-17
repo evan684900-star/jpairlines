@@ -1257,6 +1257,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
       const a = AIRCRAFT.find((x) => x.unlock === q.id);
       if (a && !res.replay) setTimeout(() => toast(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`), 3200);
       if (isRanked(q)) recordTime(q, res.time);
+      if (net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'quest', id: q.job ? 'transport' : q.id })); // statistiques (quêtes les plus jouées)
     },
     onShowTimes: (q, li) => showTimes(q, li),
   });

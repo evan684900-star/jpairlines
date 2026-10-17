@@ -150,6 +150,8 @@ function cleanSave(s) {
   return JSON.parse(json);
 }
 
+export const userCount = () => Object.keys(db.users).length;
+
 // Routes /api/… ; renvoie true si la requête a été traitée
 export async function handleApi(req, res) {
   const url = new URL(req.url, 'http://localhost');

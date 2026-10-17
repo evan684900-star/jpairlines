@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JP Airlines — Statistiques</title>
+  <style>
+    :root { color-scheme: dark; --accent: #f5b532; --dim: #8fa1b3; --card: #16202b; }
+    body { margin: 0; background: #0d141b; color: #dfe7ee; font: 15px/1.5 system-ui, sans-serif; }
+    main { max-width: 980px; margin: 0 auto; padding: 24px 16px 60px; }
+    h1 { color: var(--accent); margin: 0 0 4px; }
+    h2 { font-size: 1.05em; margin: 28px 0 10px; color: var(--accent); }
+    .sub { color: var(--dim); margin: 0 0 18px; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+    .card { background: var(--card); border-radius: 12px; padding: 12px 14px; }
+    .card b { display: block; font-size: 1.7em; color: #fff; }
+    .card span { color: var(--dim); font-size: 0.85em; }
+    .live b { color: #4be37a; }
+    .chart { background: var(--card); border-radius: 12px; padding: 12px; overflow-x: auto; }
+    svg text { fill: var(--dim); font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+    td, th { padding: 7px 12px; text-align: left; border-bottom: 1px solid #ffffff10; }
+    th { color: var(--dim); font-weight: 600; }
+    td.n { text-align: right; font-variant-numeric: tabular-nums; }
+    a { color: #8fd0ff; }
+    .err { color: #ffb4a8; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Statistiques de JP Airlines</h1>
+  <p class="sub">Chiffres du serveur multijoueur (joueurs connectés au jeu). Mise à jour toutes les 30 s. Les visites de la page web sont dans
+    <a href="https://vercel.com/dashboard" target="_blank" rel="noopener">Vercel → ton projet → Analytics</a>.</p>
+  <div id="out">Chargement…</div>
+</main>
+<script type="module">
+  import { MULTIPLAYER_URL, ACCOUNT_URL } from './js/config.js';
+  const base = (ACCOUNT_URL || (MULTIPLAYER_URL ? MULTIPLAYER_URL.replace(/^ws/, 'http').replace(/\/ws\/?$/, '') : location.origin)).replace(/\/$/, '');
+  const fmtMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let titles = {};
+  import('./js/quests/index.js').then((m) => { titles = Object.fromEntries(m.QUESTS.map((q) => [q.id, q.title])); titles.transport = 'Missions de transport'; load(); }).catch(() => {});
+
+  function bars(days, key, color, label) {
+    const bw = 30, W = Math.max(1, days.length) * bw, H = 150, max = Math.max(1, ...days.map((d) => d[key]));
+    let s = `<svg width="${W}" height="${H + 44}" viewBox="0 0 ${W} ${H + 44}"><g transform="translate(0 14)">`;
+    days.forEach((d, i) => {
+      const h = (d[key] / max) * H;
+      s += `<rect x="${i * bw + 3}" y="${H - h}" width="${bw - 6}" height="${h}" rx="3" fill="${color}"><title>${d.day} : ${key === 'minutes' ? fmtMin(d[key]) : d[key]} ${label}</title></rect>`;
+      if (d[key]) s += `<text x="${i * bw + bw / 2}" y="${H - h - 3}" text-anchor="middle">${key === 'minutes' ? Math.round(d[key] / 60) + 'h' : d[key]}</text>`;
+      if (i % 2 === 0 || days.length < 15) s += `<text x="${i * bw + bw / 2}" y="${H + 16}" text-anchor="middle">${d.day.slice(5).replace('-', '/')}</text>`;
+    });
+    return `${s}</g></svg>`;
+  }
+
+  async function load() {
+    try {
+      const r = await fetch(`${base}/api/stats`, { cache: 'no-store' });
+      const s = await r.json();
+      const t = s.today;
+      document.getElementById('out').innerHTML = `
+        <div class="cards">
+          <div class="card live"><b>${s.online}</b><span>pilote(s) en ligne maintenant</span></div>
+          <div class="card"><b>${t.visits}</b><span>connexions aujourd'hui</span></div>
+          <div class="card"><b>${t.peak}</b><span>pic de joueurs aujourd'hui</span></div>
+          <div class="card"><b>${fmtMin(t.minutes)}</b><span>temps de jeu cumulé aujourd'hui</span></div>
+          <div class="card"><b>${s.accounts}</b><span>comptes créés</span></div>
+          <div class="card"><b>${s.last30.visits}</b><span>connexions (30 jours)</span></div>
+          <div class="card"><b>${s.last30.peak}</b><span>record de joueurs simultanés (30 j)</span></div>
+          <div class="card"><b>${fmtMin(s.last30.minutes)}</b><span>temps de jeu (30 jours)</span></div>
+          <div class="card"><b>${s.last30.quests}</b><span>quêtes réussies (30 jours)</span></div>
+          <div class="card"><b>${s.last30.chat}</b><span>messages de chat (30 jours)</span></div>
+        </div>
+        <h2>Connexions par jour</h2><div class="chart">${bars(s.days, 'visits', '#f5b532', 'connexions')}</div>
+        <h2>Temps de jeu par jour</h2><div class="chart">${bars(s.days, 'minutes', '#4b9be3', 'de jeu')}</div>
+        <h2>Pic de joueurs simultanés par jour</h2><div class="chart">${bars(s.days, 'peak', '#4be37a', 'joueurs')}</div>
+        <h2>Quêtes les plus jouées</h2>
+        ${s.topQuests.length ? `<table><tr><th>Quête</th><th class="n">Réussites</th></tr>${s.topQuests.map(([id, n]) => `<tr><td>${esc(titles[id] || id)}</td><td class="n">${n}</td></tr>`).join('')}</table>` : '<p class="sub">Aucune quête terminée pour l\'instant.</p>'}
+        <p class="sub" style="margin-top:20px">Serveur démarré depuis ${s.uptimeH} h.</p>`;
+    } catch {
+      document.getElementById('out').innerHTML = '<p class="err">Serveur injoignable : vérifie que le serveur multijoueur tourne (pm2 list).</p>';
+    }
+  }
+  load();
+  setInterval(load, 30000);
+</script>
+</body>
+</html>
