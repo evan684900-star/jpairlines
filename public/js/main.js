@@ -21,11 +21,19 @@ import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
+import { t, isEN, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, priceOf, PRICE_LABEL } from './livery.js';
 
 const $ = (id) => document.getElementById(id);
-const status = (t, progress) => { $('load-status').textContent = t; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
+// rang au classement : « 1er sur 12 » / « #1 of 12 »
+const ordinal = (rank, total) => (rank === 1 ? t('{rank}er sur {total}', { rank, total }) : t('{rank}e sur {total}', { rank, total }));
+const status = (msg, progress) => { $('load-status').textContent = msg; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
 hydrateIcons();
+// langue : la page est en français, traduite à l'affichage si le joueur a choisi l'anglais
+document.documentElement.lang = isEN ? 'en' : 'fr';
+translateDom();
+$('lang-switch').textContent = isEN ? '🇫🇷 Passer en français' : '🇬🇧 Play in English';
+$('lang-switch').onclick = () => setLang(isEN ? 'fr' : 'en');
 
 // ================= Rendu =================
 const gfx = new GameRenderer($('game'));
@@ -82,14 +90,15 @@ function updatePrompt() {
     const q = quests ? quests.prompt() : '';
     if (q) lines.push(q);
     if (atAirportStopped() && plane.fuel < plane.S.fuelCapacity - 0.5 && FUEL_SCALE[settings.fuelMode] > 0) {
+      const extra = save.money < FUEL_PRICE ? t(", carburant de secours offert jusqu'à {n} L", { n: EMERGENCY_FUEL }) : '';
       lines.push(canRefuel()
-        ? `⛽ Maintiens ${kbd('refuel')} pour faire le plein : ${Math.round(plane.fuel)} / ${plane.S.fuelCapacity} L (${FUEL_PRICE} ₣/L${save.money < FUEL_PRICE ? `, carburant de secours offert jusqu'à ${EMERGENCY_FUEL} L` : ''})`
-        : `⛽ Coupe le moteur (${kbd('engine')}) pour faire le plein`);
+        ? t('⛽ Maintiens {key} pour faire le plein : {fuel} / {cap} L ({price} ₣/L{extra})', { key: kbd('refuel'), fuel: Math.round(plane.fuel), cap: plane.S.fuelCapacity, price: FUEL_PRICE, extra })
+        : t('⛽ Coupe le moteur ({key}) pour faire le plein', { key: kbd('engine') }));
     }
     if (!lines.length && plane.onGround && !plane.engineOn && plane.engineStart <= 0) {
-      lines.push(`Appuie sur ${kbd('engine')} pour démarrer le moteur · ${kbd('help')} commandes`);
+      lines.push(t('Appuie sur {engine} pour démarrer le moteur · {help} commandes', { engine: kbd('engine'), help: kbd('help') }));
     } else if (!lines.length && plane.onGround && plane.parkingBrake && plane.throttle > 0.2) {
-      lines.push(`Le frein de parking est serré : appuie sur ${kbd('parking')}`);
+      lines.push(t('Le frein de parking est serré : appuie sur {key}', { key: kbd('parking') }));
     }
   }
   const html = lines.join('<br>');
@@ -152,7 +161,7 @@ addEventListener('keydown', (e) => {
     e.preventDefault();
     if (k !== 'escape') {
       const taken = bindKey(capturing, k);
-      if (taken.length) toast(`${keyName(k)} retirée de : ${taken.join(', ')}`);
+      if (taken.length) toast(t('{key} retirée de : {list}', { key: keyName(k), list: taken.map((l) => t(l)).join(', ') }));
     }
     capturing = null;
     renderKeys();
@@ -178,7 +187,7 @@ addEventListener('keydown', (e) => {
   if (is('help')) $('help').classList.toggle('hidden');
   if (paused) return;
   if (is('chat')) { e.preventDefault(); openChat(); return; }
-  if (is('camera')) { rig.next(); toast(`Caméra : ${rig.modeName}`); }
+  if (is('camera')) { rig.next(); toast(t('Caméra : {name}', { name: t(rig.modeName) })); }
   if (is('respawn')) respawn();
   if (is('board') && quests?.canOpenBoard()) quests.openBoard();
   if (is('drop')) quests?.requestDrop();
@@ -190,9 +199,9 @@ addEventListener('keydown', (e) => {
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
   if (is('smoke')) {
-    if (!isOwned('smoke')) { toast('💨 Achète le fumigène au hangar (onglet Fumigène)'); return; }
+    if (!isOwned('smoke')) { toast(t('💨 Achète le fumigène au hangar (onglet Fumigène)')); return; }
     plane.smokeOn = !plane.smokeOn;
-    toast(plane.smokeOn ? '💨 Fumigène allumé (couleur réglable au hangar)' : 'Fumigène coupé');
+    toast(plane.smokeOn ? t('💨 Fumigène allumé (couleur réglable au hangar)') : t('Fumigène coupé'));
   }
 });
 addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
@@ -239,7 +248,7 @@ let fuelPaid = 0, lastFuelMsg = 0, lastFuelSave = 0;
 function doRefuel(dt) {
   const free = save.money < FUEL_PRICE && plane.fuel < EMERGENCY_FUEL;
   if (!free && save.money < FUEL_PRICE) {
-    if (performance.now() - lastFuelMsg > 3000) { lastFuelMsg = performance.now(); logMsg('Plus assez d\'argent pour le carburant !'); }
+    if (performance.now() - lastFuelMsg > 3000) { lastFuelMsg = performance.now(); logMsg(t('Plus assez d\'argent pour le carburant !')); }
     return;
   }
   const before = plane.fuel;
@@ -312,41 +321,41 @@ let capturing = null; // action en attente d'une nouvelle touche
 function helpTable() {
   let html = '';
   for (const a of ACTIONS) {
-    if (a.group) { html += `<tr><th colspan="2">${a.group}</th></tr>`; continue; }
+    if (a.group) { html += `<tr><th colspan="2">${t(a.group)}</th></tr>`; continue; }
     const ks = keysFor(a.id).map((k) => `<kbd>${keyName(k)}</kbd>`).join(' · ') || '—';
-    html += `<tr><td>${ks}</td><td>${a.label}</td></tr>`;
+    html += `<tr><td>${ks}</td><td>${t(a.label)}</td></tr>`;
   }
-  return html + '<tr><td><kbd>Échap</kbd></td><td>Pause et paramètres</td></tr><tr><td>molette · clic-glisser</td><td>Zoom · tourner autour de l\'avion</td></tr>';
+  return html + `<tr><td><kbd>${t('Échap')}</kbd></td><td>${t('Pause et paramètres')}</td></tr><tr><td>${t('molette · clic-glisser')}</td><td>${t('Zoom · tourner autour de l\'avion')}</td></tr>`;
 }
 function renderKeys() {
   for (const t of document.querySelectorAll('.keys-dyn')) t.innerHTML = helpTable();
   const box = $('keys-list');
   box.innerHTML = '';
   for (const a of ACTIONS) {
-    if (a.group) { const h = document.createElement('h3'); h.textContent = a.group; box.appendChild(h); continue; }
+    if (a.group) { const h = document.createElement('h3'); h.textContent = t(a.group); box.appendChild(h); continue; }
     const row = document.createElement('div');
     row.className = 'keyrow';
-    const chips = keysFor(a.id).map((k) => `<button class="keychip" data-k="${encodeURIComponent(k)}" title="Retirer cette touche">${keyName(k)} <i>×</i></button>`).join('');
+    const chips = keysFor(a.id).map((k) => `<button class="keychip" data-k="${encodeURIComponent(k)}" title="${t('Retirer cette touche')}">${keyName(k)} <i>×</i></button>`).join('');
     const wait = capturing === a.id;
-    row.innerHTML = `<span>${a.label}</span><div>${chips}<button class="keyadd${wait ? ' wait' : ''}">${wait ? 'Appuie sur une touche… (Échap : annuler)' : '+ Ajouter'}</button></div>`;
+    row.innerHTML = `<span>${t(a.label)}</span><div>${chips}<button class="keyadd${wait ? ' wait' : ''}">${wait ? t('Appuie sur une touche… (Échap : annuler)') : t('+ Ajouter')}</button></div>`;
     for (const c of row.querySelectorAll('.keychip')) c.onclick = () => { unbindKey(a.id, decodeURIComponent(c.dataset.k)); renderKeys(); };
     row.querySelector('.keyadd').onclick = (e) => { e.currentTarget.blur(); capturing = capturing === a.id ? null : a.id; renderKeys(); };
     box.appendChild(row);
   }
 }
-$('keys-reset').onclick = () => { resetKeys(); capturing = null; renderKeys(); toast('Touches par défaut rétablies'); };
+$('keys-reset').onclick = () => { resetKeys(); capturing = null; renderKeys(); toast(t('Touches par défaut rétablies')); };
 renderKeys();
 document.querySelector('#help .close-help').onclick = () => $('help').classList.add('hidden');
 $('open-help').onclick = () => $('help').classList.remove('hidden');
 buildSettingsForm($('settings-form'), applySettings);
 $('reset-progress').onclick = () => {
-  if (!confirm('Effacer argent, quêtes et aéroports visités ?')) return;
+  if (!confirm(t('Effacer argent, quêtes et aéroports visités ?'))) return;
   save = { name: save.name, money: 0, completed: [], lastAirport: 'alpha', visited: ['alpha'], aircraft: 'cub' };
   persist();
   quests.reset();
   if (plane.type !== 'cub') setAircraft('cub');
   renderHangar();
-  toast('Progression effacée');
+  toast(t('Progression effacée'));
 };
 
 function renderAirportList() {
@@ -355,10 +364,10 @@ function renderAirportList() {
   for (const a of AIRPORTS) {
     const li = document.createElement('li');
     const known = save.visited.includes(a.id);
-    li.innerHTML = `<span>${known ? '🛬' : '🔒'} <b>${a.name}</b> <small>· ${a.label}, ${a.elev} m</small></span>`;
+    li.innerHTML = `<span>${known ? '🛬' : '🔒'} <b>${a.name}</b> <small>· ${t(a.label)}, ${a.elev} m</small></span>`;
     if (known) {
       const b = document.createElement('button');
-      b.textContent = 'Y aller';
+      b.textContent = t('Y aller');
       b.onclick = () => { respawn(a, true); save.lastAirport = a.id; persist(); closeOverlays(); };
       li.appendChild(b);
     }
@@ -515,12 +524,12 @@ function connect() {
       chatLine(msg.name, msg.text, msg.id === net.id ? 'me' : '');
       if (msg.id !== net.id) beep(990, 0.05, 0.06);
     }
-    if (msg.t === 'chat-info') chatLine('', msg.text, 'info');
+    if (msg.t === 'chat-info') chatLine('', t(msg.text), 'info');
   };
   ws.onclose = () => {
     net.ws = null;
     for (const id of [...remotes.keys()]) removeRemote(id);
-    $('online').textContent = 'Solo (hors ligne)';
+    $('online').textContent = t('Solo (hors ligne)');
     if (chat.open) closeChat();
     setTimeout(connect, net.retry);
     net.retry = Math.min(60000, net.retry * 2);
@@ -537,8 +546,8 @@ function syncRemotes(list) {
   // arrivées et départs annoncés dans le chat (pas au premier passage : ce sont les pilotes déjà là)
   const now = new Map(list.filter((p) => p.id !== net.id).map((p) => [p.id, p.name]));
   if (net.known) {
-    for (const [id, name] of now) if (!net.known.has(id)) chatLine('', `${name} a rejoint le ciel`, 'info');
-    for (const [id, name] of net.known) if (!now.has(id)) chatLine('', `${name} a quitté le ciel`, 'info');
+    for (const [id, name] of now) if (!net.known.has(id)) chatLine('', t('{name} a rejoint le ciel', { name }), 'info');
+    for (const [id, name] of net.known) if (!now.has(id)) chatLine('', t('{name} a quitté le ciel', { name }), 'info');
   }
   net.known = now;
   const seen = new Set();
@@ -565,7 +574,7 @@ function syncRemotes(list) {
     r.st = { rpm: p.r ?? 0.6, gearPos: p.g ?? 1, flapPos: p.f ?? 0, lights: !!p.l };
   }
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
-  $('online').textContent = `${remotes.size + 1} pilote${remotes.size ? 's' : ''} en ligne`;
+  $('online').textContent = remotes.size ? t('{n} pilotes en ligne', { n: remotes.size + 1 }) : t('{n} pilote en ligne', { n: 1 });
 }
 
 // ================= Chat =================
@@ -587,7 +596,7 @@ function chatLine(name, text, cls = '') {
   if (!cls.includes('old')) setTimeout(() => d.classList.add('old'), 12000);
 }
 function openChat() {
-  if (!net.ws || net.ws.readyState !== 1) { toast('Chat indisponible : pas de connexion au serveur multijoueur'); return; }
+  if (!net.ws || net.ws.readyState !== 1) { toast(t('Chat indisponible : pas de connexion au serveur multijoueur')); return; }
   chat.open = true;
   keys.clear(); // sinon une touche de vol enfoncée resterait « bloquée »
   $('chat').classList.add('open');
@@ -667,7 +676,7 @@ function setAircraft(id) {
     plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine);
     rig.reset(plane);
   } else respawn(undefined, true);
-  toast(`${def.name} sorti du hangar !`);
+  toast(t('{name} sorti du hangar !', { name: def.name }));
 }
 
 function aircraftStats(a) {
@@ -685,26 +694,26 @@ function renderHangar() {
     const cur = plane.type === a.id;
     const st = aircraftStats(a), p = a.perf;
     const bars = [
-      ['Vitesse', p.vmax / 600], ['Maniabilité', Math.min(1, p.roll / 256)], ['Autonomie', Math.min(1, st.range / 1650)], ['Piste courte', Math.min(1, 128 / p.takeoff)],
+      [t('Vitesse'), p.vmax / 600], [t('Maniabilité'), Math.min(1, p.roll / 256)], [t('Autonomie'), Math.min(1, st.range / 1650)], [t('Piste courte'), Math.min(1, 128 / p.takeoff)],
     ];
     const quest = a.unlock && quests?.byId.get(a.unlock);
     const card = document.createElement('div');
     card.className = `aircraft${open ? '' : ' locked'}${cur ? ' current' : ''}`;
     card.innerHTML = `
       <div class="ac-head"><span class="ac-swatch" style="background:#${a.color.toString(16).padStart(6, '0')};border-color:#${a.accent.toString(16).padStart(6, '0')}"></span>
-        <div><b>${a.name}</b> <small>${a.role}</small><div class="ac-sub">${a.engineLabel} · ${a.seats} places</div></div></div>
-      <p class="ac-desc">${a.desc}</p>
+        <div><b>${a.name}</b> <small>${t(a.role)}</small><div class="ac-sub">${t(a.engineLabel)} · ${t('{n} places', { n: a.seats })}</div></div></div>
+      <p class="ac-desc">${t(a.desc)}</p>
       <div class="ac-bars">${bars.map(([n, v]) => `<div><span>${n}</span><i><em style="width:${Math.round(Math.max(0.06, v) * 100)}%"></em></i></div>`).join('')}</div>
-      <div class="ac-specs">Max ${p.vmax} km/h · croisière ${p.cruise} km/h · décroche à ${p.stall} km/h · roulage ${p.takeoff} m · autonomie ${st.range} km (${st.hours.toFixed(1)} h)</div>
+      <div class="ac-specs">${t('Max {vmax} km/h · croisière {cruise} km/h · décroche à {stall} km/h · roulage {takeoff} m · autonomie {range} km ({hours} h)', { vmax: p.vmax, cruise: p.cruise, stall: p.stall, takeoff: p.takeoff, range: st.range, hours: st.hours.toFixed(1) })}</div>
       <div class="ac-action"></div>`;
     const act = card.querySelector('.ac-action');
-    if (cur) act.innerHTML = '<span class="ac-cur">✈️ Aux commandes</span>';
+    if (cur) act.innerHTML = `<span class="ac-cur">${t('✈️ Aux commandes')}</span>`;
     else if (open) {
       const b = document.createElement('button');
-      b.textContent = 'Piloter cet avion';
+      b.textContent = t('Piloter cet avion');
       b.onclick = () => { setAircraft(a.id); closeOverlays(); };
       act.appendChild(b);
-    } else act.innerHTML = `<span class="ac-lock">🔒 Débloqué par la quête « ${quest ? quest.title : a.unlock} »</span>`;
+    } else act.innerHTML = `<span class="ac-lock">${t('🔒 Débloqué par la quête « {title} »', { title: quest ? t(quest.title) : a.unlock })}</span>`;
     box.appendChild(card);
   }
 }
@@ -715,15 +724,15 @@ async function recordTime(q, time) {
   const prev = save.bestTimes[q.id];
   const record = !prev || time < prev;
   if (record) { save.bestTimes[q.id] = Math.round(time * 10) / 10; persist(); }
-  logMsg(`⏱ ${q.title} : ${fmtChrono(time)}${record ? (prev ? ' — nouveau record perso !' : '') : ` (record : ${fmtChrono(prev)})`}`);
+  logMsg(`⏱ ${t(q.title)} : ${fmtChrono(time)}${record ? (prev ? t(' — nouveau record perso !') : '') : t(' (record : {time})', { time: fmtChrono(prev) })}`);
   if (!account.loggedIn) {
-    setTimeout(() => toast('🏆 Connecte-toi (menu principal) pour apparaître au classement en ligne'), 3200);
+    setTimeout(() => toast(t('🏆 Connecte-toi (menu principal) pour apparaître au classement en ligne')), 3200);
     return;
   }
   try {
     const r = await account.submitTime(q.id, Math.round(time * 1000));
-    setTimeout(() => toast(`🏆 Classement « ${q.title} » : ${r.rank}${r.rank === 1 ? 'er' : 'e'} sur ${r.total}${r.best ? '' : ` (ton meilleur temps : ${fmtChrono(r.ms / 1000)})`}`), 3200);
-  } catch (e) { logMsg(`Classement indisponible : ${e.message}`); }
+    setTimeout(() => toast(t('🏆 Classement « {title} » : {place}', { title: t(q.title), place: ordinal(r.rank, r.total) }) + (r.best ? '' : t(' (ton meilleur temps : {time})', { time: fmtChrono(r.ms / 1000) }))), 3200);
+  } catch (e) { logMsg(t('Classement indisponible : {msg}', { msg: t(e.message) })); }
 }
 
 // top 10 d'une quête, affiché dans l'élément donné
@@ -732,18 +741,18 @@ async function showTimes(q, el) {
   if (box) { box.remove(); return; }
   box = document.createElement('div');
   box.className = 'times';
-  box.textContent = 'Chargement du classement…';
+  box.textContent = t('Chargement du classement…');
   el.appendChild(box);
   try {
     const r = await account.times(q.id);
     const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const medal = ['🥇', '🥈', '🥉'];
-    box.innerHTML = `<b>🏆 ${esc(q.title)}</b>`
-      + (r.top.length ? `<ol>${r.top.map((t, i) => `<li><span>${medal[i] || `${i + 1}.`} ${esc(t.name)}</span><span>${fmtChrono(t.ms / 1000)}</span></li>`).join('')}</ol>` : '<p>Personne n\'est encore classé : à toi de jouer !</p>')
-      + (r.me ? `<small>Toi : ${r.me.rank}${r.me.rank === 1 ? 'er' : 'e'} sur ${r.total} · ${fmtChrono(r.me.ms / 1000)}</small>`
-        : `<small>${account.loggedIn ? 'Pas encore de temps enregistré.' : 'Connecte-toi pour être classé.'}${save.bestTimes?.[q.id] ? ` Record perso : ${fmtChrono(save.bestTimes[q.id])}` : ''}</small>`);
+    box.innerHTML = `<b>🏆 ${esc(t(q.title))}</b>`
+      + (r.top.length ? `<ol>${r.top.map((t, i) => `<li><span>${medal[i] || `${i + 1}.`} ${esc(t.name)}</span><span>${fmtChrono(t.ms / 1000)}</span></li>`).join('')}</ol>` : `<p>${t('Personne n\'est encore classé : à toi de jouer !')}</p>`)
+      + (r.me ? `<small>${t('Toi : {place}', { place: ordinal(r.me.rank, r.total) })} · ${fmtChrono(r.me.ms / 1000)}</small>`
+        : `<small>${account.loggedIn ? t('Pas encore de temps enregistré.') : t('Connecte-toi pour être classé.')}${save.bestTimes?.[q.id] ? t(' Record perso : {time}', { time: fmtChrono(save.bestTimes[q.id]) }) : ''}</small>`);
   } catch {
-    box.textContent = 'Classement indisponible (serveur injoignable).';
+    box.textContent = t('Classement indisponible (serveur injoignable).');
   }
 }
 
@@ -755,9 +764,9 @@ function renderRanking() {
   for (const q of ranked) {
     const li = document.createElement('li');
     const best = save.bestTimes?.[q.id];
-    li.innerHTML = `<div class="rk-head"><b></b><small></small><button class="secondary">🏆 Voir</button></div>`;
-    li.querySelector('b').textContent = q.title;
-    li.querySelector('small').textContent = best ? `record perso ${fmtChrono(best)}` : (quests.isDone(q) ? '' : 'pas encore faite');
+    li.innerHTML = `<div class="rk-head"><b></b><small></small><button class="secondary">${t('🏆 Voir')}</button></div>`;
+    li.querySelector('b').textContent = t(q.title);
+    li.querySelector('small').textContent = best ? t('record perso {time}', { time: fmtChrono(best) }) : (quests.isDone(q) ? '' : t('pas encore faite'));
     li.querySelector('button').onclick = () => showTimes(q, li);
     list.appendChild(li);
   }
@@ -867,7 +876,7 @@ function buyPending() {
   save.money -= p.price;
   save.owned = [...new Set([...(save.owned || []), ...p.keys])];
   beep(880, 0.12);
-  toast(`🛒 ${p.label} acheté : −${PRICE_LABEL(p.price)}`);
+  toast(t('🛒 {item} acheté : −{price}', { item: p.label, price: PRICE_LABEL(p.price) }));
   setLivery(p.patch);
 }
 function cancelPending() {
@@ -883,55 +892,55 @@ function renderHangarUI() {
   const view = hg.pending ? cleanLivery({ ...L, ...hg.pending.patch }) : L; // ce qu'on voit (aperçu compris)
   $('hg-title').textContent = def.name;
   const quest = def.unlock && quests?.byId.get(def.unlock);
-  $('hg-sub').innerHTML = open ? `${def.role} · ${def.engineLabel}` : `<span class="hg-locked">🔒 Débloqué par la quête « ${quest ? quest.title : def.unlock} »</span>`;
+  $('hg-sub').innerHTML = open ? `${t(def.role)} · ${t(def.engineLabel)}` : `<span class="hg-locked">${t('🔒 Débloqué par la quête « {title} »', { title: quest ? t(quest.title) : def.unlock })}</span>`;
   $('hg-money').textContent = `💰 ${PRICE_LABEL(save.money)}`;
-  $('hg-fly').textContent = hg.type === plane.type ? '✈️ Reprendre le vol' : '✈️ Piloter cet avion';
+  $('hg-fly').textContent = hg.type === plane.type ? t('✈️ Reprendre le vol') : t('✈️ Piloter cet avion');
   $('hg-fly').disabled = !open;
   for (const b of document.querySelectorAll('[data-hg]')) b.classList.toggle('active', b.dataset.hg === hg.tab);
   const body = $('hg-body');
   const buy = $('hg-buy');
   if (hg.pending) {
     const p = hg.pending, ok = save.money >= p.price;
-    buy.innerHTML = `<div><b>${p.label}</b> — ${PRICE_LABEL(p.price)}${ok ? '' : `<br><small>Il te manque ${PRICE_LABEL(p.price - save.money)}</small>`}</div>`
-      + `<button id="hg-buy-ok" ${ok ? '' : 'disabled'}>Acheter</button><button id="hg-buy-no" class="secondary">Annuler</button>`;
+    buy.innerHTML = `<div><b>${p.label}</b> — ${PRICE_LABEL(p.price)}${ok ? '' : `<br><small>${t('Il te manque {price}', { price: PRICE_LABEL(p.price - save.money) })}</small>`}</div>`
+      + `<button id="hg-buy-ok" ${ok ? '' : 'disabled'}>${t('Acheter')}</button><button id="hg-buy-no" class="secondary">${t('Annuler')}</button>`;
     buy.classList.remove('hidden');
     $('hg-buy-ok').onclick = buyPending;
     $('hg-buy-no').onclick = cancelPending;
   } else buy.classList.add('hidden');
   if (!open) {
-    body.innerHTML = '<p class="sub">Termine la quête indiquée pour débloquer cet avion et le personnaliser.</p>';
+    body.innerHTML = `<p class="sub">${t('Termine la quête indiquée pour débloquer cet avion et le personnaliser.')}</p>`;
     return;
   }
   const hexOf = (n) => `#${n.toString(16).padStart(6, '0')}`;
   const tag = (key) => (isOwned(key) ? '' : `<em class="price">${PRICE_LABEL(priceOf(key))}</em>`);
   const colorRow = (key, label, orig) => `<h4>${label}</h4><div class="hg-sw" data-color="${key}">`
-    + (['body', 'accent', 'stripe'].includes(key) ? `<button class="orig${view[key] ? '' : ' on'}" data-v="">D'origine</button>` : '')
+    + (['body', 'accent', 'stripe'].includes(key) ? `<button class="orig${view[key] ? '' : ' on'}" data-v="">${t('D\'origine')}</button>` : '')
     + SWATCHES.map((c) => `<button style="background:${c}" class="${view[key] === c ? 'on' : ''}${isOwned(`color:${c}`) ? '' : ' lock'}" data-v="${c}" title="${isOwned(`color:${c}`) ? c : `${c} · ${PRICE_LABEL(priceOf(`color:${c}`))}`}"></button>`).join('')
-    + (isOwned('custom-color') ? `<input type="color" value="${view[key] || orig}" title="Couleur sur mesure">` : `<button class="orig custom" title="Débloque toutes les couleurs">🎨 Sur mesure ${tag('custom-color')}</button>`)
+    + (isOwned('custom-color') ? `<input type="color" value="${view[key] || orig}" title="${t('Couleur sur mesure')}">` : `<button class="orig custom" title="${t('Débloque toutes les couleurs')}">${t('🎨 Sur mesure')} ${tag('custom-color')}</button>`)
     + '</div>';
-  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${view[key] === k ? 'on' : ''}" data-v="${k}" data-n="${n}">${n}${tag(`${key}:${k}`)}</button>`).join('')}</div>`;
-  let html = `<p class="sub shop-note">Chaque élément s'achète une fois et sert ensuite sur tous tes avions. Clique pour l'essayer.</p>`;
+  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${view[key] === k ? 'on' : ''}" data-v="${k}" data-n="${t(n)}">${t(n)}${tag(`${key}:${k}`)}</button>`).join('')}</div>`;
+  let html = `<p class="sub shop-note">${t('Chaque élément s\'achète une fois et sert ensuite sur tous tes avions. Clique pour l\'essayer.')}</p>`;
   if (hg.tab === 'couleurs') {
-    html += colorRow('body', 'Couleur principale', hexOf(def.color)) + colorRow('accent', 'Couleur secondaire', hexOf(def.accent))
-      + colorRow('stripe', 'Couleur des filets', hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', 'Bouts d\'hélice', L.tips);
+    html += colorRow('body', t('Couleur principale'), hexOf(def.color)) + colorRow('accent', t('Couleur secondaire'), hexOf(def.accent))
+      + colorRow('stripe', t('Couleur des filets'), hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', t('Bouts d\'hélice'), L.tips);
   } else if (hg.tab === 'motifs') {
-    html += chips('pattern', PATTERNS, 'Motif du fuselage') + chips('wings', WINGS, 'Ailes') + chips('finish', FINISHES, 'Finition de la peinture')
-      + `<h4>Nez</h4><div class="hg-chips"><button id="hg-teeth" class="${view.sharkTeeth ? 'on' : ''}">🦈 Dents de requin${tag('teeth')}</button></div>`;
+    html += chips('pattern', PATTERNS, t('Motif du fuselage')) + chips('wings', WINGS, t('Ailes')) + chips('finish', FINISHES, t('Finition de la peinture'))
+      + `<h4>${t('Nez')}</h4><div class="hg-chips"><button id="hg-teeth" class="${view.sharkTeeth ? 'on' : ''}">${t('🦈 Dents de requin')}${tag('teeth')}</button></div>`;
   } else if (hg.tab === 'deco') {
-    html += `<h4>Immatriculation (7 caractères max) ${tag('reg')}</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${view.reg}">`
-      + chips('emblem', EMBLEMS, 'Emblème sur la dérive') + colorRow('emblemColor', 'Couleur de l\'emblème', L.emblemColor)
-      + (view.emblem === 'numero' ? `<h4>Numéro de course</h4><input type="number" id="hg-num" min="0" max="99" value="${view.number}">` : '');
+    html += `<h4>${t('Immatriculation (7 caractères max)')} ${tag('reg')}</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${view.reg}">`
+      + chips('emblem', EMBLEMS, t('Emblème sur la dérive')) + colorRow('emblemColor', t('Couleur de l\'emblème'), L.emblemColor)
+      + (view.emblem === 'numero' ? `<h4>${t('Numéro de course')}</h4><input type="number" id="hg-num" min="0" max="99" value="${view.number}">` : '');
   } else {
     html += isOwned('smoke')
-      ? colorRow('smoke', 'Couleur du fumigène', L.smoke) + `<p class="sub">En vol, appuie sur ${kbd('smoke')} pour allumer ou couper le fumigène et dessiner dans le ciel.</p>`
-      : `<h4>Fumigène de voltige</h4><p class="sub">Dessine dans le ciel avec une traînée de fumée colorée (touche ${kbd('smoke')} en vol).</p>
-         <div class="hg-chips"><button id="hg-smoke">💨 Installer le fumigène${tag('smoke')}</button></div>`;
+      ? colorRow('smoke', t('Couleur du fumigène'), L.smoke) + `<p class="sub">${t('En vol, appuie sur {key} pour allumer ou couper le fumigène et dessiner dans le ciel.', { key: kbd('smoke') })}</p>`
+      : `<h4>${t('Fumigène de voltige')}</h4><p class="sub">${t('Dessine dans le ciel avec une traînée de fumée colorée (touche {key} en vol).', { key: kbd('smoke') })}</p>
+         <div class="hg-chips"><button id="hg-smoke">${t('💨 Installer le fumigène')}${tag('smoke')}</button></div>`;
   }
   body.innerHTML = html;
   for (const row of body.querySelectorAll('[data-color]')) {
     const key = row.dataset.color;
-    for (const b of row.querySelectorAll('button:not(.custom)')) b.onclick = () => choose({ [key]: b.dataset.v || null }, `Couleur ${b.dataset.v}`);
-    for (const b of row.querySelectorAll('.custom')) b.onclick = () => { hg.pending = { patch: {}, keys: ['custom-color'], label: 'Couleurs sur mesure', price: priceOf('custom-color') }; renderHangarUI(); };
+    for (const b of row.querySelectorAll('button:not(.custom)')) b.onclick = () => choose({ [key]: b.dataset.v || null }, t('Couleur {color}', { color: b.dataset.v }));
+    for (const b of row.querySelectorAll('.custom')) b.onclick = () => { hg.pending = { patch: {}, keys: ['custom-color'], label: t('Couleurs sur mesure'), price: priceOf('custom-color') }; renderHangarUI(); };
     const inp = row.querySelector('input');
     if (!inp) continue;
     inp.oninput = () => {
@@ -944,10 +953,10 @@ function renderHangarUI() {
     inp.onchange = () => renderHangarUI();
   }
   for (const row of body.querySelectorAll('[data-chip]')) for (const b of row.querySelectorAll('button')) b.onclick = () => choose({ [row.dataset.chip]: b.dataset.v }, b.dataset.n);
-  if ($('hg-teeth')) $('hg-teeth').onclick = () => choose({ sharkTeeth: !view.sharkTeeth }, 'Dents de requin');
-  if ($('hg-reg')) $('hg-reg').onchange = () => choose({ reg: $('hg-reg').value }, 'Immatriculation personnalisée');
-  if ($('hg-num')) $('hg-num').onchange = () => choose({ number: Math.round(Number($('hg-num').value)) || 0 }, 'Numéro de course');
-  if ($('hg-smoke')) $('hg-smoke').onclick = () => { hg.pending = { patch: {}, keys: ['smoke'], label: 'Fumigène de voltige', price: priceOf('smoke') }; renderHangarUI(); };
+  if ($('hg-teeth')) $('hg-teeth').onclick = () => choose({ sharkTeeth: !view.sharkTeeth }, t('Dents de requin'));
+  if ($('hg-reg')) $('hg-reg').onchange = () => choose({ reg: $('hg-reg').value }, t('Immatriculation personnalisée'));
+  if ($('hg-num')) $('hg-num').onchange = () => choose({ number: Math.round(Number($('hg-num').value)) || 0 }, t('Numéro de course'));
+  if ($('hg-smoke')) $('hg-smoke').onclick = () => { hg.pending = { patch: {}, keys: ['smoke'], label: t('Fumigène de voltige'), price: priceOf('smoke') }; renderHangarUI(); };
 }
 
 for (const b of document.querySelectorAll('[data-hg]')) b.onclick = () => { hg.tab = b.dataset.hg; renderHangarUI(); };
@@ -981,7 +990,7 @@ function updateHUD(dt) {
   instruments.update(dt, plane, settings.units, inCockpit, agl);
   panelMat.emissiveIntensity = 0.15 + gfx.atmo.night * 0.55; // éclairage de la planche de bord la nuit
   $('money').textContent = `${save.money} ₣`;
-  $('cam-name').textContent = rig.modeName;
+  $('cam-name').textContent = t(rig.modeName);
 
   setSys('sys-engine', plane.engineOn ? 'on' : plane.engineStart > 0 ? 'warn' : null);
   const gear = document.querySelector('#sys-gear .gear');
@@ -994,22 +1003,22 @@ function updateHUD(dt) {
   // alarmes
   const w = [];
   if (!plane.onGround && !plane.crashed) {
-    if (plane.stallWarning) w.push(['DÉCROCHAGE', '']);
+    if (plane.stallWarning) w.push([t('DÉCROCHAGE'), '']);
     const overWater = ground <= 0;
-    if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0 && !(plane.S.amphibious && overWater)) w.push(['TRAIN !', '']);
+    if (plane.gearPos < 0.95 && agl < 150 && plane.throttle < 0.4 && plane.velocity.y < 0 && !(plane.S.amphibious && overWater)) w.push([t('TRAIN !'), '']);
     // hydravion : se poser sur l'eau roues sorties le ferait capoter
-    if (plane.S.amphibious && overWater && plane.gearPos > 0.05 && agl < 150 && plane.velocity.y < 0) w.push(['TRAIN SORTI : EAU !', '']);
-    if (plane.gearPos > 0.3 && plane.ias > plane.S.vGear) w.push(['VITESSE TRAIN', 'amber']);
-    if (plane.ias > plane.S.vne) w.push(['SURVITESSE', '']);
+    if (plane.S.amphibious && overWater && plane.gearPos > 0.05 && agl < 150 && plane.velocity.y < 0) w.push([t('TRAIN SORTI : EAU !'), '']);
+    if (plane.gearPos > 0.3 && plane.ias > plane.S.vGear) w.push([t('VITESSE TRAIN'), 'amber']);
+    if (plane.ias > plane.S.vne) w.push([t('SURVITESSE'), '']);
     if (Math.abs(plane.gLoad) > 4) w.push([`${plane.gLoad.toFixed(1)} G`, 'amber']);
-    if (agl < 60 && plane.velocity.y < -8) w.push(['TERRAIN', '']);
+    if (agl < 60 && plane.velocity.y < -8) w.push([t('TERRAIN'), '']);
   }
-  if (plane.flapPos > 0.2 && plane.ias > plane.S.vFlaps) w.push(['VITESSE VOLETS', 'amber']);
-  if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < plane.S.fuelCapacity * 0.15) w.push(['CARBURANT', plane.fuel < plane.S.fuelCapacity * 0.05 ? '' : 'amber']);
+  if (plane.flapPos > 0.2 && plane.ias > plane.S.vFlaps) w.push([t('VITESSE VOLETS'), 'amber']);
+  if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < plane.S.fuelCapacity * 0.15) w.push([t('CARBURANT'), plane.fuel < plane.S.fuelCapacity * 0.05 ? '' : 'amber']);
   const key = w.map((x) => x[0]).join();
   if (key !== warnKey) {
     warnKey = key;
-    $('warnings').innerHTML = w.map(([t, c]) => `<span class="${c}">${t}</span>`).join('');
+    $('warnings').innerHTML = w.map(([txt, c]) => `<span class="${c}">${txt}</span>`).join('');
   }
 }
 
@@ -1017,7 +1026,7 @@ function updateWeatherChip() {
   const w = gfx.weather;
   const night = gfx.atmo.night > 0.6;
   const ic = w.target === 'rain' || w.target === 'storm' ? 'cloud-rain' : night ? 'moon' : w.target === 'fog' ? 'wind' : 'sun';
-  $('weather-chip').innerHTML = `${icon(ic, 15)}<b>${w.name} · ${String(Math.floor(gfx.atmo.hour)).padStart(2, '0')} h ${String(Math.floor((gfx.atmo.hour % 1) * 60)).padStart(2, '0')}</b>`;
+  $('weather-chip').innerHTML = `${icon(ic, 15)}<b>${t(w.name)} · ${String(Math.floor(gfx.atmo.hour)).padStart(2, '0')} h ${String(Math.floor((gfx.atmo.hour % 1) * 60)).padStart(2, '0')}</b>`;
 }
 
 function updatePlace() {
@@ -1040,7 +1049,7 @@ function simulate(dt) {
     plane.pos.x = THREE.MathUtils.clamp(plane.pos.x, -lim, lim);
     plane.pos.z = THREE.MathUtils.clamp(plane.pos.z, -lim, lim);
     plane.rotateHeading(Math.PI * dt);
-    toast('Limite de la carte — fais demi-tour !');
+    toast(t('Limite de la carte — fais demi-tour !'));
   }
 }
 
@@ -1098,7 +1107,7 @@ function frame(now) {
       save.lastAirport = plane.landedAt.id;
       if (!save.visited.includes(plane.landedAt.id)) {
         save.visited.push(plane.landedAt.id);
-        toast(`Nouvel aéroport découvert : ${plane.landedAt.name}`);
+        toast(t('Nouvel aéroport découvert : {name}', { name: plane.landedAt.name }));
       }
       persist();
     }
@@ -1188,28 +1197,28 @@ for (const b of document.querySelectorAll('[data-acc]')) {
   b.onclick = () => {
     accMode = b.dataset.acc;
     for (const t of document.querySelectorAll('[data-acc]')) t.classList.toggle('active', t === b);
-    $('acc-submit').textContent = accMode === 'login' ? 'Se connecter' : 'Créer mon compte';
+    $('acc-submit').textContent = accMode === 'login' ? t('Se connecter') : t('Créer mon compte');
     $('acc-pass').autocomplete = accMode === 'login' ? 'current-password' : 'new-password';
-    $('acc-pass').placeholder = accMode === 'login' ? 'Mot de passe' : 'Mot de passe (8 caractères minimum)';
+    $('acc-pass').placeholder = accMode === 'login' ? t('Mot de passe') : t('Mot de passe (8 caractères minimum)');
     accMsg('');
   };
 }
 $('acc-form').onsubmit = async (e) => {
   e.preventDefault();
   const email = $('acc-email').value.trim(), pass = $('acc-pass').value;
-  if (!email || !pass) return accMsg('Entre ton e-mail et ton mot de passe.');
+  if (!email || !pass) return accMsg(t('Entre ton e-mail et ton mot de passe.'));
   $('acc-submit').disabled = true;
   accMsg('');
   try {
-    const name = ($('pilot-name').value.trim() || save.name || 'Pilote').slice(0, 16);
+    const name = ($('pilot-name').value.trim() || save.name || t('Pilote')).slice(0, 16);
     const user = accMode === 'login' ? await account.login(email, pass) : await account.register(email, pass, name, save);
     $('acc-pass').value = '';
     adoptAccount(user);
-    toast(accMode === 'login' ? `Bon retour, ${user.name} !` : 'Compte créé : ta progression est sauvegardée.');
-  } catch (err) { accMsg(err.message); }
+    toast(accMode === 'login' ? t('Bon retour, {name} !', { name: user.name }) : t('Compte créé : ta progression est sauvegardée.'));
+  } catch (err) { accMsg(t(err.message)); }
   $('acc-submit').disabled = false;
 };
-$('acc-logout').onclick = async () => { await account.logout(); toast('Déconnecté : la progression reste aussi sur cet appareil.'); };
+$('acc-logout').onclick = async () => { await account.logout(); toast(t('Déconnecté : la progression reste aussi sur cet appareil.')); };
 account.config().then((cfg) => {
   const ok = mountGoogleButton($('acc-google'), cfg.google, account.base);
   $('acc-or').classList.toggle('hidden', !ok);
@@ -1218,11 +1227,11 @@ account.config().then((cfg) => {
 const back = takeRedirectToken();
 const GOOGLE_ERRORS = { 'google-refuse': 'Connexion Google refusée.', 'google-non-configure': 'Connexion Google non configurée sur le serveur.', 'trop-de-tentatives': 'Trop de tentatives, réessaie dans une minute.' };
 if (back?.token) account.useToken(back.token);
-if (back?.error) accMsg(GOOGLE_ERRORS[back.error] || 'Connexion Google impossible.');
+if (back?.error) accMsg(t(GOOGLE_ERRORS[back.error] || 'Connexion Google impossible.'));
 account.restore().then((user) => {
   if (!user) return;
   adoptAccount(user);
-  if (back?.token) toast(`Connecté avec Google : bienvenue, ${user.name} !`);
+  if (back?.token) toast(t('Connecté avec Google : bienvenue, {name} !', { name: user.name }));
 });
 addEventListener('pagehide', () => account.flush());
 
@@ -1231,21 +1240,21 @@ $('pilot-name').value = save.name;
 const tick = () => new Promise((res) => setTimeout(res, 20));
 (async () => {
   applySettings();
-  status('Construction du terrain…', 15);
+  status(t('Construction du terrain…'), 15);
   await tick();
   const a = airportById(save.lastAirport) || AIRPORTS[0];
   plane.placeOnRunway(a);
   terrain.buildAround(a.x, a.z, 4);
-  status('Aéroports, villes et monuments…', 45);
+  status(t('Aéroports, villes et monuments…'), 45);
   await tick();
   world = buildWorldObjects(scene);
-  status('Arbres, maisons et rochers…', 55);
+  status(t('Arbres, maisons et rochers…'), 55);
   await tick();
   try {
     const [trees, rocks] = await Promise.all([new TreeLibrary().build(renderer), new RockLibrary().load()]);
     decor.setLibraries({ trees, rocks, houses: new HouseLibrary() }, new NearTrees(scene, trees));
   } catch (e) { console.warn('Décor détaillé indisponible', e); }
-  status('Ciel et nuages…', 70);
+  status(t('Ciel et nuages…'), 70);
   await tick();
   gfx.buildClouds();
   applySettings('clouds');
@@ -1255,16 +1264,16 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
     // une quête terminée peut débloquer un avion
     onQuestDone: (q, res) => {
       const a = AIRCRAFT.find((x) => x.unlock === q.id);
-      if (a && !res.replay) setTimeout(() => toast(`🔓 Nouvel avion débloqué : ${a.name} ! Échap → Hangar pour le piloter`), 3200);
+      if (a && !res.replay) setTimeout(() => toast(t('🔓 Nouvel avion débloqué : {name} ! Échap → Hangar pour le piloter', { name: a.name })), 3200);
       if (isRanked(q)) recordTime(q, res.time);
       if (net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'quest', id: q.job ? 'transport' : q.id })); // statistiques (quêtes les plus jouées)
     },
     onShowTimes: (q, li) => showTimes(q, li),
   });
-  status('Dessin de la carte…', 82);
+  status(t('Dessin de la carte…'), 82);
   await tick();
   buildMapImage();
-  status('Prêt !', 100);
+  status(t('Prêt !'), 100);
   $('start').disabled = false;
   requestAnimationFrame(frame);
   setTimeout(() => { $('loader').classList.add('done'); if (!started) { $('menu').classList.remove('hidden'); $('pilot-name').focus(); } }, 350);
@@ -1272,7 +1281,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
 })();
 
 $('start').onclick = () => {
-  save.name = ($('pilot-name').value.trim() || 'Pilote').slice(0, 16);
+  save.name = ($('pilot-name').value.trim() || t('Pilote')).slice(0, 16);
   if (!save.visited.includes('alpha')) save.visited.push('alpha');
   persist();
   $('menu').classList.add('hidden');
@@ -1282,7 +1291,7 @@ $('start').onclick = () => {
   respawn();
   started = true;
   connect();
-  toast('Bienvenue ! E pour démarrer le moteur, H pour l\'aide.');
+  toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
 };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
