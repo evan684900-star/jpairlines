@@ -138,7 +138,9 @@ function suite() {
       for (const h of [500, 1500, 3000, 4000]) if (!rates[h] && pp.pos.y > h) rates[h] = pp.velocity.y;
       if (!ceiling && t > 60 && pp.velocity.y < 0.5) ceiling = pp.pos.y;
     });
-    report(`Montée à ${kmh(T.vy)} km/h`, rates[1500] > T.climb1500[0] && rates[1500] < T.climb1500[1] && rates[4000] > T.climb4000[0] && rates[4000] < T.climb4000[1],
+    // hors mode réaliste, la puissance en altitude est adoucie (altLapse) : le taux de montée à 4 000 m peut être 40 % plus fort
+    const hi4000 = T.climb4000[1] * (difficulty === 'realistic' ? 1 : 1.4);
+    report(`Montée à ${kmh(T.vy)} km/h`, rates[1500] > T.climb1500[0] && rates[1500] < T.climb1500[1] * (difficulty === 'realistic' ? 1 : 1.1) && rates[4000] > T.climb4000[0] && rates[4000] < hi4000,
       `vario ${Object.entries(rates).map(([h, v]) => `${h} m : ${v.toFixed(1)} m/s`).join(', ')} ; plafond ≈ ${ceiling ? Math.round(ceiling) : `> ${Math.round(p.pos.y)}`} m`);
   }
 

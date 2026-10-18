@@ -16,9 +16,9 @@ export const SPECS = aircraftById('cub').specs;
 
 // Aides au pilotage et tolérance selon la difficulté
 export const DIFFICULTY = {
-  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, turnComp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity },
-  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8 },
-  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6 },
+  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, turnComp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity, altLapse: 0.35 },
+  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8, altLapse: 0.6 },
+  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6, altLapse: 1 },
 };
 
 const DT = 1 / 240; // pas de simulation (s)
@@ -179,6 +179,7 @@ export class Plane {
     const diff = DIFFICULTY[opts.difficulty] || DIFFICULTY.normal;
     this.brake = !!input.brake;
 
+    this.diff = diff;
     this.updateSystems(dt, input, opts, diff);
 
     // commandes lissées (le clavier est tout-ou-rien : on amène les gouvernes progressivement)
@@ -339,7 +340,9 @@ export class Plane {
 
     // ----- poussée : hélice (limitée en puissance) ou réacteur -----
     if (this.engineOn) {
-      const sigma = rho / 1.225;
+      // la perte de puissance en altitude est adoucie hors mode réaliste (altLapse 1 = physique réelle) :
+      // on grimpe encore correctement vers 3 000 m, là où se trouvent sommets et défis
+      const sigma = 1 - (1 - rho / 1.225) * (this.diff?.altLapse ?? 1);
       const power = Math.max(0, (this.rpm - 0.15) / 0.85);
       let thrust;
       if (S.engine === 'jet') {
