@@ -14,7 +14,7 @@ fs.mkdirSync(dest, { recursive: true });
 fs.copyFileSync(path.join(root, 'node_modules/three/build/three.module.js'), path.join(dest, 'three.module.js'));
 
 // modules complémentaires utilisés par le jeu (dossiers entiers : ils s'importent entre eux)
-const ADDONS = ['objects', 'postprocessing', 'shaders', 'utils', 'environments', 'loaders/GLTFLoader.js'];
+const ADDONS = ['objects', 'postprocessing', 'shaders', 'utils', 'environments', 'geometries', 'loaders/GLTFLoader.js'];
 for (const f of ADDONS) {
   fs.cpSync(path.join(jsm, f), path.join(dest, 'addons', f), { recursive: true });
 }

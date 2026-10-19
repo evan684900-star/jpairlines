@@ -320,6 +320,22 @@ export class Hangar {
     if (this.plane) animatePlaneMesh(this.plane, { rpm: 0.08, gearPos: 1, flapPos: 0, lights: false, night: 0 }, dt, this.t);
   }
 
+  // point de la carrosserie sous la souris (autocollants) : { p, n } dans le repère de l'avion, ou null
+  pick(clientX, clientY) {
+    if (!this.plane) return null;
+    const ndc = new THREE.Vector2((clientX / innerWidth) * 2 - 1, -(clientY / innerHeight) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    const targets = [];
+    this.plane.traverse((o) => { if (o.isMesh && o.userData.paint) targets.push(o); });
+    const hit = ray.intersectObjects(targets, false)[0];
+    if (!hit || !hit.face) return null;
+    const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (n.dot(ray.ray.direction) > 0) n.negate(); // face tournée vers la caméra
+    const q = this.plane.getWorldQuaternion(new THREE.Quaternion()).invert();
+    return { p: this.plane.worldToLocal(hit.point.clone()), n: n.applyQuaternion(q).normalize() };
+  }
+
   render() {
     this.renderer.render(this.scene, this.camera);
   }

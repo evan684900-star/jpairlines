@@ -22,7 +22,8 @@ import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } 
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
 import { t, isEN, setLang, translateDom } from './i18n.js';
-import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, priceOf, PRICE_LABEL } from './livery.js';
+import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
+import { stickerThumb } from './stickers.js';
 
 const $ = (id) => document.getElementById(id);
 // rang au classement : « 1er sur 12 » / « #1 of 12 »
@@ -208,8 +209,14 @@ addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 addEventListener('blur', () => keys.clear());
 
 const canvas = $('game');
-canvas.addEventListener('pointerdown', (e) => { orbit.dragging = true; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', () => { orbit.dragging = false; });
+let downAt = null;
+canvas.addEventListener('pointerdown', (e) => { orbit.dragging = true; downAt = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener('pointerup', (e) => {
+  orbit.dragging = false;
+  // hangar : un clic (sans glisser) sur l'avion colle l'autocollant choisi
+  if (hg.active && hg.placing && downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) < 6) placeSticker(e.clientX, e.clientY);
+  downAt = null;
+});
 canvas.addEventListener('pointermove', (e) => {
   if (!orbit.dragging) return;
   if (hg.active) { hangar.drag(e.movementX, e.movementY); return; }
@@ -572,6 +579,8 @@ function syncRemotes(list) {
     r.tp.fromArray(p.p);
     r.tq.fromArray(p.q);
     r.st = { rpm: p.r ?? 0.6, gearPos: p.g ?? 1, flapPos: p.f ?? 0, lights: !!p.l };
+    r.smoke = !!p.k;
+    r.id = p.id;
   }
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
   $('online').textContent = remotes.size ? t('{n} pilotes en ligne', { n: remotes.size + 1 }) : t('{n} pilote en ligne', { n: 1 });
@@ -631,7 +640,7 @@ function netTick(now) {
     t: 'state',
     p: plane.pos.toArray().map(r2),
     q: plane.quat.toArray().map((v) => Math.round(v * 1e4) / 1e4),
-    s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0, a: aircraftIndex(plane.type),
+    s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0, a: aircraftIndex(plane.type), k: plane.smokeOn && !plane.onGround ? 1 : 0,
   }));
 }
 
@@ -846,6 +855,11 @@ function missingFor(patch) {
     if (k === 'pattern' || k === 'wings' || k === 'finish' || k === 'emblem') out.push(`${k}:${v}`);
     if (k === 'sharkTeeth' && v) out.push('teeth');
     if (k === 'reg' && v) out.push('reg');
+    if (k === 'zones') {
+      const cur = liveryOf(hg.type).zones;
+      for (const [z, c] of Object.entries(v)) if (c && c !== cur[z]) out.push(`zone:${z}`, SWATCHES.includes(c) || c === '#ffffff' ? `color:${c}` : 'custom-color');
+    }
+    if (k === 'stickers') for (const st of v) out.push(`sticker:${st.k}`, SWATCHES.includes(st.c) || st.c === '#ffffff' ? `color:${st.c}` : 'custom-color');
   }
   return [...new Set(out)].filter((key) => !isOwned(key));
 }
@@ -875,6 +889,8 @@ function buyPending() {
   if (!p || save.money < p.price) return;
   save.money -= p.price;
   save.owned = [...new Set([...(save.owned || []), ...p.keys])];
+  const bought = p.keys.find((k) => k.startsWith('sticker:'));
+  if (bought) hg.placing = bought.slice(8); // autocollant acheté : on peut le coller tout de suite
   beep(880, 0.12);
   toast(t('🛒 {item} acheté : −{price}', { item: p.label, price: PRICE_LABEL(p.price) }));
   setLivery(p.patch);
@@ -923,6 +939,27 @@ function renderHangarUI() {
   if (hg.tab === 'couleurs') {
     html += colorRow('body', t('Couleur principale'), hexOf(def.color)) + colorRow('accent', t('Couleur secondaire'), hexOf(def.accent))
       + colorRow('stripe', t('Couleur des filets'), hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', t('Bouts d\'hélice'), L.tips);
+  } else if (hg.tab === 'zones') {
+    hg.zone ||= 'top';
+    html += `<p class="sub">${t('Peins une partie de l\'avion d\'une couleur à part, par-dessus le motif. Chaque zone se débloque une fois.')}</p>`
+      + `<div class="hg-chips" id="hg-zones">${ZONES.map(([k, n]) => `<button class="${hg.zone === k ? 'on' : ''}" data-z="${k}"><i class="dot" style="background:${view.zones[k] || 'transparent'}"></i>${t(n)}${tag(`zone:${k}`)}</button>`).join('')}</div>`
+      + colorRow(`zone:${hg.zone}`, t('Couleur : {zone}', { zone: t(ZONES.find(([k]) => k === hg.zone)[1]) }), view.zones[hg.zone] || '#ffffff')
+      + `<div class="hg-chips"><button id="hg-zone-clear" class="secondary">${t('↺ Suivre le motif (enlever la couleur de zone)')}</button></div>`;
+  } else if (hg.tab === 'stickers') {
+    hg.stickerColor ||= '#c8261e';
+    const list = view.stickers;
+    html += `<p class="sub">${t('Choisis un autocollant puis clique sur l\'avion pour le coller où tu veux. Achat une fois, collage illimité ({max} par avion).', { max: MAX_STICKERS })}</p>`
+      + (hg.placing ? `<div class="hg-place"><b>${t('🖱 Clique sur l\'avion pour coller : {name}', { name: t(STICKERS.find(([k]) => k === hg.placing)[1]) })}</b><button id="hg-place-done" class="secondary">${t('Terminé')}</button></div>` : '')
+      + `<div class="hg-stickers">${STICKERS.map(([k, n]) => `<button class="${hg.placing === k ? 'on' : ''}" data-st="${k}" title="${t(n)}"><img src="${stickerThumb(k, hg.stickerColor, k === 'texte' ? (hg.stickerText || 'JP') : '')}" alt=""><span>${t(n)}</span>${tag(`sticker:${k}`)}</button>`).join('')}</div>`
+      + `<h4>${t('Texte (autocollant « Texte personnalisé »)')}</h4><input type="text" id="hg-st-text" maxlength="12" value="${hg.stickerText || ''}" placeholder="JP AIRLINES">`
+      + colorRow('stickerColor', t('Couleur des prochains autocollants'), hg.stickerColor)
+      + `<h4>${t('Taille et symétrie des prochains')}</h4><div class="hg-row"><input type="range" id="hg-st-size" min="0.15" max="3" step="0.05" value="${hg.stickerSize || 0.6}"><label><input type="checkbox" id="hg-st-mirror" ${hg.stickerMirror ? 'checked' : ''}> ${t('Des deux côtés')}</label></div>`
+      + `<h4>${t('Autocollants posés ({n}/{max})', { n: list.length, max: MAX_STICKERS })}</h4>`
+      + (list.length ? `<div class="hg-placed">${list.map((st, i) => `<div class="hg-st-item" data-i="${i}"><img src="${stickerThumb(st.k, st.c, st.t)}" alt=""><div>
+          <label>${t('Taille')} <input type="range" data-f="s" min="0.15" max="3" step="0.05" value="${st.s}"></label>
+          <label>${t('Rotation')} <input type="range" data-f="r" min="-180" max="180" step="5" value="${st.r}"></label>
+          <label><input type="checkbox" data-f="m" ${st.m ? 'checked' : ''}> ${t('Des deux côtés')}</label></div>
+          <button class="secondary" data-del="${i}" title="${t('Enlever')}">✕</button></div>`).join('')}</div>` : `<p class="sub">${t('Aucun autocollant pour l\'instant.')}</p>`);
   } else if (hg.tab === 'motifs') {
     html += chips('pattern', PATTERNS, t('Motif du fuselage')) + chips('wings', WINGS, t('Ailes')) + chips('finish', FINISHES, t('Finition de la peinture'))
       + `<h4>${t('Nez')}</h4><div class="hg-chips"><button id="hg-teeth" class="${view.sharkTeeth ? 'on' : ''}">${t('🦈 Dents de requin')}${tag('teeth')}</button></div>`;
@@ -939,13 +976,27 @@ function renderHangarUI() {
   body.innerHTML = html;
   for (const row of body.querySelectorAll('[data-color]')) {
     const key = row.dataset.color;
-    for (const b of row.querySelectorAll('button:not(.custom)')) b.onclick = () => choose({ [key]: b.dataset.v || null }, t('Couleur {color}', { color: b.dataset.v }));
+    const patchFor = (v) => (key.startsWith('zone:') ? { zones: { ...view.zones, [key.slice(5)]: v || undefined } }
+      : key === 'stickerColor' ? null : { [key]: v || null });
+    for (const b of row.querySelectorAll('button:not(.custom)')) {
+      b.onclick = () => {
+        const v = b.dataset.v;
+        if (key === 'stickerColor') { // couleur des prochains autocollants (à posséder)
+          if (!isOwned(`color:${v}`)) { hg.pending = { patch: {}, keys: [`color:${v}`], label: t('Couleur {color}', { color: v }), price: priceOf(`color:${v}`) }; }
+          hg.stickerColor = v;
+          renderHangarUI();
+          return;
+        }
+        choose(patchFor(v), t('Couleur {color}', { color: v }));
+      };
+    }
     for (const b of row.querySelectorAll('.custom')) b.onclick = () => { hg.pending = { patch: {}, keys: ['custom-color'], label: t('Couleurs sur mesure'), price: priceOf('custom-color') }; renderHangarUI(); };
     const inp = row.querySelector('input');
     if (!inp) continue;
     inp.oninput = () => {
+      if (key === 'stickerColor') { hg.stickerColor = inp.value; return; }
       save.liveries ||= {};
-      save.liveries[hg.type] = cleanLivery({ ...liveryOf(hg.type), [key]: inp.value });
+      save.liveries[hg.type] = cleanLivery({ ...liveryOf(hg.type), ...patchFor(inp.value) });
       persist();
       clearTimeout(hg.timer);
       hg.timer = setTimeout(() => hangar.setPlane(hg.type, liveryOf(hg.type), true), 120);
@@ -956,10 +1007,55 @@ function renderHangarUI() {
   if ($('hg-teeth')) $('hg-teeth').onclick = () => choose({ sharkTeeth: !view.sharkTeeth }, t('Dents de requin'));
   if ($('hg-reg')) $('hg-reg').onchange = () => choose({ reg: $('hg-reg').value }, t('Immatriculation personnalisée'));
   if ($('hg-num')) $('hg-num').onchange = () => choose({ number: Math.round(Number($('hg-num').value)) || 0 }, t('Numéro de course'));
+  // zones
+  for (const b of body.querySelectorAll('[data-z]')) b.onclick = () => { hg.zone = b.dataset.z; renderHangarUI(); };
+  if ($('hg-zone-clear')) $('hg-zone-clear').onclick = () => { const z = { ...view.zones }; delete z[hg.zone]; setLivery({ zones: z }); };
+  // autocollants
+  hangar.view.autoSpin = hg.tab !== 'stickers' && hangar.view.autoSpin;
+  for (const b of body.querySelectorAll('[data-st]')) {
+    b.onclick = () => {
+      const k = b.dataset.st;
+      if (!isOwned(`sticker:${k}`)) { hg.pending = { patch: {}, keys: [`sticker:${k}`], label: t(STICKERS.find(([x]) => x === k)[1]), price: priceOf(`sticker:${k}`) }; hg.placing = null; }
+      else hg.placing = hg.placing === k ? null : k;
+      renderHangarUI();
+    };
+  }
+  if ($('hg-place-done')) $('hg-place-done').onclick = () => { hg.placing = null; renderHangarUI(); };
+  if ($('hg-st-text')) $('hg-st-text').onchange = () => { hg.stickerText = cleanStickerText($('hg-st-text').value); renderHangarUI(); };
+  if ($('hg-st-size')) $('hg-st-size').oninput = () => { hg.stickerSize = Number($('hg-st-size').value); };
+  if ($('hg-st-mirror')) $('hg-st-mirror').onchange = () => { hg.stickerMirror = $('hg-st-mirror').checked; };
+  for (const item of body.querySelectorAll('.hg-st-item')) {
+    const i = Number(item.dataset.i);
+    for (const inp of item.querySelectorAll('[data-f]')) {
+      const apply = (final) => {
+        const list = liveryOf(hg.type).stickers.map((x) => ({ ...x }));
+        if (!list[i]) return;
+        list[i][inp.dataset.f] = inp.type === 'checkbox' ? inp.checked : Number(inp.value);
+        save.liveries[hg.type] = cleanLivery({ ...liveryOf(hg.type), stickers: list });
+        persist();
+        clearTimeout(hg.timer);
+        hg.timer = setTimeout(() => hangar.setPlane(hg.type, liveryOf(hg.type), true), final ? 0 : 90);
+      };
+      inp.oninput = () => apply(false);
+      inp.onchange = () => apply(true);
+    }
+  }
+  for (const b of body.querySelectorAll('[data-del]')) b.onclick = () => { const list = liveryOf(hg.type).stickers.filter((_, j) => j !== Number(b.dataset.del)); setLivery({ stickers: list }); };
   if ($('hg-smoke')) $('hg-smoke').onclick = () => { hg.pending = { patch: {}, keys: ['smoke'], label: t('Fumigène de voltige'), price: priceOf('smoke') }; renderHangarUI(); };
 }
 
-for (const b of document.querySelectorAll('[data-hg]')) b.onclick = () => { hg.tab = b.dataset.hg; renderHangarUI(); };
+function placeSticker(x, y) {
+  const L = liveryOf(hg.type);
+  if (L.stickers.length >= MAX_STICKERS) { toast(t('Maximum {max} autocollants par avion', { max: MAX_STICKERS })); return; }
+  if (!isOwned(`color:${hg.stickerColor}`) && !isOwned('custom-color')) { toast(t('Achète d\'abord cette couleur')); return; }
+  const hit = hangar.pick(x, y);
+  if (!hit) return;
+  const st = { k: hg.placing, p: hit.p.toArray(), n: hit.n.toArray(), s: hg.stickerSize || 0.6, r: 0, c: hg.stickerColor, m: !!hg.stickerMirror };
+  if (st.k === 'texte') st.t = hg.stickerText || 'JP';
+  beep(700, 0.05);
+  setLivery({ stickers: [...L.stickers, st] });
+}
+for (const b of document.querySelectorAll('[data-hg]')) b.onclick = () => { hg.tab = b.dataset.hg; hg.placing = null; renderHangarUI(); };
 const cycleAircraft = (d) => {
   const i = AIRCRAFT.findIndex((a) => a.id === hg.type);
   hg.type = AIRCRAFT[(i + d + AIRCRAFT.length) % AIRCRAFT.length].id;
@@ -1152,6 +1248,16 @@ function frame(now) {
     r.mesh.position.lerp(r.tp, k);
     r.mesh.quaternion.slerp(r.tq, k);
     animatePlaneMesh(r.mesh, r.st, realDt, wallT);
+    // fumigène des autres pilotes, dans la couleur de leur peinture
+    if (r.smoke && realDt > 0) {
+      r.smokeAcc = (r.smokeAcc || 0) + realDt * 45;
+      const col = (r.smokeCol ||= new THREE.Color(net.liveries.get(r.id)?.smoke || '#ffffff'));
+      while (r.smokeAcc > 1) {
+        r.smokeAcc--;
+        const at = r.mesh.localToWorld(r.mesh.userData.exhaust.clone());
+        gfx.effects.smoke.emit(at, new THREE.Vector3((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), { life: 9, size: 1.1, grow: 5, color: col, alpha: 0.75, drag: 1.2, rise: 0.15 });
+      }
+    }
   }
 
   gfx.render(rawDt, {

@@ -84,7 +84,7 @@ wss.on('connection', (ws) => {
       player.p = msg.p;
       player.q = msg.q;
       // état visible par les autres : vitesse, régime, train, volets, feux, type d'avion
-      for (const k of ['s', 'r', 'g', 'f', 'l']) player[k] = num(msg[k], 0, 1000);
+      for (const k of ['s', 'r', 'g', 'f', 'l', 'k']) player[k] = num(msg[k], 0, 1000); // k : fumigène allumé
       player.a = Math.round(num(msg.a, 0, 31));
     } else if (msg.t === 'livery') {
       // peinture de l'avion (hangar), vérifiée puis relayée à tous
@@ -92,6 +92,8 @@ wss.on('connection', (ws) => {
       if (now - (player.liveryAt || 0) < 500) return;
       player.liveryAt = now;
       player.livery = cleanLivery(msg.l);
+      // le texte des autocollants est visible par tous : même filtre que le chat
+      player.livery.stickers = player.livery.stickers.filter((st) => st.k !== 'texte' || (st.t = cleanChat(st.t)));
       const data = JSON.stringify({ t: 'livery', id, l: player.livery });
       for (const c of wss.clients) if (c.readyState === 1) c.send(data);
     } else if (msg.t === 'quest' && typeof msg.id === 'string') {
