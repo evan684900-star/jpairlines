@@ -18,11 +18,12 @@ import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
-import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
+import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys, layout, setLayout, detectLayout } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
 import { loadPlaneModels } from './planeModel.js';
-import { t, isEN, setLang, translateDom } from './i18n.js';
+import { Tutorial } from './tutorial.js';
+import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
 import { stickerThumb } from './stickers.js';
 
@@ -32,10 +33,21 @@ const ordinal = (rank, total) => (rank === 1 ? t('{rank}er sur {total}', { rank,
 const status = (msg, progress) => { $('load-status').textContent = msg; if (progress !== undefined) $('load-bar').style.width = `${progress}%`; };
 hydrateIcons();
 // langue : la page est en français, traduite à l'affichage si le joueur a choisi l'anglais
-document.documentElement.lang = isEN ? 'en' : 'fr';
+document.documentElement.lang = LANG;
 translateDom();
-$('lang-switch').textContent = isEN ? '🇫🇷 Passer en français' : '🇬🇧 Play in English';
-$('lang-switch').onclick = () => setLang(isEN ? 'fr' : 'en');
+// choix de la langue : trois drapeaux au menu
+{
+  const row = document.createElement('div');
+  row.className = 'lang-row';
+  for (const [code, flag, name] of LANGS) {
+    const b = document.createElement('button');
+    b.className = `secondary${code === LANG ? ' on' : ''}`;
+    b.textContent = `${flag} ${name}`;
+    b.onclick = () => { if (code !== LANG) setLang(code); };
+    row.appendChild(b);
+  }
+  $('lang-switch').replaceWith(row);
+}
 
 // ================= Rendu =================
 const gfx = new GameRenderer($('game'));
@@ -346,7 +358,13 @@ function helpTable() {
   }
   return html + `<tr><td><kbd>${t('Échap')}</kbd></td><td>${t('Pause et paramètres')}</td></tr><tr><td>${t('molette · clic-glisser')}</td><td>${t('Zoom · tourner autour de l\'avion')}</td></tr>`;
 }
+// disposition AZERTY / QWERTY : touches par défaut des lettres de pilotage
+for (const b of document.querySelectorAll('[data-layout]')) {
+  b.onclick = () => { setLayout(b.dataset.layout); capturing = null; renderKeys(); toast(t('Clavier {name} : touches par défaut adaptées', { name: b.dataset.layout.toUpperCase() })); };
+}
+detectLayout().then((l) => { if (l) { renderKeys(); toast(t('Clavier {name} détecté : touches adaptées', { name: l.toUpperCase() })); } });
 function renderKeys() {
+  for (const b of document.querySelectorAll('[data-layout]')) b.classList.toggle('on', b.dataset.layout === layout);
   for (const t of document.querySelectorAll('.keys-dyn')) t.innerHTML = helpTable();
   const box = $('keys-list');
   box.innerHTML = '';
@@ -1225,6 +1243,7 @@ function frame(now) {
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
     updatePrompt();
+    tutorial.update(realDt);
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
     updateHUD(realDt);
     netTick(now);
@@ -1409,8 +1428,18 @@ $('start').onclick = () => {
   respawn();
   started = true;
   connect();
-  toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
+  // premier vol : tutoriel guidé avec flèches (sinon simple rappel)
+  if (!save.tutorialDone && !save.completed.length) tutorial.start();
+  else toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
 };
+const tutorial = new Tutorial({
+  plane,
+  agl: () => plane.pos.y - Math.max(0, groundHeight(plane.pos.x, plane.pos.z)) - plane.S.gear,
+  isPaused: () => paused || hg.active || overlayOpen(),
+  onDone: () => { save.tutorialDone = true; persist(); },
+});
+// revoir le tutoriel depuis l'aide
+$('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft };
+window.jp = { plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial };

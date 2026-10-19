@@ -364,3 +364,18 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 
 /* touche « cacher le HUD » : tout disparaît sauf l'essentiel (messages) */
 #hud.hud-off > :not(#toast):not(#log):not(#chat) { visibility: hidden; }
+.lang-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.lang-row button { padding: 6px 10px; font-size: 0.85em; }
+.lang-row button.on { outline: 2px solid var(--accent); }
+.layout-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 12px; flex-wrap: wrap; }
+.layout-row button.on { outline: 2px solid var(--accent); }
+
+/* tutoriel du premier vol */
+#tuto { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 40; width: min(460px, 92vw); padding: 14px 16px; border-left: 4px solid #ffd23f; animation: rise 0.35s ease; }
+#tuto .tuto-step { font-size: 0.78em; color: #ffd23f; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; }
+#tuto .tuto-text { line-height: 1.45; }
+#tuto .tuto-btns { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+#tuto .tuto-btns button { padding: 6px 12px; font-size: 0.85em; }
+#tuto-arrow { position: fixed; z-index: 41; pointer-events: none; width: 56px; height: 56px; transform: rotate(var(--rot, 0deg)); filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6)); }
+#tuto-arrow svg { animation: tuto-bounce 0.9s ease-in-out infinite; }
+@keyframes tuto-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }

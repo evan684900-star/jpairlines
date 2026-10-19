@@ -40,9 +40,28 @@ export const ACTIONS = [
 ];
 const LIST = ACTIONS.filter((a) => a.id);
 
+// Disposition du clavier : AZERTY (français) ou QWERTY (le reste du monde). Par défaut on la devine d'après la
+// langue du navigateur, puis on la vérifie avec l'API Keyboard quand elle existe (Chrome, Edge).
+// Seules les touches « lettres » du pilotage changent : gaz sur Z (AZERTY) ou W (QWERTY), palonnier gauche sur Q ou A.
+const LAYOUT_KEY = 'jpairlines-layout';
+const PRESETS = {
+  azerty: { throttleUp: ['z', 'shift'], yawLeft: ['q'] },
+  qwerty: { throttleUp: ['w', 'shift'], yawLeft: ['a'] },
+};
+function guessLayout() {
+  try {
+    const saved = localStorage.getItem(LAYOUT_KEY);
+    if (saved === 'azerty' || saved === 'qwerty') return saved;
+  } catch { /* stockage indisponible */ }
+  const lang = (typeof navigator !== 'undefined' && navigator.language) || 'fr';
+  return /^fr\b/i.test(lang) ? 'azerty' : 'qwerty';
+}
+export let layout = guessLayout();
+const defaultsFor = (a) => PRESETS[layout][a.id] || a.def;
+
 let binds = {};
 function load() {
-  binds = Object.fromEntries(LIST.map((a) => [a.id, [...a.def]]));
+  binds = Object.fromEntries(LIST.map((a) => [a.id, [...defaultsFor(a)]]));
   try {
     const saved = JSON.parse(localStorage.getItem(KEY)) || {};
     for (const a of LIST) if (Array.isArray(saved[a.id])) binds[a.id] = saved[a.id].filter((k) => typeof k === 'string' && k !== 'escape').slice(0, 4);
@@ -50,6 +69,27 @@ function load() {
 }
 load();
 const store = () => { try { localStorage.setItem(KEY, JSON.stringify(binds)); } catch { /* stockage indisponible */ } };
+
+// change de disposition (touches par défaut) ; les touches que le joueur a modifiées lui-même sont gardées
+export function setLayout(l) {
+  if (!PRESETS[l]) return;
+  layout = l;
+  try { localStorage.setItem(LAYOUT_KEY, l); } catch { /* stockage indisponible */ }
+  load();
+}
+// vérifie la vraie disposition du clavier (asynchrone) ; renvoie la disposition détectée ou null
+export async function detectLayout() {
+  try {
+    if (localStorage.getItem(LAYOUT_KEY)) return null; // déjà choisie
+    const map = await navigator.keyboard?.getLayoutMap?.();
+    if (!map) return null;
+    const q = map.get('KeyQ'), w = map.get('KeyW');
+    const found = q === 'a' && w === 'z' ? 'azerty' : q === 'q' && w === 'w' ? 'qwerty' : null;
+    if (found && found !== layout) { setLayout(found); return found; }
+    if (found) localStorage.setItem(LAYOUT_KEY, found);
+  } catch { /* API absente ou refusée */ }
+  return null;
+}
 
 export const keysFor = (id) => binds[id] || [];
 export const isKey = (id, k) => keysFor(id).includes(k);

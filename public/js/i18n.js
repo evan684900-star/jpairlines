@@ -1,4 +1,4 @@
-// Langues du jeu : français (langue du code) et anglais.
+// Langues du jeu : français (langue du code), anglais et espagnol.
 // Le texte français sert de clé : t('Quête abandonnée') renvoie la traduction anglaise si elle existe,
 // sinon le français (jamais de texte vide). Variables : t('Bonjour {nom} !', { nom }).
 // Le HTML statique (index.html) est traduit par translateDom(), qui remplace les textes connus.
@@ -7,19 +7,33 @@ import uiMain from './lang/en-main.js';
 import uiMisc from './lang/en-misc.js';
 import quests from './lang/en-quests.js';
 import quests2 from './lang/en-quests2.js';
+import esHtml from './lang/es-html.js';
+import esMain from './lang/es-main.js';
+import esMisc from './lang/es-misc.js';
+import esQuests from './lang/es-quests.js';
+import esQuests2 from './lang/es-quests2.js';
 
 const KEY = 'jpairlines-lang';
-const EN = { ...quests, ...quests2, ...uiMisc, ...uiMain, ...uiHtml };
+export const LANGS = [['fr', '🇫🇷', 'Français'], ['en', '🇬🇧', 'English'], ['es', '🇪🇸', 'Español']];
+const DICTS = {
+  en: { ...quests, ...quests2, ...uiMisc, ...uiMain, ...uiHtml },
+  // espagnol : ce qui n'est pas encore traduit s'affiche en anglais plutôt qu'en français
+  es: { ...quests, ...quests2, ...uiMisc, ...uiMain, ...uiHtml, ...esQuests, ...esQuests2, ...esMisc, ...esMain, ...esHtml },
+};
 
 function detect() {
   try {
     const saved = localStorage.getItem(KEY);
-    if (saved === 'fr' || saved === 'en') return saved;
+    if (LANGS.some(([l]) => l === saved)) return saved;
   } catch { /* stockage indisponible */ }
-  return /^fr\b/i.test(navigator.language || 'fr') ? 'fr' : 'en';
+  const nav = navigator.language || 'fr';
+  return /^fr\b/i.test(nav) ? 'fr' : /^es\b/i.test(nav) ? 'es' : 'en';
 }
+// la langue a-t-elle été choisie par le joueur (sinon : détectée)
+export const langChosen = (() => { try { return !!localStorage.getItem(KEY); } catch { return false; } })();
 export const LANG = typeof window === 'undefined' ? 'fr' : detect(); // scripts Node : français
-export const isEN = LANG === 'en';
+export const isEN = LANG !== 'fr'; // texte à traduire (anglais ou espagnol)
+const EN = DICTS[LANG] || {};
 
 const norm = (s) => s.replace(/\s+/g, ' ').trim();
 export function t(fr, vars) {
