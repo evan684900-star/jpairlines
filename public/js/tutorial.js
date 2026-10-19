@@ -91,8 +91,18 @@ export class Tutorial {
     this.arrow.style.setProperty('--rot', `${angle}deg`);
     this.arrow.classList.remove('hidden');
   }
+  // caché pendant la pause, les menus et le hangar (l'étape en cours est gardée)
+  setHidden(h) {
+    if (!this.active) return;
+    this.wasPaused = h;
+    this.box.classList.toggle('hidden', h);
+    if (h) this.arrow.classList.add('hidden'); else this.place();
+  }
   update(dt) {
-    if (!this.active || this.ctx.isPaused()) return;
+    if (!this.active) return;
+    const paused = this.ctx.isPaused();
+    if (paused !== this.wasPaused) { this.wasPaused = paused; this.setHidden(paused); }
+    if (paused) return;
     const s = this.list[this.i];
     this.timer += dt;
     this.place();

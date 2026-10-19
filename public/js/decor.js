@@ -111,7 +111,9 @@ function chooseSparse(x, z, h, r) {
 }
 
 // libs : { trees, houses, rocks } ; opts : { density (réglage végétation), forest (arbres/km² en forêt) }
-function buildChunkDecor(ci, cj, opts, libs) {
+// Générateur : rend la main régulièrement (yield) pour que la création d'un morceau soit étalée sur plusieurs
+// images au lieu de provoquer une saccade. Le résultat est exactement le même (même suite aléatoire).
+function* buildChunkDecorSteps(ci, cj, opts, libs) {
   const r = rng((ci * 73856093) ^ (cj * 19349663) ^ 0x5eed);
   const group = new THREE.Group();
   const simple = { palm: [], cactus: [] }, rocks = [], houses = [];
@@ -120,6 +122,7 @@ function buildChunkDecor(ci, cj, opts, libs) {
   const up = new THREE.Vector3(0, 1, 0);
   const pick = { conifer: variantsOf('conifer'), broadleaf: variantsOf('broadleaf'), bush: variantsOf('bush') };
   const density = opts.density;
+  let work = 0;
   // arbres : tableau compact [x, y, z, rotation, échelle, variante]
   const spacing = Math.sqrt(1e6 / Math.max(50, opts.forest * density));
   const cap = Math.ceil((CH / spacing + 1) ** 2) + 2000;
@@ -148,6 +151,7 @@ function buildChunkDecor(ci, cj, opts, libs) {
   if (density > 0) {
     for (let gz = z0; gz < z0 + CH; gz += spacing) {
       for (let gx = x0; gx < x0 + CH; gx += spacing) {
+        if (++work % 96 === 0) yield;
         const x = gx + r() * spacing, z = gz + r() * spacing;
         const forest = fbm(x / 1800, z / 1800, 3, 77);
         if (forest < 0.5 || r() > Math.min(1, (forest - 0.5) * 8)) continue;
@@ -166,6 +170,7 @@ function buildChunkDecor(ci, cj, opts, libs) {
     // campagne : éléments isolés
     const sparse = Math.round(700 * density);
     for (let k = 0; k < sparse; k++) {
+      if (++work % 96 === 0) yield;
       const x = x0 + r() * CH, z = z0 + r() * CH;
       if (fbm(x / 1800, z / 1800, 3, 77) >= 0.5) continue;
       const h = terrainHeight(x, z);
@@ -179,6 +184,7 @@ function buildChunkDecor(ci, cj, opts, libs) {
   // villages
   const vCount = Math.round(230 * Math.min(density, 1.5));
   for (let k = 0; k < vCount; k++) {
+    if (++work % 96 === 0) yield;
     const x = x0 + r() * CH, z = z0 + r() * CH;
     if (fbm(x / 2600, z / 2600, 2, 300) < 0.62) continue;
     const h = terrainHeight(x, z);
@@ -210,6 +216,7 @@ function buildChunkDecor(ci, cj, opts, libs) {
     }
   }
 
+  yield;
   data = data.slice(0, n * TREE_STRIDE);
   if (n) group.add(libs.trees.impostors(data, n, new THREE.Vector3(x0 + CH / 2, 300, z0 + CH / 2)));
   for (const [type, mats] of Object.entries(simple)) {
@@ -224,6 +231,10 @@ function buildChunkDecor(ci, cj, opts, libs) {
   for (const mesh of [...(rocks.length ? libs.rocks.meshes(rocks) : []), ...(houses.length ? libs.houses.meshes(houses) : [])]) group.add(mesh);
   group.userData.trees = { data, n };
   return group;
+}
+function buildChunkDecor(ci, cj, opts, libs) {
+  const it = buildChunkDecorSteps(ci, cj, opts, libs);
+  for (;;) { const r = it.next(); if (r.done) return r.value; }
 }
 
 // Végétation et maisons : seulement autour du joueur (arbres 3D tout près, imposteurs plus loin)
@@ -259,6 +270,7 @@ export class Decor {
       this.forest = forest;
       for (const g of this.groups.values()) this.dispose(g);
       this.groups.clear();
+      this.job = null;
       this.center = null;
     }
   }
@@ -276,6 +288,7 @@ export class Decor {
   unload() {
     for (const g of this.groups.values()) this.dispose(g);
     this.groups.clear();
+    this.job = null;
     this.queue = [];
     this.center = null;
   }
@@ -292,6 +305,7 @@ export class Decor {
         if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) > R + 1) { this.dispose(g); this.groups.delete(key); }
       }
       this.queue = [];
+      if (this.job && Math.max(Math.abs(this.job.i - ci), Math.abs(this.job.j - cj)) > R) this.job = null; // trop loin désormais
       for (let dj = -R; dj <= R; dj++) {
         for (let di = -R; di <= R; di++) {
           const key = `${ci + di},${cj + dj}`;
@@ -302,11 +316,19 @@ export class Decor {
     }
     if (this.density > 0) {
       const t0 = performance.now();
-      while (this.queue.length && performance.now() - t0 < budgetMs) {
-        const job = this.queue.shift();
-        const g = buildChunkDecor(job.i, job.j, { density: this.density, forest: this.forest }, this.libs);
-        this.scene.add(g);
-        this.groups.set(job.key, g);
+      // un morceau en cours de création avance par petites étapes, dans le temps alloué à cette image
+      while (performance.now() - t0 < budgetMs) {
+        if (!this.job) {
+          const job = this.queue.shift();
+          if (!job) break;
+          if (this.groups.has(job.key)) continue;
+          this.job = { ...job, it: buildChunkDecorSteps(job.i, job.j, { density: this.density, forest: this.forest }, this.libs) };
+        }
+        const step = this.job.it.next();
+        if (!step.done) continue;
+        this.scene.add(step.value);
+        this.groups.set(this.job.key, step.value);
+        this.job = null;
       }
     }
     // arbres 3D : morceaux autour de la caméra

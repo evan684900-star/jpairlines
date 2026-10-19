@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   WORLD, AIRPORTS, LANDMARKS, CITIES, TOWNS, SHIPS, BALLOONS, WIND_FARMS, VOLCANO,
   terrainHeight, groundHeight, rng, shipPosition, balloonPosition, turbinePositions,
@@ -129,6 +130,45 @@ function createAirliner(color) {
 
 const TERMINAL_MAT = createBuildingMaterial({ floor: 4.5, bay: 4, glass: 0.95 });
 
+// Optimisation sans perte : les objets fixes d'un groupe sont fusionnés par matériau (une géométrie par matériau).
+// Même image, mais des dizaines de fois moins d'appels de dessin. keep : objets à garder tels quels (animés…).
+function bakeStatic(g, keep = new Set()) {
+  g.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(g.matrixWorld).invert();
+  const kept = (o) => { for (let n = o; n && n !== g; n = n.parent) if (keep.has(n) || !n.visible) return true; return false; };
+  const bins = new Map(), drop = [];
+  g.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || kept(o)) return;
+    if (o.material.opacity === 0 || o.material.visible === false) { drop.push(o); return; }
+    const geo = o.geometry;
+    const names = ['position', 'normal', 'uv', 'color'].filter((n) => geo.attributes[n]);
+    const key = `${o.material.uuid}|${names}|${o.castShadow}|${o.renderOrder}`;
+    if (!bins.has(key)) bins.set(key, { o, names, list: [] });
+    bins.get(key).list.push(o);
+  });
+  const m = new THREE.Matrix4();
+  for (const { o, names, list } of bins.values()) {
+    if (list.length < 2) continue;
+    const parts = list.map((x) => {
+      const sg = new THREE.BufferGeometry();
+      for (const n of names) sg.setAttribute(n, x.geometry.attributes[n].clone());
+      sg.setIndex(x.geometry.index ? x.geometry.index.clone() : [...Array(x.geometry.attributes.position.count).keys()]);
+      sg.applyMatrix4(m.multiplyMatrices(inv, x.matrixWorld));
+      return sg;
+    });
+    const geo = mergeGeometries(parts, false);
+    for (const p of parts) p.dispose();
+    if (!geo) continue;
+    const mesh = new THREE.Mesh(geo, o.material);
+    mesh.castShadow = o.castShadow;
+    mesh.receiveShadow = o.receiveShadow;
+    mesh.renderOrder = o.renderOrder;
+    g.add(mesh);
+    for (const x of list) x.parent.remove(x);
+  }
+  for (const x of drop) x.parent?.remove(x);
+}
+
 function buildAirport(scene, a, r, anim) {
   const g = new THREE.Group();
   g.position.set(a.x, a.elev, a.z);
@@ -228,10 +268,13 @@ function buildAirport(scene, a, r, anim) {
     const p = createPlaneMesh(def.id, { color: tint, accent: def.id === 'cub' ? 0x2a4bd8 : def.accent, detail: false });
     p.position.set(a.width / 2 + 40, def.specs.gear, -apronLen / 2 + 130 + i * 20);
     p.rotation.y = -Math.PI / 2;
+    if (p.userData.cabin) p.userData.cabin.visible = false; // avion garé : cabine invisible de loin
     g.add(p);
   }
   g.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) { o.castShadow = true; o.receiveShadow = true; } });
   rw.castShadow = apron.castShadow = false;
+  // tout est fixe sauf le phare tournant (et le balisage, déjà regroupé)
+  bakeStatic(g, new Set([beacon]));
   scene.add(g);
   addLabel(scene, a.name, a.x, a.elev + 160, a.z, 30000, { color: '#bfe8ff' });
 }
@@ -296,6 +339,7 @@ function buildCities(scene) {
 
 // ---------- Points d'intérêt ----------
 function buildLandmark(scene, l, anim) {
+  const animated = new Set(); // pièces animées : pas fusionnées
   const g = new THREE.Group();
   const base = Math.max(0, l.type === 'volcano' ? l.y : groundHeight(l.x, l.z));
   g.position.set(l.x, base, l.z);
@@ -310,6 +354,7 @@ function buildLandmark(scene, l, anim) {
       for (let i = 0; i < 5; i++) add(new THREE.CylinderGeometry(8 - i * 0.6, 8.6 - i * 0.6, 12, 12), i % 2 ? red : white, 0, 16 + i * 12);
       add(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffee88 }), 0, 77);
       const beam = add(new THREE.ConeGeometry(14, 160, 12, 1, true).rotateZ(Math.PI / 2).translate(80, 0, 0), new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, opacity: 0.18, depthWrite: false }), 0, 77);
+      animated.add(beam);
       anim.push((dt) => { beam.rotation.y += dt * 0.8; });
       break;
     }
@@ -342,6 +387,7 @@ function buildLandmark(scene, l, anim) {
       add(new THREE.CylinderGeometry(1.5, 4, 70, 6), steel, 25, 80, 25);
       add(new THREE.CylinderGeometry(20, 20, 1, 16), lambert(0x33363b), 20, 47, -20); // héliport
       const flame = add(new THREE.ConeGeometry(3, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff8a2a }), 25, 120, 25);
+      animated.add(flame);
       anim.push((dt, t) => { flame.scale.y = 0.8 + Math.sin(t * 13) * 0.25; });
       labelY = 180;
       break;
@@ -410,6 +456,7 @@ function buildLandmark(scene, l, anim) {
       break;
     }
   }
+  bakeStatic(g, animated);
   scene.add(g);
   g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial)) { o.castShadow = true; o.receiveShadow = true; } });
   addLabel(scene, l.name, l.x, g.position.y + labelY, l.z, 15000, { color: '#ffe9b0', size: 0.027 });

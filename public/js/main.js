@@ -21,7 +21,7 @@ import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys, layout, setLayout, detectLayout } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
-import { loadPlaneModels } from './planeModel.js';
+import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
@@ -575,7 +575,7 @@ function connect() {
 
 function removeRemote(id) {
   const r = remotes.get(id);
-  if (r) scene.remove(r.mesh);
+  if (r) { scene.remove(r.mesh); disposePlaneMesh(r.mesh); }
   remotes.delete(id);
 }
 
@@ -694,7 +694,7 @@ attachPanel();
 // (re)construit le modèle de l'avion du joueur avec sa peinture du hangar
 function rebuildPlaneMesh() {
   scene.remove(planeMesh);
-  planeMesh.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  disposePlaneMesh(planeMesh);
   planeMesh = createPlaneMesh(plane.type, { landingLight: true, livery: liveryOf(plane.type) });
   planeMesh.position.copy(plane.pos);
   planeMesh.quaternion.copy(plane.quat);
@@ -848,6 +848,7 @@ async function enterHangar() {
     terrain.unload();
     decor.unload();
     hg.active = true;
+    tutorial.setHidden(true);
     $('hud').classList.add('hidden');
     $('hangar3d').classList.remove('hidden');
     renderHangarUI();
@@ -1240,6 +1241,8 @@ function frame(now) {
 
     planeMesh.position.copy(plane.pos);
     planeMesh.quaternion.copy(plane.quat);
+    // intérieur de la cabine : seulement quand la caméra est assez près pour le voir par les vitres
+    if (planeMesh.userData.cabin) planeMesh.userData.cabin.visible = camera.position.distanceTo(planeMesh.position) < 35;
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
     updatePrompt();
@@ -1278,6 +1281,7 @@ function frame(now) {
   for (const r of remotes.values()) {
     r.mesh.position.lerp(r.tp, k);
     r.mesh.quaternion.slerp(r.tq, k);
+    if (r.mesh.userData.cabin) r.mesh.userData.cabin.visible = camera.position.distanceTo(r.mesh.position) < 35;
     animatePlaneMesh(r.mesh, r.st, realDt, wallT);
     // fumigène des autres pilotes, dans la couleur de leur peinture
     if (r.smoke && realDt > 0) {
@@ -1442,4 +1446,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial };
+window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial };

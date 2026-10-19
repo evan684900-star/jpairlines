@@ -4,6 +4,7 @@ import { aircraftById } from './aircraft.js';
 import { cleanLivery } from './livery.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { stickerTexture } from './stickers.js';
 
 // Relie des anneaux de points (même nombre de points) en une surface lisse
@@ -717,14 +718,14 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   // autocollants collés au hangar (projetés sur la carrosserie)
   if (LV.stickers.length) decals.push(...applyStickers(g, LV.stickers));
 
-  g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial) && !Array.isArray(o.material)) { o.castShadow = true; o.receiveShadow = true; } });
+  g.traverse((o) => { if (o.isMesh && !(o.material instanceof THREE.MeshBasicMaterial) && !Array.isArray(o.material)) { o.castShadow = !o.userData.noCast; o.receiveShadow = true; } });
   fuse.castShadow = true;
   const ex = MD.exhaust;
   g.userData = {
     type: def.id, props, fans, legs, lights, strobe, landing, landingLight,
     flapL: glbInfo?.flapL ?? flapL, flapR: glbInfo?.flapR ?? flapR, ailL: glbInfo?.ailL ?? ailL, ailR: glbInfo?.ailR ?? ailR,
     elevator: glbInfo?.elevator ?? elevator, rudder: glbInfo?.rudder ?? rudder,
-    fuse, interior, pilot, panel, yokes: glbInfo?.yokes ?? yokes, decals,
+    fuse, interior, pilot, panel, yokes: glbInfo?.yokes ?? yokes, decals, cabin: glbInfo?.cabin ?? null,
     // points utiles aux effets et à la caméra (repère de l'avion)
     eye: glbInfo?.eye ?? new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
     exhaust: glbInfo?.exhaust ?? new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
@@ -779,6 +780,7 @@ const PAINTED = /^(Peinture_Blanche|Bande_Bleue|Bande_Rouge)$/;
 function mountGlb(g, src, k) {
   const procedural = [...g.children];
   const model = src.clone(true);
+  model.traverse((o) => { if (o.isMesh) o.userData.shared = true; }); // géométries du fichier, communes à tous les avions
   g.add(model);
   g.updateMatrixWorld(true);
   const box = (o) => new THREE.Box3().setFromObject(o);
@@ -834,6 +836,7 @@ function mountGlb(g, src, k) {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.boundingBox = o.geometry.boundingBox; geo.boundingSphere = o.geometry.boundingSphere;
     o.geometry = geo;
+    o.userData.shared = false;
     const side = o.material.side;
     if (!paintMats.has(side)) paintMats.set(side, new THREE.MeshPhysicalMaterial({ vertexColors: true, ...k.FINISH, side }));
     o.material = paintMats.get(side);
@@ -910,14 +913,19 @@ function mountGlb(g, src, k) {
   if (exh) out.exhaust = exh.add(new THREE.Vector3(0, -0.02, 0.1));
   const nl = at('Feu_Nav_Gauche'), nr = at('Feu_Nav_Droite');
   if (nl && nr) out.wingtips = [nl, nr];
-  // immatriculation et emblème : projetés sur la carrosserie du modèle (ses plaques d'origine sont cachées)
-  const targets = [];
-  model.traverse((o) => { if (o.isMesh && o.userData.paint) targets.push(o); });
-  for (const [n, sx] of [['Immatriculation_Gauche', -1], ['Immatriculation_Droite', 1]]) {
-    const o = find(n);
-    if (!o) continue;
-    const b = box(o);
-    o.visible = false;
+  // plaques d'immatriculation d'origine : remplacées par nos décalcomanies
+  const plates = ['Immatriculation_Gauche', 'Immatriculation_Droite'].map((n) => find(n)).filter(Boolean).map((o) => ({ o, b: box(o) }));
+  for (const { o } of plates) o.visible = false;
+
+  // optimisation : les pièces fixes sont fusionnées par matériau (même image, ~10 fois moins d'appels de dessin) ;
+  // l'intérieur de la cabine est à part pour pouvoir le cacher quand la caméra est loin
+  const cabin = new THREE.Group();
+  g.add(cabin);
+  out.cabin = cabin;
+  const targets = mergeStatic(model, g, cabin, src);
+  g.remove(model);
+  for (const { b } of plates) {
+    const sx = 1;
     const p = b.getCenter(new THREE.Vector3());
     k.decals.push(...projectDecal(g, targets, p, new THREE.Vector3(Math.sign(p.x) || sx, 0, 0), b.max.z - b.min.z, (b.max.z - b.min.z) / 4, 0, k.regTex, Math.sign(p.x) < 0));
   }
@@ -929,6 +937,50 @@ function mountGlb(g, src, k) {
     }
   }
   return out;
+}
+
+// Fusion des pièces fixes : une géométrie par matériau (et par jeu d'attributs). Les pièces non peintes sont
+// identiques pour tous les avions de ce type : leur fusion est faite une fois et partagée. Renvoie les maillages peints.
+function mergeStatic(model, g, cabin, src) {
+  g.updateMatrixWorld(true);
+  const visible = (o) => { for (let n = o; n && n !== model; n = n.parent) if (!n.visible) return false; return true; };
+  const inside = (o) => { for (let n = o; n && n !== model; n = n.parent) if (n.name === 'Interieur') return true; return false; };
+  const groups = new Map();
+  model.traverse((o) => {
+    if (!o.isMesh || !visible(o)) return;
+    const geo = o.geometry;
+    const names = ['position', 'normal', ...(geo.attributes.uv ? ['uv'] : []), ...(geo.attributes.color ? ['color'] : [])];
+    const key = `${o.material.uuid}|${names.join(',')}|${inside(o) ? 'in' : 'out'}`;
+    if (!groups.has(key)) groups.set(key, { mat: o.material, names, inside: inside(o), paint: !!o.userData.paint, list: [] });
+    groups.get(key).list.push(o);
+  });
+  src.userData.merged ||= new Map();
+  const painted = [];
+  for (const [key, grp] of groups) {
+    let geo = grp.paint ? null : src.userData.merged.get(key);
+    if (!geo) {
+      const parts = grp.list.map((o) => {
+        const sgeo = new THREE.BufferGeometry();
+        for (const n of grp.names) sgeo.setAttribute(n, o.geometry.attributes[n].clone());
+        sgeo.setIndex(o.geometry.index ? o.geometry.index.clone() : [...Array(o.geometry.attributes.position.count).keys()]);
+        sgeo.applyMatrix4(o.matrixWorld);
+        return sgeo;
+      });
+      geo = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
+      for (const p of parts) if (p !== geo) p.dispose();
+      if (!geo) continue;
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      if (!grp.paint) src.userData.merged.set(key, geo);
+    }
+    const m = new THREE.Mesh(geo, grp.mat);
+    m.userData.noCast = grp.inside; // l'intérieur ne projette pas d'ombre visible
+    m.receiveShadow = true;
+    m.userData.shared = !grp.paint; // géométrie partagée : ne pas la libérer avec l'avion
+    if (grp.paint) { m.userData.paint = true; painted.push(m); }
+    (grp.inside ? cabin : g).add(m);
+  }
+  return painted;
 }
 
 // projette une image sur les pièces données (décalcomanie qui épouse la carrosserie)
@@ -1087,6 +1139,11 @@ function decalTexture(kind, value, LV, BODY) {
 }
 function decalMat(map) {
   return new THREE.MeshStandardMaterial({ map, transparent: true, roughness: 0.4, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+}
+
+// libère la mémoire d'un avion retiré de la scène (sans toucher aux géométries partagées entre avions)
+export function disposePlaneMesh(mesh) {
+  mesh.traverse((o) => { if (o.isMesh && !o.userData.shared) o.geometry.dispose(); });
 }
 
 // Vue cockpit : on cache la carrosserie qui gênerait (fuselage extérieur, pilote) et on garde l'intérieur

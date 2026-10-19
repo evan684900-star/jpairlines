@@ -2,7 +2,7 @@
 // tournant, caméra orbitale à la souris / au doigt. La personnalisation est appliquée en direct.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { createPlaneMesh, animatePlaneMesh } from './planeModel.js';
+import { createPlaneMesh, animatePlaneMesh, disposePlaneMesh } from './planeModel.js';
 import { aircraftById } from './aircraft.js';
 
 // ----- textures procédurales -----
@@ -281,7 +281,7 @@ export class Hangar {
   setPlane(type, livery, keepView = false) {
     if (this.plane) {
       this.turntable.remove(this.plane);
-      this.plane.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+      disposePlaneMesh(this.plane);
     }
     const def = aircraftById(type);
     const m = createPlaneMesh(type, { livery, detail: true });
