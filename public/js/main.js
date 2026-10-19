@@ -56,6 +56,11 @@ function applySettings(key) {
   if (!key || key === 'showNames') for (const r of remotes.values()) r.label.visible = settings.showNames;
   if (!key || key === 'muted') $('btn-mute').innerHTML = icon(settings.muted ? 'volume-x' : 'volume-2');
   $('btn-mute').classList.toggle('off', settings.muted);
+  // taille et éléments du HUD (zoom du conteneur : les éléments restent collés à leurs bords)
+  if (!key || key === 'hudScale') $('hud').style.zoom = String(settings.hudScale || 1);
+  if (!key || key === 'showInstruments') $('flightdeck').style.display = settings.showInstruments ? '' : 'none';
+  if (!key || key === 'showSystems') $('systems').style.display = settings.showSystems ? '' : 'none';
+  if (!key || key === 'showToolbar') $('toolbar').style.display = settings.showToolbar ? '' : 'none';
 }
 
 // ================= Sauvegarde =================
@@ -186,6 +191,7 @@ addEventListener('keydown', (e) => {
   }
   if (is('journal') && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (is('help')) $('help').classList.toggle('hidden');
+  if (is('hud')) { e.preventDefault(); $('hud').classList.toggle('hud-off'); }
   if (paused) return;
   if (is('chat')) { e.preventDefault(); openChat(); return; }
   if (is('camera')) { rig.next(); toast(t('Caméra : {name}', { name: t(rig.modeName) })); }
@@ -291,9 +297,11 @@ function respawn(airport, teleport = false) {
 
 // ================= Barre d'outils (souris / tactile) =================
 const press = (key) => { dispatchEvent(new KeyboardEvent('keydown', { key })); dispatchEvent(new KeyboardEvent('keyup', { key })); };
-$('btn-camera').onclick = () => press('c');
-$('btn-map').onclick = () => press('m');
-$('btn-journal').onclick = () => press('j');
+// les boutons déclenchent l'action avec la touche choisie par le joueur (onglet « Touches »), pas une touche fixe
+const pressAction = (id) => press(keysFor(id)[0] || ACTIONS.find((a) => a.id === id).def[0]);
+$('btn-camera').onclick = () => pressAction('camera');
+$('btn-map').onclick = () => pressAction('map');
+$('btn-journal').onclick = () => pressAction('journal');
 $('btn-pause').onclick = () => openPause();
 $('btn-hangar').onclick = () => enterHangar();
 $('open-hangar3d').onclick = () => enterHangar();

@@ -361,3 +361,6 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 .hg-st-item label { display: flex; align-items: center; gap: 6px; }
 .hg-st-item input[type=range] { flex: 1; }
 .hg-st-item button { padding: 4px 9px; }
+
+/* touche « cacher le HUD » : tout disparaît sauf l'essentiel (messages) */
+#hud.hud-off > :not(#toast):not(#log):not(#chat) { visibility: hidden; }

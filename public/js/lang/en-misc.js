@@ -379,4 +379,9 @@ export default {
   "Vague": "Wave",
   "Planète": "Planet",
   "Texte personnalisé": "Custom text",
+  "Taille de l'affichage (HUD)": "HUD size",
+  "Instruments de vol (horizon, vitesse, altitude)": "Flight instruments (horizon, speed, altitude)",
+  "Voyants (moteur, train, volets…)": "Indicators (engine, gear, flaps…)",
+  "Barre de boutons": "Button bar",
+  "Afficher / cacher tout l'affichage (HUD)": "Show / hide the whole HUD",
 };

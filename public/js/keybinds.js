@@ -36,6 +36,7 @@ export const ACTIONS = [
   { id: 'camera', label: 'Changer de caméra', def: ['c'] },
   { id: 'respawn', label: 'Réapparaître au dernier aéroport', def: ['r'] },
   { id: 'help', label: 'Aide (commandes)', def: ['h'] },
+  { id: 'hud', label: 'Afficher / cacher tout l\'affichage (HUD)', def: ['f2'] },
 ];
 const LIST = ACTIONS.filter((a) => a.id);
 
