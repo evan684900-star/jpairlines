@@ -21,6 +21,7 @@ import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys } from './keybinds.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
+import { loadPlaneModels } from './planeModel.js';
 import { t, isEN, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
 import { stickerThumb } from './stickers.js';
@@ -81,6 +82,9 @@ if (!save.liveries || typeof save.liveries !== 'object') save.liveries = {};
 const liveryOf = (id) => cleanLivery((save.liveries || {})[id]);
 
 // ================= Joueur =================
+// modèles 3D détaillés (Cub-1) : chargés avant de créer l'avion ; sans eux, modèle simplifié
+status(t('Chargement des avions…'), 2);
+await loadPlaneModels();
 const plane = new Plane(save.aircraft);
 let planeMesh = createPlaneMesh(plane.type, { landingLight: true, livery: liveryOf(plane.type) });
 plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);

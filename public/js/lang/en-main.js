@@ -181,4 +181,5 @@ export default {
   "Achète d'abord cette couleur": "Buy this color first",
   "Zones": "Zones",
   "Autocollants": "Stickers",
+  "Chargement des avions…": "Loading aircraft…",
 };

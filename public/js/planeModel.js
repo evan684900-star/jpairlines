@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { aircraftById } from './aircraft.js';
 import { cleanLivery } from './livery.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { stickerTexture } from './stickers.js';
 
 // Relie des anneaux de points (même nombre de points) en une surface lisse
@@ -217,12 +218,12 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   };
   // motif de peinture du fuselage (z : du nez, négatif, vers la queue ; ny : hauteur relative, -1 en bas, 1 en haut)
   const zNose = MD.fuse[0][0], zTail = MD.fuse[MD.fuse.length - 1][0], len = zTail - zNose;
-  const paintFuse = (c, z, ny, p) => {
+  const paintFuse = (c, z, ny, p, glb = false) => {
     const u = (z - zNose) / len; // 0 au nez, 1 à la queue
     const ang = Math.atan2(p.y, p.x);
     c.copy(BODY);
     switch (LV.pattern) {
-      case 'origine': for (const [a, b, k, zMin] of MD.stripes || []) if (ny > a && ny < b && z > zMin) c.copy(pick(k)); break;
+      case 'origine': if (!glb) for (const [a, b, k, zMin] of MD.stripes || []) if (ny > a && ny < b && z > zMin) c.copy(pick(k)); break;
       case 'bande': if (Math.abs(ny + 0.05) < 0.16) c.copy(ACC); else if (Math.abs(ny + 0.05) < 0.22) c.copy(ACC2); break;
       case 'bicolore': if (ny < -0.08) c.copy(ACC); else if (ny < 0.0) c.copy(ACC2); break;
       case 'eclair': {
@@ -306,7 +307,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   const half = W.xs || [...new Set([W.half, W.half - 0.3, (W.half + W.taperFrom) / 2, W.taperFrom, W.taperFrom / 2, 0].map((v) => Math.round(v * 100) / 100))]
     .filter((v) => v >= 0 && v <= W.half).sort((a, b) => b - a);
   const wingXs = [...half.map((v) => -v), ...half.slice(0, -1).reverse()];
-  const paintWing = (c, p) => {
+  const paintWing = (c, p, glb = false) => {
     const s = Math.abs(p.x);
     switch (LV.wings) {
       case 'uni': c.copy(BODY); break;
@@ -315,7 +316,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
       case 'bandes': { const k = Math.floor((s - W.half * 0.3) / 0.28); c.copy(s > W.half * 0.3 && k < 5 ? (k % 2 ? BLACK : WHITE) : BODY); break; }
       case 'chevron': { const v = (p.z - W.le) - s * 0.35; c.copy(v > 0.1 && v < 0.45 && s > W.half * 0.2 ? ACC : v > 0.45 && v < 0.6 && s > W.half * 0.2 ? ACC2 : BODY); break; }
       case 'bord': { const c0 = chordAt(p.x), t = (p.z - leAt(p.x)) / c0; c.copy(t < 0.12 ? ACC : t < 0.16 ? ACC2 : BODY); break; }
-      default: c.copy(s > W.accentFrom ? ACC : BODY);
+      default: c.copy(!glb && s > W.accentFrom ? ACC : BODY);
     }
     if (ZC.tips && s > W.half * 0.75) c.copy(ZC.tips);
     else if (ZC.wings && s <= W.half * 0.75) c.copy(ZC.wings);
@@ -704,6 +705,15 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     }
   }
 
+  // modèle 3D détaillé (glTF) à la place du modèle dessiné par le code, quand il existe pour cet avion
+  let glbInfo = null;
+  if (GLB[def.id]) {
+    glbInfo = mountGlb(g, GLB[def.id], {
+      paintFuse, paintWing, ZC, BODY, ACC, ACC2, LV, FINISH, props, lights, strobe, landing, landingLight, pilot, interior, panel, legs, decals,
+      regTex, emblemTex: LV.emblem !== 'aucun' ? decalTexture('emblem', LV.emblem, LV, BODY) : null,
+    });
+  }
+
   // autocollants collés au hangar (projetés sur la carrosserie)
   if (LV.stickers.length) decals.push(...applyStickers(g, LV.stickers));
 
@@ -711,15 +721,239 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   fuse.castShadow = true;
   const ex = MD.exhaust;
   g.userData = {
-    type: def.id, props, fans, flapL, flapR, ailL, ailR, elevator, rudder, legs, lights, strobe, landing, landingLight,
-    fuse, interior, pilot, panel, yokes, decals,
+    type: def.id, props, fans, legs, lights, strobe, landing, landingLight,
+    flapL: glbInfo?.flapL ?? flapL, flapR: glbInfo?.flapR ?? flapR, ailL: glbInfo?.ailL ?? ailL, ailR: glbInfo?.ailR ?? ailR,
+    elevator: glbInfo?.elevator ?? elevator, rudder: glbInfo?.rudder ?? rudder,
+    fuse, interior, pilot, panel, yokes: glbInfo?.yokes ?? yokes, decals,
     // points utiles aux effets et à la caméra (repère de l'avion)
-    eye: new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
-    exhaust: new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
-    wingtips: [new THREE.Vector3(-W.half, yAt(W.half), MD.tipFxZ), new THREE.Vector3(W.half, yAt(W.half), MD.tipFxZ)],
+    eye: glbInfo?.eye ?? new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
+    exhaust: glbInfo?.exhaust ?? new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
+    wingtips: glbInfo?.wingtips ?? [new THREE.Vector3(-W.half, yAt(W.half), MD.tipFxZ), new THREE.Vector3(W.half, yAt(W.half), MD.tipFxZ)],
     wheels: def.geo.wheels.filter((w) => w.brake).map((w) => w.p.clone()).concat(def.geo.wheels.filter((w) => w.nose).map((w) => w.p.clone())),
   };
   return g;
+}
+
+// ----------------------------------------------------------------------------------------------------
+// Modèles 3D détaillés (glTF) : chargés au démarrage ; sans eux, le modèle dessiné par le code est utilisé.
+// Repère du fichier : nez vers +Z, gauche vers +X, roues posées sur y = 0. On le retourne (nez vers -Z) et on le
+// recale pour que ses roues tombent sur les points de contact de la physique (aircraft.js).
+// ----------------------------------------------------------------------------------------------------
+const GLB = {};
+const GLB_FILES = { cub: { file: 'cub.glb', offset: [0, -1.55, 0.45] } };
+export async function loadPlaneModels(base = 'models/') {
+  const loader = new GLTFLoader();
+  await Promise.all(Object.entries(GLB_FILES).map(async ([id, f]) => {
+    try {
+      const gltf = await loader.loadAsync(base + f.file);
+      const root = new THREE.Group();
+      gltf.scene.rotation.y = Math.PI;
+      gltf.scene.position.fromArray(f.offset);
+      root.add(gltf.scene);
+      root.updateMatrixWorld(true);
+      // profil du fuselage (hauteur et centre par tranche) pour appliquer les motifs de peinture
+      const shell = root.getObjectByName('Coque_Fuselage');
+      const prof = [];
+      if (shell) {
+        const pos = shell.geometry.attributes.position, v = new THREE.Vector3();
+        const bins = new Map();
+        for (let i = 0; i < pos.count; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(shell.matrixWorld);
+          const k = Math.round(v.z / 0.2);
+          const b = bins.get(k) || { lo: Infinity, hi: -Infinity };
+          b.lo = Math.min(b.lo, v.y); b.hi = Math.max(b.hi, v.y);
+          bins.set(k, b);
+        }
+        for (const [k, b] of [...bins].sort((a, c) => a[0] - c[0])) prof.push([k * 0.2, (b.hi - b.lo) / 2, (b.hi + b.lo) / 2]);
+      }
+      root.userData.profile = prof;
+      GLB[id] = root;
+    } catch (e) {
+      console.warn(`Modèle 3D ${f.file} indisponible, modèle simplifié utilisé`, e);
+    }
+  }));
+}
+
+const PAINTED = /^(Peinture_Blanche|Bande_Bleue|Bande_Rouge)$/;
+// installe le modèle glTF dans le groupe de l'avion et le relie aux animations, feux, peinture et cockpit
+function mountGlb(g, src, k) {
+  const procedural = [...g.children];
+  const model = src.clone(true);
+  g.add(model);
+  g.updateMatrixWorld(true);
+  const box = (o) => new THREE.Box3().setFromObject(o);
+  const center = (o) => box(o).getCenter(new THREE.Vector3());
+  const find = (n) => model.getObjectByName(n);
+
+  // le modèle dessiné par le code disparaît (on garde ses feux, le pilote et la planche de bord animée)
+  const keep = new Set([...k.lights, k.strobe, k.landing, k.landingLight, k.landingLight?.target, k.pilot, k.interior, ...k.props.map((p) => p.disc)].filter(Boolean));
+  for (const o of procedural) if (!keep.has(o)) g.remove(o);
+  for (const o of [...k.interior.children]) if (o !== k.panel) k.interior.remove(o);
+  k.legs.length = 0; // train fixe
+  k.decals.length = 0;
+
+  // peinture : couleurs par sommet calculées avec les mêmes motifs et zones que le modèle dessiné
+  const prof = src.userData.profile;
+  const section = (z) => {
+    if (!prof.length) return [0.6, 0];
+    let i = prof.findIndex((p) => p[0] >= z);
+    if (i <= 0) return [prof[Math.max(0, i)][1], prof[Math.max(0, i)][2]];
+    const a = prof[i - 1], b = prof[i], t = (z - a[0]) / (b[0] - a[0] || 1);
+    return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  };
+  const origine = k.LV.pattern === 'origine';
+  const paintMats = new Map();
+  const c = new THREE.Color(), v = new THREE.Vector3();
+  model.traverse((o) => {
+    if (!o.isMesh || !PAINTED.test(o.material?.name || '')) return;
+    const n = o.name, matName = o.material.name;
+    const stripe = matName !== 'Peinture_Blanche';
+    // bandes d'origine : seulement avec la peinture d'origine (sinon elles suivent le motif choisi)
+    const pos = o.geometry.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+      if (stripe && origine) c.copy(matName === 'Bande_Bleue' ? k.ACC2 : k.ACC);
+      else if (/^(Aile|Volet|Aileron|Bande_Saumon)/.test(n)) {
+        k.paintWing(c, v, true);
+        if (/^(Volet|Aileron)/.test(n) && k.ZC.surfaces) c.copy(k.ZC.surfaces);
+      } else if (/^Stabilisateur/.test(n)) c.copy(k.ZC.stab || k.BODY);
+      else if (/^(Gouverne|Tab_|Bande_Gouverne)/.test(n)) c.copy(k.ZC.surfaces || k.BODY);
+      else if (/^Derive/.test(n)) c.copy(k.ZC.fin || k.BODY);
+      else if (/^Carenage/.test(n)) c.copy(k.ZC.pants || k.BODY);
+      else {
+        const [h, yc] = section(v.z);
+        k.paintFuse(c, v.z, (v.y - yc) / Math.max(0.05, h), { x: v.x, y: v.y - yc }, true);
+      }
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+    }
+    // géométrie partagée (positions, normales) + couleurs propres à cet avion
+    const geo = new THREE.BufferGeometry();
+    geo.setIndex(o.geometry.index);
+    for (const [name, a] of Object.entries(o.geometry.attributes)) geo.setAttribute(name, a);
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.boundingBox = o.geometry.boundingBox; geo.boundingSphere = o.geometry.boundingSphere;
+    o.geometry = geo;
+    const side = o.material.side;
+    if (!paintMats.has(side)) paintMats.set(side, new THREE.MeshPhysicalMaterial({ vertexColors: true, ...k.FINISH, side }));
+    o.material = paintMats.get(side);
+    o.userData.paint = true;
+  });
+
+  // pièces mobiles : on les accroche à un pivot placé sur leur charnière (bord avant = côté nez, z minimal)
+  const hinge = (name) => {
+    const o = find(name);
+    if (!o) return null;
+    const b = box(o), pivot = new THREE.Group();
+    pivot.position.set((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, b.min.z);
+    g.add(pivot);
+    pivot.attach(o);
+    return pivot;
+  };
+  const out = {
+    flapL: hinge('Volet_Gauche'), flapR: hinge('Volet_Droite'), ailL: hinge('Aileron_Gauche'), ailR: hinge('Aileron_Droite'),
+    elevator: hinge('Gouverne_Profondeur'), rudder: hinge('Gouverne_Direction'),
+  };
+  // hélice : les pales tournent autour du cône
+  const cone = find('Cone_Helice');
+  if (cone && k.props[0]) {
+    const hub = center(cone), spin = new THREE.Group();
+    spin.position.copy(hub);
+    g.add(spin);
+    for (const n of ['Pale_Helice_1', 'Pale_Helice_2']) { const b = find(n); if (b) spin.attach(b); }
+    const p0 = k.props[0];
+    p0.prop = spin;
+    p0.disc.position.set(hub.x, hub.y, hub.z - 0.06);
+    p0.disc.scale.setScalar(0.92);
+  }
+  // manches : pivot au centre (tourne pour le roulis, avance / recule pour le tangage)
+  out.yokes = ['Manche_Pilote', 'Manche_CoPilote'].map((n) => {
+    const o = find(n);
+    if (!o) return null;
+    const pivot = new THREE.Group();
+    pivot.position.copy(center(o));
+    g.add(pivot);
+    pivot.attach(o);
+    pivot.userData.z0 = pivot.position.z;
+    return pivot;
+  }).filter(Boolean);
+  // planche de bord animée par-dessus celle du modèle (dont on cache les cadrans en relief)
+  for (const n of ['Instruments', 'Pile_Radio', 'Interrupteurs', 'Boite_A_Gants']) { const o = find(n); if (o) o.visible = false; }
+  const dash = find('Tableau_De_Bord');
+  if (dash) {
+    const b = box(dash);
+    k.panel.position.set(0, (b.min.y + b.max.y) / 2, b.max.z + 0.006);
+    k.panel.rotation.set(0, 0, 0);
+    k.panel.scale.set((b.max.x - b.min.x) / k.panel.geometry.parameters.width, (b.max.y - b.min.y) / k.panel.geometry.parameters.height, 1);
+  }
+  // feux du modèle dessiné, replacés sur ceux du fichier
+  const at = (n) => (find(n) ? center(find(n)) : null);
+  const place = (lamp, n) => { const p = at(n); if (lamp && p) lamp.position.copy(p); };
+  place(k.lights[0], 'Feu_Nav_Gauche'); place(k.lights[1], 'Feu_Nav_Droite'); place(k.lights[2], 'Feu_Arriere');
+  place(k.strobe, 'Feu_Anticollision'); place(k.landing, 'Phare_Atterrissage');
+  if (k.landingLight && at('Phare_Atterrissage')) {
+    const p = at('Phare_Atterrissage');
+    k.landingLight.position.copy(p);
+    k.landingLight.target.position.set(p.x, -6, p.z - 60);
+  }
+  // pilote assis dans le siège avant gauche du modèle
+  const seat = find('Siege_Avant_Gauche');
+  if (k.pilot && seat) {
+    const b = box(seat);
+    k.pilot.position.set(0, b.min.y + 0.12 - (-0.12), (b.min.z + b.max.z) / 2 + 0.95 - 0.03);
+  }
+  if (seat) {
+    const b = box(seat);
+    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.08, b.max.z - 0.3); // tête contre l'appuie-tête
+  }
+  const exh = at('Echappement');
+  if (exh) out.exhaust = exh.add(new THREE.Vector3(0, -0.02, 0.1));
+  const nl = at('Feu_Nav_Gauche'), nr = at('Feu_Nav_Droite');
+  if (nl && nr) out.wingtips = [nl, nr];
+  // immatriculation et emblème : projetés sur la carrosserie du modèle (ses plaques d'origine sont cachées)
+  const targets = [];
+  model.traverse((o) => { if (o.isMesh && o.userData.paint) targets.push(o); });
+  for (const [n, sx] of [['Immatriculation_Gauche', -1], ['Immatriculation_Droite', 1]]) {
+    const o = find(n);
+    if (!o) continue;
+    const b = box(o);
+    o.visible = false;
+    const p = b.getCenter(new THREE.Vector3());
+    k.decals.push(...projectDecal(g, targets, p, new THREE.Vector3(Math.sign(p.x) || sx, 0, 0), b.max.z - b.min.z, (b.max.z - b.min.z) / 4, 0, k.regTex, Math.sign(p.x) < 0));
+  }
+  if (k.emblemTex) {
+    const fin = find('Derive');
+    if (fin) {
+      const b = box(fin), p = b.getCenter(new THREE.Vector3()), sz = Math.min(b.max.y - b.min.y, b.max.z - b.min.z) * 0.55;
+      for (const sx of [-1, 1]) k.decals.push(...projectDecal(g, targets, new THREE.Vector3(sx * 0.06, p.y, p.z + 0.2), new THREE.Vector3(sx, 0, 0), sz, sz, 0, k.emblemTex, sx < 0));
+    }
+  }
+  return out;
+}
+
+// projette une image sur les pièces données (décalcomanie qui épouse la carrosserie)
+function projectDecal(g, targets, p, n, w, h, rotDeg, tex, mirror = false) {
+  _do.position.copy(p);
+  _do.lookAt(p.clone().add(n));
+  _do.rotateZ(THREE.MathUtils.degToRad(rotDeg));
+  const size = new THREE.Vector3(w, h, Math.max(0.25, Math.max(w, h) * 0.6));
+  let map = tex;
+  if (mirror) { map = tex.clone(); map.wrapS = THREE.RepeatWrapping; map.repeat.x = -1; map.offset.x = 1; map.needsUpdate = true; }
+  const mat = new THREE.MeshStandardMaterial({ map, transparent: true, depthWrite: false, roughness: 0.45, polygonOffset: true, polygonOffsetFactor: -4, side: THREE.DoubleSide });
+  _sph.set(p, Math.max(w, h));
+  const out = [];
+  for (const mesh of targets) {
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    _box.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);
+    if (!_box.intersectsSphere(_sph)) continue;
+    const geo = keepFront(new DecalGeometry(mesh, p, _do.rotation, size), p, n);
+    if (!geo) continue;
+    const d = new THREE.Mesh(geo, mat);
+    d.renderOrder = 3;
+    g.add(d);
+    out.push(d);
+  }
+  return out;
 }
 
 // Autocollants : chaque autocollant est projeté (DecalGeometry) sur les pièces peintes qu'il touche.
