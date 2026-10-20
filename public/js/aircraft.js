@@ -125,7 +125,7 @@ const MOUSTIQUE = {
     Cnb: 0.07, Cnr: -0.1, Cndr: 0.045, Cnda: -0.004, Cnp: -0.03,
     engine: 'piston', maxPower: 73500, staticThrust: 1500, propEff: 0.6,
     fuelCapacity: 80, fuelDensity: 0.72, fuelFlowIdle: 3, fuelFlowMax: 22,
-    gear: 1.3, vFlaps: 33, vGear: Infinity, vne: 62, flapNotches: [0, 15, 30], retractable: false,
+    gear: 1.3, vFlaps: 33, vGear: 38, vne: 62, flapNotches: [0, 15, 30], retractable: true,
   },
   geo: contacts({
     mass: 443, gear: 1.3, nose: [0, -2.2], mains: [0.95, -0.55],
@@ -155,7 +155,7 @@ const MOUSTIQUE = {
     fin: { y0: 0.48, y1: 1.45, root: 1.0, tip: 0.5, le0: 2.55, le1: 3.15, accentFrom: 1.1 },
     props: [{ x: 0, y: 0, z: -2.62, r: 0.85, blades: 3, spinner: 0.75 }],
     exhaust: [0.18, -0.35, -2.2],
-    gear: { r: 0.24, pants: false, fixed: true, mains: { x: 0.95, z: -0.55, ax: 0.4, ay: -0.4, style: 'spring' }, nose: { z: -2.2, ay: -0.3 } },
+    gear: { r: 0.24, pants: false, mains: { x: 0.95, z: -0.55, ax: 0.4, ay: -0.4, style: 'spring' }, nose: { z: -2.2, ay: -0.3 } },
     cabin: {
       panel: { y: 0.08, z: -1.72, w: 0.95 }, seats: [[-0.26, -0.75], [0.26, -0.75]], seatY: -0.16, stick: true,
       floor: { y: -0.45, z: -1.0, len: 1.8, w: 0.9 },
@@ -184,7 +184,7 @@ const FAUCON = {
     Cnb: 0.08, Cnr: -0.12, Cndr: 0.06, Cnda: -0.003, Cnp: -0.02,
     engine: 'piston', maxPower: 224000, staticThrust: 4300, propEff: 0.75,
     fuelCapacity: 160, fuelDensity: 0.72, fuelFlowIdle: 8, fuelFlowMax: 85,
-    gear: 1.35, vFlaps: Infinity, vGear: Infinity, vne: 113, flapNotches: [0], retractable: false, rollGentle: 0.3,
+    gear: 1.35, vFlaps: Infinity, vGear: 70, vne: 113, flapNotches: [0], retractable: true, rollGentle: 0.3,
     gTol: 1.6, feelN: 2.4,
   },
   geo: contacts({
@@ -210,7 +210,7 @@ const FAUCON = {
     fin: { y0: 0.2, y1: 1.4, root: 1.25, tip: 0.6, le0: 2.2, le1: 2.95, accentFrom: 0.8 },
     props: [{ x: 0, y: 0.05, z: -3.42, r: 0.98, blades: 3, spinner: 1.05, intakes: true }],
     exhaust: [0.32, -0.35, -2.6],
-    gear: { r: 0.26, pants: true, fixed: true, mains: { x: 1.0, z: -0.75, ax: 0.3, ay: -0.5, style: 'spring' }, nose: { z: -2.7, ay: -0.42 } },
+    gear: { r: 0.26, pants: true, mains: { x: 1.0, z: -0.75, ax: 0.3, ay: -0.5, style: 'spring' }, nose: { z: -2.7, ay: -0.42 } },
     cabin: {
       panel: { y: 0.28, z: -1.6, w: 0.7 }, seats: [[0, -0.75], [0, 0.35]], seatY: -0.22, stick: true,
       floor: { y: -0.42, z: -0.3, len: 2.4, w: 0.7 },
