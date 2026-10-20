@@ -184,7 +184,7 @@ const FAUCON = {
     Cnb: 0.08, Cnr: -0.12, Cndr: 0.06, Cnda: -0.003, Cnp: -0.02,
     engine: 'piston', maxPower: 224000, staticThrust: 4300, propEff: 0.75,
     fuelCapacity: 160, fuelDensity: 0.72, fuelFlowIdle: 8, fuelFlowMax: 85,
-    gear: 1.35, vFlaps: Infinity, vGear: Infinity, vne: 113, flapNotches: [0], retractable: false,
+    gear: 1.35, vFlaps: Infinity, vGear: Infinity, vne: 113, flapNotches: [0], retractable: false, rollGentle: 0.3,
     gTol: 1.6, feelN: 2.4,
   },
   geo: contacts({

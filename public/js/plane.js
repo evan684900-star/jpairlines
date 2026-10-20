@@ -187,7 +187,12 @@ export class Plane {
     this.sens = sens;
     const ramp = (cur, target, up, down) => cur + clamp(target - cur, -dt * (Math.abs(target) > Math.abs(cur) ? up : down), dt * (Math.abs(target) > Math.abs(cur) ? up : down));
     this.ctrl.pitch = ramp(this.ctrl.pitch, clamp(input.pitch, -1, 1), 1.5, 3.5);
-    this.ctrl.roll = ramp(this.ctrl.roll, clamp(input.roll * sens, -1, 1), 3, 4);
+    // roulis progressif sur les avions très vifs (voltige) : une petite pression incline doucement,
+    // le roulis complet n'arrive qu'en gardant la touche enfoncée (au clavier, tout-ou-rien, sinon on fait un tonneau en 1 s)
+    this.rollHold = Math.abs(input.roll) > 0.1 ? (this.rollHold || 0) + dt : 0;
+    const gentle = this.S.rollGentle ?? 1;
+    const rollGain = gentle + (1 - gentle) * smooth(clamp((this.rollHold - 0.3) / 1.2, 0, 1));
+    this.ctrl.roll = ramp(this.ctrl.roll, clamp(input.roll * sens * rollGain, -1, 1), 3, 4);
     this.ctrl.yaw = ramp(this.ctrl.yaw, clamp(input.yaw, -1, 1), 3, 4);
 
     let t = dt;
