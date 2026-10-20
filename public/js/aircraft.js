@@ -58,8 +58,8 @@ const CUB = {
     Cnb: 0.07, Cnr: -0.1, Cndr: 0.04, Cnda: -0.004, Cnp: -0.03,
     engine: 'piston', maxPower: 119000, staticThrust: 2700, propEff: 0.7,
     fuelCapacity: 160, fuelDensity: 0.72, fuelFlowIdle: 6, fuelFlowMax: 46,
-    gear: 1.55, belly: 0.7, vFlaps: 46, vGear: Infinity, vne: 84, flapNotches: [0, 10, 20, 30],
-    retractable: false, feelV: 26, feelFloor: 0.2, // train fixe, comme le vrai Cessna 172 (et le modèle 3D)
+    gear: 1.55, belly: 0.7, vFlaps: 46, vGear: 58, vne: 84, flapNotches: [0, 10, 20, 30],
+    retractable: true, feelV: 26, feelFloor: 0.2, // train escamotable (jambes du modèle 3D animées)
   },
   geo: {
     cg: V3(0, -0.15, -1.2),

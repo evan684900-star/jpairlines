@@ -710,7 +710,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   let glbInfo = null;
   if (GLB[def.id]) {
     glbInfo = mountGlb(g, GLB[def.id], {
-      paintFuse, paintWing, ZC, BODY, ACC, ACC2, LV, FINISH, props, lights, strobe, landing, landingLight, pilot, interior, panel, legs, decals,
+      paintFuse, paintWing, ZC, BODY, ACC, ACC2, LV, FINISH, props, lights, strobe, landing, landingLight, pilot, interior, panel, legs, decals, retractable: def.specs.retractable,
       regTex, emblemTex: LV.emblem !== 'aucun' ? decalTexture('emblem', LV.emblem, LV, BODY) : null,
     });
   }
@@ -791,7 +791,7 @@ function mountGlb(g, src, k) {
   const keep = new Set([...k.lights, k.strobe, k.landing, k.landingLight, k.landingLight?.target, k.pilot, k.interior, ...k.props.map((p) => p.disc)].filter(Boolean));
   for (const o of procedural) if (!keep.has(o)) g.remove(o);
   for (const o of [...k.interior.children]) if (o !== k.panel) k.interior.remove(o);
-  k.legs.length = 0; // train fixe
+  k.legs.length = 0; // remplacées par les jambes du modèle (ci-dessous) si le train est escamotable
   k.decals.length = 0;
 
   // peinture : couleurs par sommet calculées avec les mêmes motifs et zones que le modèle dessiné
@@ -868,6 +868,25 @@ function mountGlb(g, src, k) {
     p0.prop = spin;
     p0.disc.position.set(hub.x, hub.y, hub.z - 0.06);
     p0.disc.scale.setScalar(0.92);
+  }
+  // train d'atterrissage escamotable : les jambes principales se replient vers le fuselage, la roue avant vers l'arrière
+  if (k.retractable) {
+    const leg = (names, fold) => {
+      const parts = names.map(find).filter(Boolean);
+      if (!parts.length) return;
+      const b = new THREE.Box3();
+      for (const o of parts) b.union(box(o));
+      const pivot = new THREE.Group();
+      // charnière en haut de la jambe, côté fuselage
+      pivot.position.set(fold ? (fold > 0 ? b.max.x : b.min.x) : (b.min.x + b.max.x) / 2, b.max.y, fold ? (b.min.z + b.max.z) / 2 : b.min.z);
+      g.add(pivot);
+      for (const o of parts) pivot.attach(o);
+      pivot.userData.fold = fold;
+      k.legs.push(pivot);
+    };
+    leg(['Jambe_Train_Gauche', 'Essieu_Gauche', 'Marchepied_Gauche', 'Roue_Principale_Gauche', 'Carenage_Roue_Gauche'], 1);
+    leg(['Jambe_Train_Droite', 'Essieu_Droite', 'Marchepied_Droite', 'Roue_Principale_Droite', 'Carenage_Roue_Droite'], -1);
+    leg(['Train_Avant'], 0);
   }
   // manches : pivot au centre (tourne pour le roulis, avance / recule pour le tangage)
   out.yokes = ['Manche_Pilote', 'Manche_CoPilote'].map((n) => {
