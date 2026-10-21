@@ -122,7 +122,9 @@ export class Water {
     const U2 = this.uniforms;
     // vagues de Gerstner : direction (angle relatif au vent), longueur d'onde (m), cambrure
     const WAVES = [[0.0, 62, 0.32], [0.55, 33, 0.28], [-0.7, 19, 0.24], [1.6, 9.5, 0.18], [-1.9, 5.3, 0.14]];
-    const waveGLSL = WAVES.map(([a, L, q]) => `jpWave(p, rot(waveDir, ${a.toFixed(2)}), ${L.toFixed(1)}, ${q.toFixed(2)}, amp, P, N, J);`).join('\n');
+    // hauteur cumulée des vagues (m) pour une amplitude de 1 : sert à les limiter en eau peu profonde
+    const WAVE_SUM = WAVES.reduce((n, [, L, q]) => n + (L / (2 * Math.PI)) * q, 0).toFixed(3);
+    const waveGLSL = WAVES.map(([a, L, q]) => `jpWave(p, rot(waveDir, ${a.toFixed(2)}), ${L.toFixed(1)}, ${q.toFixed(2)}, amp, sp, P, N, J);`).join('\n');
     mat.onBeforeCompile = (shader) => {
       injectShared(shader);
       Object.assign(shader.uniforms, U2);
@@ -141,7 +143,11 @@ export class Water {
           return near < -400.0 ? vec2(far, 0.0) : vec2(mix(far, near, inside), inside);
         }
         vec2 rot(vec2 d, float a) { float c = cos(a), s = sin(a); return vec2(d.x * c - d.y * s, d.x * s + d.y * c); }
-        void jpWave(vec2 p, vec2 d, float L, float q, float amp, inout vec3 P, inout vec3 N, inout float J) {
+        // sp : écart entre les sommets de la grille ici. Une vague plus courte que 4 écarts ne peut pas être dessinée :
+        // ses normales par sommet tomberaient au hasard et feraient des triangles sombres dans le reflet du ciel
+        void jpWave(vec2 p, vec2 d, float L, float q, float amp, float sp, inout vec3 P, inout vec3 N, inout float J) {
+          amp *= smoothstep(4.0, 8.0, L / sp);
+          if (amp < 0.001) return;
           float k = 6.2832 / L;
           float c = sqrt(9.81 / k);
           float A = q / k * amp;
@@ -160,8 +166,11 @@ export class Water {
             vec2 p = (modelMatrix * vec4(position, 1.0)).xz;
             float depth = max(0.0, -jpGround(p).x);
             float dcam = length(p - cameraPosition.xz);
-            float amp = waveAmp * (1.0 - smoothstep(600.0, 3500.0, dcam)) * smoothstep(0.0, 6.0, depth);
+            // les vagues s'aplatissent quand le fond est proche (lacs, bords de plage) : leur creux ne doit jamais
+            // descendre sous le fond (sinon le fond apparaît par taches sombres au milieu de l'eau)
+            float amp = min(waveAmp, depth * 0.12 / ${WAVE_SUM}) * smoothstep(2.0, 20.0, depth) * (1.0 - smoothstep(600.0, 3500.0, dcam));
             vec3 P = vec3(0.0), N = vec3(0.0, 1.0, 0.0); float J = 1.0;
+            float sp = max(0.5, dcam * 0.05); // la grille est radiale : 128 sommets par cercle
             if (amp > 0.001) { ${waveGLSL} }
             jpP = P; jpN = normalize(N); jpJ = J;
           }
@@ -224,6 +233,11 @@ export class Water {
             vec2 slope = (a.xy + b.xy * 0.7) * near * 0.35 + c.xy * 0.22;
             vec3 nw = normalize(normalize((vec4(normal, 0.0) * viewMatrix).xyz) + vec3(slope.x, 0.0, slope.y));
             normal = normalize((viewMatrix * vec4(nw, 0.0)).xyz);
+            // vu en rasant, une pente de vague ne doit jamais tourner le dos à la caméra : sinon son reflet
+            // part vers le sol et fait des taches sombres au loin
+            vec3 jpV = normalize(vViewPosition);
+            float jpNV = dot(normal, jpV);
+            if (jpNV < 0.12) normal = normalize(normal + jpV * (0.12 - jpNV));
           }
         `)
         .replace('#include <opaque_fragment>', /* glsl */`
