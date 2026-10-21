@@ -160,6 +160,8 @@ let sound = null;
 function initAudio() {
   try { sound = new SoundEngine(); sound.setVolume(settings); } catch { sound = null; }
 }
+// le son est créé juste après le clic « Décoller » : si le navigateur l'a laissé en pause, il repart au geste suivant
+for (const ev of ['pointerdown', 'keydown']) addEventListener(ev, () => sound?.resume(), { capture: true, passive: true });
 function beep(freq, dur, vol = 0.15) { sound?.beep(freq, dur, vol); }
 
 // ================= Entrées =================
@@ -1428,13 +1430,17 @@ $('start').onclick = () => {
   $('menu').classList.add('hidden');
   $('hud').classList.remove('hidden');
   $('help').classList.add('hidden');
-  initAudio();
-  respawn();
-  started = true;
-  connect();
-  // premier vol : tutoriel guidé avec flèches (sinon simple rappel)
-  if (!save.tutorialDone && !save.completed.length) tutorial.start();
-  else toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
+  $('start').disabled = true;
+  // tout le reste (son, placement, connexion, tutoriel) attend que le menu ait disparu à l'écran : le clic répond tout de suite
+  requestAnimationFrame(() => setTimeout(() => {
+    initAudio();
+    respawn();
+    started = true;
+    connect();
+    // premier vol : tutoriel guidé avec flèches (sinon simple rappel)
+    if (!save.tutorialDone && !save.completed.length) tutorial.start();
+    else toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
+  }, 0));
 };
 const tutorial = new Tutorial({
   plane,
