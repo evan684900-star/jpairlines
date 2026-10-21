@@ -631,10 +631,12 @@ function chatLine(name, text, cls = '') {
     d.append(b);
   }
   d.append(document.createTextNode(text));
+  // on ne ramène pas en bas quelqu'un qui est en train de relire les anciens messages
+  const atBottom = !chat.open || box.scrollHeight - box.scrollTop - box.clientHeight < 30;
   box.appendChild(d);
-  while (box.children.length > 50) box.firstChild.remove();
-  box.scrollTop = box.scrollHeight;
-  if (!cls.includes('old')) setTimeout(() => d.classList.add('old'), 12000);
+  while (box.children.length > 150) box.firstChild.remove();
+  if (atBottom) box.scrollTop = box.scrollHeight;
+  if (!cls.includes('old')) setTimeout(() => d.classList.add('old'), 30000);
 }
 function openChat() {
   if (!net.ws || net.ws.readyState !== 1) { toast(t('Chat indisponible : pas de connexion au serveur multijoueur')); return; }
@@ -643,10 +645,12 @@ function openChat() {
   $('chat').classList.add('open');
   $('chat-form').classList.remove('hidden');
   $('chat-input').focus();
+  $('chat-lines').scrollTop = $('chat-lines').scrollHeight;
 }
 function closeChat() {
   chat.open = false;
   $('chat').classList.remove('open');
+  $('chat-lines').scrollTop = $('chat-lines').scrollHeight;
   $('chat-form').classList.add('hidden');
   $('chat-input').blur();
 }
@@ -662,6 +666,8 @@ $('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
 });
 $('chat-input').addEventListener('blur', () => { if (chat.open) closeChat(); });
+// cliquer ou tirer la barre de défilement dans l'historique ne ferme pas le chat
+$('chat-lines').addEventListener('mousedown', (e) => { if (chat.open) e.preventDefault(); });
 $('btn-chat').onclick = () => (chat.open ? closeChat() : openChat());
 
 function netTick(now) {
