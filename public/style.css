@@ -381,3 +381,26 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 #tuto-arrow { position: fixed; z-index: 41; pointer-events: none; width: 56px; height: 56px; transform: rotate(var(--rot, 0deg)); filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6)); }
 #tuto-arrow svg { animation: tuto-bounce 0.9s ease-in-out infinite; }
 @keyframes tuto-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+/* manette : élément choisi au stick ou à la croix */
+.pad-focus { outline: 3px solid var(--accent) !important; outline-offset: 2px; }
+kbd.pad { white-space: nowrap; }
+.keychip.padchip { border-color: #8fd0ff55; }
+
+/* note de fin de mission */
+#grade { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); z-index: 35; width: min(420px, calc(100vw - 32px)); padding: 14px 16px; box-sizing: border-box; animation: rise 0.35s ease; cursor: pointer; }
+#grade.hidden { display: none; }
+#grade .g-head { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+#grade .g-head > div:last-child { display: flex; flex-direction: column; min-width: 0; }
+#grade .g-head small { color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75em; }
+#grade .g-head b { font-size: 1.1em; }
+#grade .g-head span { color: var(--dim); font-size: 0.9em; }
+.g-letter { font-size: 46px; font-weight: 800; width: 64px; height: 64px; border-radius: 14px; display: grid; place-items: center; flex: none; color: #111; }
+.g-S { background: linear-gradient(135deg, #ffe27a, #ffb300); } .g-A { background: #6fe08a; } .g-B { background: #7cc7ff; } .g-C { background: #ffb37a; } .g-D { background: #ff7a7a; }
+#grade .g-row { display: grid; grid-template-columns: 96px 1fr 30px; gap: 2px 8px; align-items: center; margin: 6px 0; font-size: 0.9em; }
+#grade .g-row .bar { height: 6px; background: #ffffff22; border-radius: 3px; overflow: hidden; }
+#grade .g-row .bar div { height: 100%; background: var(--accent); }
+#grade .g-row b { text-align: right; }
+#grade .g-row small { grid-column: 2 / 4; color: var(--dim); }
+#grade .g-gain { margin-top: 8px; font-weight: 700; color: var(--accent); }
+.g-badge { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 4px; font-size: 0.8em; font-weight: 800; color: #111; }

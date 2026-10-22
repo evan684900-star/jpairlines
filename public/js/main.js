@@ -18,7 +18,8 @@ import { SoundEngine } from './ui/audio.js';
 import { Instruments } from './ui/instruments.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
-import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys, layout, setLayout, detectLayout } from './keybinds.js';
+import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys, layout, setLayout, detectLayout, pad, padFor, isPad, padName, bindPad, unbindPad, resetPad } from './keybinds.js';
+import { Gamepads, moveFocus, clearPadFocus } from './gamepad.js';
 import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
 import { Hangar } from './hangar.js';
 import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
@@ -202,16 +203,23 @@ addEventListener('keydown', (e) => {
     else openPause();
     return;
   }
-  const is = (id) => isKey(id, k);
+  if (isKey('hud', k) || isKey('chat', k)) e.preventDefault();
+  onAction((id) => isKey(id, k));
+});
+addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+addEventListener('blur', () => keys.clear());
+
+// action déclenchée par une touche du clavier ou un bouton de la manette : is(id) dit si c'est celle de l'action id
+function onAction(is) {
   if (is('map')) {
     const nowHidden = $('bigmap').classList.toggle('hidden');
     if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); }
   }
   if (is('journal') && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (is('help')) $('help').classList.toggle('hidden');
-  if (is('hud')) { e.preventDefault(); $('hud').classList.toggle('hud-off'); }
+  if (is('hud')) $('hud').classList.toggle('hud-off');
   if (paused) return;
-  if (is('chat')) { e.preventDefault(); openChat(); return; }
+  if (is('chat')) { openChat(); return; }
   if (is('camera')) { rig.next(); toast(t('Caméra : {name}', { name: t(rig.modeName) })); }
   if (is('respawn')) respawn();
   if (is('board') && quests?.canOpenBoard()) quests.openBoard();
@@ -228,9 +236,84 @@ addEventListener('keydown', (e) => {
     plane.smokeOn = !plane.smokeOn;
     toast(plane.smokeOn ? t('💨 Fumigène allumé (couleur réglable au hangar)') : t('Fumigène coupé'));
   }
+}
+
+// ================= Manette =================
+// en vol : boutons → actions (onglet « Touches ») ; dans un menu : naviguer, A / ✕ valider, B / ○ revenir
+let capturingPad = null; // action en attente d'un nouveau bouton
+const gp = new Gamepads({
+  connected: () => {
+    toast(t('🎮 Manette détectée : stick gauche = manche, gâchettes = gaz, stick droit = caméra'));
+    setTimeout(renderKeys, 100); // noms des boutons Xbox ou PlayStation
+  },
+  press: padPress,
+  release: () => {},
 });
-addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
-addEventListener('blur', () => keys.clear());
+// partie de l'écran pilotée à la manette (menu ouvert), ou null en vol
+function uiRoot() {
+  if (hg.busy) return null;
+  const open = OVERLAYS.map($).filter((el) => !el.classList.contains('hidden'));
+  if (open.length) return open[open.length - 1];
+  if (hg.active) return $('hangar3d');
+  if (!started && !$('menu').classList.contains('hidden')) return $('menu');
+  return null;
+}
+function padPress(k) {
+  if (capturingPad) {
+    const taken = bindPad(capturingPad, k);
+    if (taken.length) toast(t('{key} retirée de : {list}', { key: padName(k), list: taken.map((l) => t(l)).join(', ') }));
+    capturingPad = null;
+    renderKeys();
+    return;
+  }
+  if (chat.open) return;
+  const root = uiRoot();
+  if (root) {
+    const focused = root.contains(document.activeElement) && document.activeElement !== document.body ? document.activeElement : null;
+    // le bouton qui a ouvert une fenêtre (carte, journal, aide) la referme
+    const same = { bigmap: 'map', journal: 'journal', help: 'help' }[root.id];
+    if (same && isPad(same, k)) { clearPadFocus(); root.classList.add('hidden'); return; }
+    if (k === 'p0') { if (focused) focused.click(); else moveFocus(root, 'down'); }
+    else if (k === 'p1' || k === 'p9') {
+      clearPadFocus();
+      if (hg.active && root.id === 'hangar3d') exitHangar(false);
+      else if (root.id === 'menu') { if (k === 'p9') $('start').click(); }
+      else closeOverlays();
+    } else if ((k === 'p4' || k === 'p5') && root.id === 'pause') {
+      // LB / RB : onglet précédent / suivant
+      const tabs = [...root.querySelectorAll('.tabs .tab')];
+      const i = tabs.findIndex((b) => b.classList.contains('active'));
+      tabs[(i + (k === 'p5' ? 1 : tabs.length - 1)) % tabs.length]?.click();
+    }
+    return;
+  }
+  if (!started) return;
+  if (plane.crashed && (k === 'p0' || k === 'p9')) { respawn(); return; }
+  if (k === 'p9') { openPause(); return; }
+  // tutoriel : A / ✕ passe les étapes « Continuer »
+  if (k === 'p0' && $('tuto-next') && !$('tuto').classList.contains('hidden')) $('tuto-next').click();
+  onAction((id) => isPad(id, k));
+}
+let padLook = false;
+function updateGamepad(dt) {
+  gp.poll();
+  if (!pad.connected) return;
+  const root = uiRoot();
+  if (root) {
+    const d = gp.navDir(dt);
+    if (d) moveFocus(root, d);
+    if (hg.active && root.id === 'hangar3d' && (gp.axes.rx || gp.axes.ry)) hangar.drag(gp.axes.rx * dt * 400, gp.axes.ry * dt * 300);
+    return;
+  }
+  // stick droit : regarder autour de l'avion
+  const { rx, ry } = gp.axes;
+  if (rx || ry) {
+    padLook = true;
+    orbit.dragging = true;
+    orbit.yaw -= rx * dt * 2.4;
+    orbit.pitch = THREE.MathUtils.clamp(orbit.pitch - ry * dt * 1.6, -0.6, 1.2);
+  } else if (padLook) { padLook = false; orbit.dragging = false; }
+}
 
 const canvas = $('game');
 let downAt = null;
@@ -251,14 +334,17 @@ canvas.addEventListener('wheel', (e) => { if (hg.active) { hangar.zoom(e.deltaY 
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 function readInput() {
-  const on = (id) => (keysFor(id).some((k) => keys.has(k)) ? 1 : 0); // touches choisies par le joueur
-  let pitch = on('pitchUp') - on('pitchDown');
+  // touches choisies par le joueur, et boutons de manette maintenus
+  const on = (id) => (keysFor(id).some((k) => keys.has(k)) || padFor(id).some((k) => gp.held.has(k)) ? 1 : 0);
+  const A = gp.axes, c = (v) => THREE.MathUtils.clamp(v, -1, 1);
+  // stick gauche tiré vers soi = cabrer, comme un vrai manche
+  let pitch = c(on('pitchUp') - on('pitchDown') + A.ly);
   if (settings.invertPitch) pitch = -pitch;
   return {
     pitch,
-    roll: on('rollRight') - on('rollLeft'),
-    yaw: on('yawRight') - on('yawLeft'),
-    throttle: on('throttleUp') - on('throttleDown'),
+    roll: c(on('rollRight') - on('rollLeft') + A.lx),
+    yaw: c(on('yawRight') - on('yawLeft')),
+    throttle: c(on('throttleUp') - on('throttleDown') + A.rt - A.lt),
     brake: !!on('brake'),
     trim: on('trimUp') - on('trimDown'),
     refuel: !!on('refuel'),
@@ -355,10 +441,17 @@ function helpTable() {
   let html = '';
   for (const a of ACTIONS) {
     if (a.group) { html += `<tr><th colspan="2">${t(a.group)}</th></tr>`; continue; }
-    const ks = keysFor(a.id).map((k) => `<kbd>${keyName(k)}</kbd>`).join(' · ') || '—';
+    const ks = [...keysFor(a.id).map((k) => `<kbd>${keyName(k)}</kbd>`), ...padFor(a.id).map((k) => `<kbd class="pad">🎮 ${padName(k)}</kbd>`)].join(' · ') || '—';
     html += `<tr><td>${ks}</td><td>${t(a.label)}</td></tr>`;
   }
-  return html + `<tr><td><kbd>${t('Échap')}</kbd></td><td>${t('Pause et paramètres')}</td></tr><tr><td>${t('molette · clic-glisser')}</td><td>${t('Zoom · tourner autour de l\'avion')}</td></tr>`;
+  return html + `<tr><td><kbd>${t('Échap')}</kbd></td><td>${t('Pause et paramètres')}</td></tr><tr><td>${t('molette · clic-glisser')}</td><td>${t('Zoom · tourner autour de l\'avion')}</td></tr>`
+    + `<tr><th colspan="2">${t('Manette')}</th></tr>`
+    + `<tr><td>🎮 ${t('stick gauche')}</td><td>${t('Manche : tirer pour monter, incliner pour tourner')}</td></tr>`
+    + `<tr><td>🎮 ${padName('p7')} · ${padName('p6')}</td><td>${t('Plus de gaz · moins de gaz')}</td></tr>`
+    + `<tr><td>🎮 ${t('stick droit')}</td><td>${t('Regarder autour de l\'avion')}</td></tr>`
+    + `<tr><td>🎮 ${padName('p9')}</td><td>${t('Pause et paramètres')}</td></tr>`
+    + `<tr><td>🎮 ${padName('p8')} ${t('maintenu')}</td><td>${t('Deuxième série de boutons (voir ci-dessus)')}</td></tr>`
+    + `<tr><td>🎮 ${t('menus')}</td><td>${t('Stick ou croix pour choisir, {a} pour valider, {b} pour revenir, {lb} / {rb} pour changer d\'onglet', { a: padName('p0'), b: padName('p1'), lb: padName('p4'), rb: padName('p5') })}</td></tr>`;
 }
 // disposition AZERTY / QWERTY : touches par défaut des lettres de pilotage
 for (const b of document.querySelectorAll('[data-layout]')) {
@@ -375,14 +468,19 @@ function renderKeys() {
     const row = document.createElement('div');
     row.className = 'keyrow';
     const chips = keysFor(a.id).map((k) => `<button class="keychip" data-k="${encodeURIComponent(k)}" title="${t('Retirer cette touche')}">${keyName(k)} <i>×</i></button>`).join('');
-    const wait = capturing === a.id;
-    row.innerHTML = `<span>${t(a.label)}</span><div>${chips}<button class="keyadd${wait ? ' wait' : ''}">${wait ? t('Appuie sur une touche… (Échap : annuler)') : t('+ Ajouter')}</button></div>`;
-    for (const c of row.querySelectorAll('.keychip')) c.onclick = () => { unbindKey(a.id, decodeURIComponent(c.dataset.k)); renderKeys(); };
-    row.querySelector('.keyadd').onclick = (e) => { e.currentTarget.blur(); capturing = capturing === a.id ? null : a.id; renderKeys(); };
+    const wait = capturing === a.id, waitPad = capturingPad === a.id;
+    const padChips = padFor(a.id).map((k) => `<button class="keychip padchip" data-p="${k}" title="${t('Retirer ce bouton')}">🎮 ${padName(k)} <i>×</i></button>`).join('');
+    row.innerHTML = `<span>${t(a.label)}</span><div>${chips}<button class="keyadd${wait ? ' wait' : ''}">${wait ? t('Appuie sur une touche… (Échap : annuler)') : t('+ Ajouter')}</button>`
+      + `${padChips}<button class="keyadd padadd${waitPad ? ' wait' : ''}">${waitPad ? t('Appuie sur un bouton de la manette…') : t('+ 🎮')}</button></div>`;
+    for (const c of row.querySelectorAll('.keychip:not(.padchip)')) c.onclick = () => { unbindKey(a.id, decodeURIComponent(c.dataset.k)); renderKeys(); };
+    for (const c of row.querySelectorAll('.padchip')) c.onclick = () => { unbindPad(a.id, c.dataset.p); renderKeys(); };
+    row.querySelector('.keyadd:not(.padadd)').onclick = (e) => { e.currentTarget.blur(); capturing = capturing === a.id ? null : a.id; capturingPad = null; renderKeys(); };
+    // choisi à la manette, on attend que le bouton A soit relâché avant d'écouter le suivant
+    row.querySelector('.padadd').onclick = (e) => { e.currentTarget.blur(); const id = capturingPad === a.id ? null : a.id; capturing = null; capturingPad = null; renderKeys(); setTimeout(() => { capturingPad = id; renderKeys(); }, 250); };
     box.appendChild(row);
   }
 }
-$('keys-reset').onclick = () => { resetKeys(); capturing = null; renderKeys(); toast(t('Touches par défaut rétablies')); };
+$('keys-reset').onclick = () => { resetKeys(); resetPad(); capturing = null; capturingPad = null; renderKeys(); toast(t('Touches par défaut rétablies')); };
 renderKeys();
 document.querySelector('#help .close-help').onclick = () => $('help').classList.add('hidden');
 $('open-help').onclick = () => $('help').classList.remove('hidden');
@@ -1205,8 +1303,8 @@ function shakeAmount() {
 
 function handleFxEvents(events) {
   for (const e of events) {
-    if (e.type === 'touchdown') { rig.kick(0.25 + e.strength * 0.5); sound?.touchdown(e.strength); }
-    if (e.type === 'crash') { rig.kick(1.5); sound?.crash(); }
+    if (e.type === 'touchdown') { rig.kick(0.25 + e.strength * 0.5); sound?.touchdown(e.strength); gp.rumble(0.2 + e.strength * 0.6, 160); quests?.onTouchdown(e.vs); }
+    if (e.type === 'crash') { rig.kick(1.5); sound?.crash(); gp.rumble(1, 600); }
     if (e.type === 'thunder') sound?.thunder(e.delay, e.strength);
   }
 }
@@ -1216,6 +1314,7 @@ function frame(now) {
   const realDt = Math.min(0.05, rawDt);
   last = now;
   const wallT = Date.now() / 1000; // horloge commune : bateaux et montgolfières identiques pour tous
+  updateGamepad(realDt);
 
   // hangar : le monde est déchargé, on n'affiche que la scène du hangar
   if (hg.active) {
@@ -1425,7 +1524,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status(t('Prêt !'), 100);
   $('start').disabled = false;
   requestAnimationFrame(frame);
-  setTimeout(() => { $('loader').classList.add('done'); if (!started) { $('menu').classList.remove('hidden'); $('pilot-name').focus(); } }, 350);
+  setTimeout(() => { $('loader').classList.add('done'); if (!started && !$('start').disabled) { $('menu').classList.remove('hidden'); $('pilot-name').focus(); } }, 350);
   setTimeout(() => $('loader').remove(), 1400);
 })();
 

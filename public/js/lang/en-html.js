@@ -90,4 +90,6 @@ export default {
   "Avion précédent": "Previous plane",
   "Avion suivant": "Next plane",
   "Chargement": "Loading",
+  // manette et note de fin de mission
+  "🎮 Manette Xbox ou PlayStation : clique sur « + 🎮 » puis appuie sur le bouton voulu. Maintenir Vue (Xbox) ou Create (PlayStation) donne une deuxième série de boutons. Le stick gauche pilote, les gâchettes règlent les gaz et le stick droit tourne la caméra.": "🎮 Xbox or PlayStation controller: click “+ 🎮”, then press the button you want. Holding View (Xbox) or Create (PlayStation) gives a second set of buttons. The left stick flies, the triggers set the throttle and the right stick turns the camera.",
 };

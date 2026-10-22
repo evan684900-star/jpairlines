@@ -115,5 +115,56 @@ const NAMES = {
   arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', pageup: 'Page ↑', pagedown: 'Page ↓', home: 'Début', end: 'Fin', insert: 'Inser', delete: 'Suppr',
 };
 export const keyName = (k) => (NAMES[k] && t(NAMES[k])) || (k.length === 1 ? k.toUpperCase() : k.charAt(0).toUpperCase() + k.slice(1));
-// première touche d'une action, en <kbd> (pour les messages à l'écran)
-export const kbd = (id) => `<kbd>${keysFor(id).length ? keyName(keysFor(id)[0]) : '—'}</kbd>`;
+// première touche d'une action, en <kbd> (pour les messages à l'écran) : bouton de manette si le joueur s'en sert
+export const kbd = (id) => {
+  if (pad.active && padFor(id).length) return `<kbd class="pad">${padName(padFor(id)[0])}</kbd>`;
+  return `<kbd>${keysFor(id).length ? keyName(keysFor(id)[0]) : '—'}</kbd>`;
+};
+
+// ----- Manette (Xbox, PlayStation et toute manette « standard ») -----
+// Boutons notés 'p0'…'p16' (numéros de la disposition standard des navigateurs). Maintenir Vue / Share (p8) donne
+// une deuxième série d'actions : 'p8+0' = Vue + A. Les sticks et gâchettes ne se changent pas (voir gamepad.js).
+const PAD_KEY = 'jpairlines-pad';
+export const PAD_DEFAULTS = {
+  brake: ['p0'], gear: ['p1'], engine: ['p2'], camera: ['p3'], yawLeft: ['p4'], yawRight: ['p5'],
+  flapsUp: ['p12'], flapsDown: ['p13'], trimDown: ['p14'], trimUp: ['p15'], parking: ['p10'], smoke: ['p11'],
+  map: ['p8'], board: ['p8+0'], respawn: ['p8+1'], refuel: ['p8+2'], journal: ['p8+3'], lights: ['p8+4'], drop: ['p8+5'],
+  hud: ['p8+12'], help: ['p8+13'],
+};
+// état partagé : manette branchée, dernière entrée venant de la manette, style des noms de boutons
+export const pad = { connected: false, active: false, style: 'xbox' };
+let padBinds = {};
+function loadPad() {
+  padBinds = Object.fromEntries(LIST.map((a) => [a.id, [...(PAD_DEFAULTS[a.id] || [])]]));
+  try {
+    const saved = JSON.parse(localStorage.getItem(PAD_KEY)) || {};
+    for (const a of LIST) if (Array.isArray(saved[a.id])) padBinds[a.id] = saved[a.id].filter((k) => typeof k === 'string' && /^p\d+(\+\d+)?$/.test(k)).slice(0, 3);
+  } catch { /* pas de sauvegarde */ }
+}
+loadPad();
+const storePad = () => { try { localStorage.setItem(PAD_KEY, JSON.stringify(padBinds)); } catch { /* stockage indisponible */ } };
+export const padFor = (id) => padBinds[id] || [];
+export const isPad = (id, k) => padFor(id).includes(k);
+export function bindPad(id, k) {
+  const taken = [];
+  for (const a of LIST) {
+    if (a.id !== id && padBinds[a.id].includes(k)) { padBinds[a.id] = padBinds[a.id].filter((x) => x !== k); taken.push(t(a.label)); }
+  }
+  if (!padBinds[id].includes(k)) padBinds[id] = [...padBinds[id], k].slice(-3);
+  storePad();
+  return taken;
+}
+export function unbindPad(id, k) { padBinds[id] = padBinds[id].filter((x) => x !== k); storePad(); }
+export function resetPad() { try { localStorage.removeItem(PAD_KEY); } catch { /* stockage indisponible */ } loadPad(); }
+const PAD_NAMES = {
+  xbox: ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Vue', 'Menu', 'L🕹', 'R🕹', '✚↑', '✚↓', '✚←', '✚→', 'Xbox'],
+  ps: ['✕', '○', '□', '△', 'L1', 'R1', 'L2', 'R2', 'Create', 'Options', 'L3', 'R3', '✚↑', '✚↓', '✚←', '✚→', 'PS'],
+};
+// nom d'un bouton selon la manette branchée (« Vue + A », « Create + ✕ »)
+export function padName(k) {
+  const names = PAD_NAMES[pad.style] || PAD_NAMES.xbox;
+  const one = (n) => { const i = Number(n); return t(names[i] ?? `B${i}`); };
+  const m = /^p(\d+)(?:\+(\d+))?$/.exec(k);
+  if (!m) return k;
+  return m[2] !== undefined ? `${one(m[1])} + ${one(m[2])}` : one(m[1]);
+}

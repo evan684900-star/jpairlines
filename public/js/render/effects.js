@@ -249,7 +249,7 @@ export class Effects {
     // toucher des roues : vitesse verticale juste avant le contact
     if (!this.wasOnGround && plane.onGround && !plane.crashed) {
       const vs = -this.lastVy;
-      this.events.push({ type: 'touchdown', strength: Math.min(1.5, vs / 3) });
+      this.events.push({ type: 'touchdown', strength: Math.min(1.5, vs / 3), vs });
       if (cfg.particles) for (const w of u.wheels.slice(0, 2)) {
         this.world(mesh, w, _v);
         for (let i = 0; i < 6 * dens; i++) this.smoke.emit(_v, _w.set((Math.random() - 0.5) * 2, Math.random() * 1.5, (Math.random() - 0.5) * 2).addScaledVector(plane.velocity, 0.2), { life: 2.2, size: 1.2, grow: 3, color: new THREE.Color(0.85, 0.85, 0.85), alpha: 0.45 + vs * 0.1, drag: 1.5 });

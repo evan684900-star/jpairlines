@@ -17,6 +17,36 @@ const $ = (id) => document.getElementById(id);
 const ground = (x, z) => Math.max(0, terrainHeight(x, z));
 // mission chronométrée avec classement en ligne
 export const isRanked = (q) => !q.job && !!(q.ranked || q.timeLimit || q.bonusTime);
+
+// ---------- Note de fin de mission ----------
+// Quatre critères notés sur 100 : atterrissage (vitesse verticale au toucher), pilotage (décrochage, survitesse,
+// facteur de charge), temps (seulement si la mission a un temps de référence) et avion intact.
+export const GRADES = [['S', 92, 0.2], ['A', 80, 0.1], ['B', 65, 0.05], ['C', 50, 0], ['D', 0, 0]]; // lettre, score mini, bonus
+const GRADE_ORDER = GRADES.map(([g]) => g);
+export const betterGrade = (a, b) => (!a ? b : !b ? a : GRADE_ORDER.indexOf(a) <= GRADE_ORDER.indexOf(b) ? a : b);
+const clamp100 = (v) => Math.max(0, Math.min(100, Math.round(v)));
+export function gradeMission(A, q) {
+  const crit = [];
+  if (A.landings.length) {
+    const vs = Math.max(...A.landings);
+    const sc = vs < 0.8 ? 100 : vs < 1.5 ? 100 - (vs - 0.8) * 20 : vs < 2.5 ? 86 - (vs - 1.5) * 25 : vs < 4 ? 61 - (vs - 2.5) * 25 : 20;
+    const word = vs < 0.8 ? 'Kiss landing !' : vs < 1.5 ? 'Atterrissage doux' : vs < 2.5 ? 'Atterrissage correct' : vs < 4 ? 'Atterrissage dur' : 'Atterrissage très dur';
+    crit.push({ name: 'Atterrissage', score: clamp100(sc), weight: 35, detail: t('{word} ({vs} m/s)', { word: t(word), vs: vs.toFixed(1) }) });
+  }
+  const pen = A.stall * 6 + A.over * 4 + Math.max(0, A.maxG - 4) * 12;
+  const notes = [A.stall > 0.5 ? t('décrochage {s} s', { s: Math.round(A.stall) }) : '', A.over > 0.5 ? t('survitesse {s} s', { s: Math.round(A.over) }) : '', A.maxG > 4 ? t('{g} g max', { g: A.maxG.toFixed(1) }) : ''].filter(Boolean);
+  crit.push({ name: 'Pilotage', score: clamp100(100 - pen), weight: 25, detail: notes.join(' · ') || t('Vol propre') });
+  const ref = q.bonusTime || (q.timeLimit ? q.timeLimit * 0.7 : 0);
+  if (ref) {
+    const r = A.elapsed / ref;
+    crit.push({ name: 'Temps', score: clamp100(r <= 1 ? 100 : 100 - (r - 1) * 120), weight: 25, detail: `${fmtChrono(A.elapsed)} / ${fmtChrono(ref)}` });
+  }
+  const intact = A.crashes ? 0 : A.damage ? 50 : 100;
+  crit.push({ name: 'Avion intact', score: intact, weight: 15, detail: A.crashes ? t('{n} crash', { n: A.crashes }) : A.damage ? t('Avion endommagé') : t('Aucun dégât') });
+  const total = crit.reduce((n, c) => n + c.score * c.weight, 0) / crit.reduce((n, c) => n + c.weight, 0);
+  const [grade, , bonus] = GRADES.find(([, min]) => total >= min);
+  return { score: Math.round(total), grade, bonus, crit };
+}
 export const fmtChrono = (s) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`;
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const fmtDist = (d) => (d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`);
@@ -310,13 +340,15 @@ export class QuestSystem {
       const extra = [q.timeLimit ? `⏱ ${fmtTime(q.timeLimit)}` : '', q.bonusTime ? t('bonus +{reward} ₣ en moins de {time}', { reward: q.bonusReward, time: fmtTime(q.bonusTime) }) : ''].filter(Boolean).join(' · ');
       const ranked = isRanked(q);
       const best = s.bestTimes?.[q.id];
+      const grade = s.grades?.[q.id];
       const btn = done && ranked && !active ? `<span class="btns"><button data-accept="${esc(q.id)}" class="secondary">⏱ ${t('Rejouer')}</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
+        : done && !q.job && !active ? `<span class="btns"><button data-accept="${esc(q.id)}" class="secondary">↻ ${t('Rejouer')}</button></span>`
         : done ? `<span class="tag done">✅ ${t('Terminée')}</span>`
         : ranked && !lock && !active ? `<span class="btns"><button data-accept="${esc(q.id)}">${t('Accepter')}</button><button data-top="${esc(q.id)}" class="secondary">🏆</button></span>`
         : active ? `<span class="tag">▶ ${t('En cours')}</span>`
           : lock ? `<span class="tag lock">🔒 ${esc(lock)}</span>`
             : `<button data-accept="${esc(q.id)}">${t('Accepter')}</button>`;
-      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(t(q.title))}</b> <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
+      return `<li class="${done ? 'done' : ''}"><div><b>${q.job ? '' : `${CAT_ICON[q.category] || ''} `}${esc(t(q.title))}</b>${grade ? ` <span class="g-badge g-${grade}" title="${t('Meilleure note')}">${grade}</span>` : ''} <span class="r">${q.reward} ₣</span>${unlockTag(q)}<br>
         <small>${esc(t(q.desc))}</small>${stagesLine(q)}${ranked ? `<br><small class="extra">⏱ ${t('Classée')}${best ? ` · ${t('ton record : {time}', { time: fmtChrono(best) })}` : ''}</small>` : ''}${extra ? `<br><small class="extra">${esc(extra)}</small>` : ''}</div>${btn}</li>`;
     };
     const qs = [...quests].sort((a, b) => this.isDone(a) - this.isDone(b) || a.reward - b.reward);
@@ -347,7 +379,8 @@ export class QuestSystem {
   start(q) {
     this.abandon(true);
     // needAirborne : il faut décoller avant qu'un atterrissage compte (anti-téléportation)
-    this.active = { q, step: 0, elapsed: 0, timer: 0, touched: false, objects: [], moving: null, needAirborne: this.plane.onGround, replay: this.isDone(q) };
+    this.active = { q, step: 0, elapsed: 0, timer: 0, touched: false, objects: [], moving: null, needAirborne: this.plane.onGround, replay: this.isDone(q),
+      landings: [], stall: 0, over: 0, maxG: 1, crashes: 0, damage: false }; // de quoi noter la mission à la fin
     this.refreshClusters();
     this.showStep();
     this.toast(t('Nouvelle quête : {title}', { title: t(q.title) }));
@@ -476,8 +509,14 @@ export class QuestSystem {
     const q = A.q;
     const s = this.ensureSave();
     const bonus = q.bonusTime && A.elapsed <= q.bonusTime ? q.bonusReward : 0;
-    // une quête rejouée pour le chrono rapporte 10 % de la récompense
-    const gain = A.replay ? Math.round(q.reward * 0.1) : q.reward + bonus;
+    // une quête rejouée (chrono, meilleure note) rapporte 10 % de la récompense ; une bonne note ajoute un bonus
+    const base = A.replay ? Math.round(q.reward * 0.1) : q.reward + bonus;
+    const note = gradeMission(A, q);
+    const noteBonus = Math.round((base * note.bonus) / 10) * 10;
+    const gain = base + noteBonus;
+    s.grades ||= {};
+    const prevGrade = s.grades[q.id];
+    s.grades[q.id] = betterGrade(prevGrade, note.grade);
     const before = this.rankIndex();
     s.money += gain;
     s.xp += gain;
@@ -485,12 +524,34 @@ export class QuestSystem {
     else if (!s.completed.includes(q.id)) s.completed.push(q.id);
     this.persist();
     this.abandon(true);
-    this.onQuestDone?.(q, { time: A.elapsed, replay: A.replay });
+    this.onQuestDone?.(q, { time: A.elapsed, replay: A.replay, grade: note.grade });
+    this.showGrade(q, note, { gain, noteBonus, best: prevGrade, record: prevGrade !== s.grades[q.id] && !!prevGrade });
     this.toast(`✅ ${t('{title} terminée ! +{gain} ₣', { title: t(q.title), gain })}${bonus ? ` ${t('(dont bonus chrono {bonus} ₣)', { bonus })}` : ''}`);
     this.beep(880, 0.25);
     const after = this.rankIndex();
     if (after > before) setTimeout(() => this.toast(`🎖 ${t('Nouveau rang : {rank} !', { rank: t(RANKS[after].name) })}`), 3000);
   }
+
+  // carte de résultat (quelques secondes, ne met pas le jeu en pause)
+  showGrade(q, note, { gain, noteBonus, best, record }) {
+    let el = $('grade');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'grade';
+      el.className = 'glass';
+      document.body.append(el);
+      el.onclick = () => el.classList.add('hidden');
+    }
+    const rows = note.crit.map((c) => `<div class="g-row"><span>${esc(t(c.name))}</span><div class="bar"><div style="width:${c.score}%"></div></div><b>${c.score}</b><small>${esc(c.detail)}</small></div>`).join('');
+    el.innerHTML = `<div class="g-head"><div class="g-letter g-${note.grade}">${note.grade}</div><div><small>${t('Mission terminée')}</small><b>${esc(t(q.title))}</b>`
+      + `<span>${t('Score {n}/100', { n: note.score })}${record ? ` · 🎉 ${t('Nouvelle meilleure note !')}` : best ? ` · ${t('Meilleure note : {g}', { g: best })}` : ''}</span></div></div>`
+      + rows + `<div class="g-gain">+${gain} ₣${noteBonus ? ` <small>${t('(dont bonus note {n} ₣)', { n: noteBonus })}</small>` : ''}</div>`;
+    el.classList.remove('hidden');
+    clearTimeout(this.gradeTimer);
+    this.gradeTimer = setTimeout(() => el.classList.add('hidden'), 9000);
+  }
+  // appelés par le jeu pendant le vol
+  onTouchdown(vs) { if (this.active && !this.active.needAirborne) this.active.landings.push(vs); }
 
   requestDrop() {
     if (!this.active) return;
@@ -514,6 +575,12 @@ export class QuestSystem {
     const agl = pos.y - ground(pos.x, pos.z);
     const airborne = !plane.onGround && !plane.crashed;
     if (airborne && agl > 15) A.needAirborne = false;
+    if (airborne) {
+      if (plane.stallWarning) A.stall += dt;
+      if (plane.ias > plane.S.vne * 0.95) A.over += dt;
+      A.maxG = Math.max(A.maxG, Math.abs(plane.gLoad || 1));
+    }
+    if (plane.gearBroken) A.damage = true;
     const p = this.stepPoint(st, wallT);
     if (A.moving && p) A.moving.position.set(p.x, p.y + 2000, p.z);
     const hd = p ? Math.hypot(pos.x - p.x, pos.z - p.z) : 0;
@@ -662,6 +729,7 @@ export class QuestSystem {
   }
 
   onCrash() {
+    if (this.active) this.active.crashes++;
     if (this.active?.q.timeLimit) this.fail('crash pendant une mission chronométrée');
   }
   // réapparition : après un crash la quête continue (il faudra redécoller) ;
@@ -712,7 +780,8 @@ export class QuestSystem {
         const isDone = this.isDone(q), lock = this.lockReason(q), act = this.active?.q.id === q.id;
         const icon = isDone ? '✅' : act ? '▶' : lock ? '🔒' : '❗';
         const where = q.airport ? airportById(q.airport).name : this.placeName(q.giver.x, q.giver.z);
-        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(t(q.title))}</b> <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
+        const grade = this.ensureSave().grades?.[q.id];
+        html += `<li class="${isDone ? 'done' : act ? 'active' : ''}"><span class="r">${q.reward} ₣</span><b>${icon} ${esc(t(q.title))}</b>${grade ? ` <span class="g-badge g-${grade}">${grade}</span>` : ''} <small>· ${esc(where)}</small>${unlockTag(q)}<br>`
           + `<small>${esc(lock && !isDone ? lock : t(q.desc))}</small>${isDone ? '' : stagesLine(q)}</li>`;
       }
       html += '</ul>';

@@ -73,6 +73,27 @@ elle est fusionnée avec celle du navigateur (aucune quête réussie n'est perdu
 | `Échap` | Pause : paramètres, voyage vers un aéroport connu, aide |
 | `H` | Aide |
 
+### Manette Xbox / PlayStation
+
+Branche la manette (USB ou Bluetooth) puis appuie sur un bouton : le jeu la détecte et les messages affichent ses boutons.
+
+| Manette (Xbox · PlayStation) | Action |
+|---|---|
+| Stick gauche | Manche : tirer pour monter, incliner pour tourner |
+| RT · LT (R2 · L2) | Plus / moins de gaz (analogique) |
+| Stick droit | Regarder autour de l'avion |
+| LB · RB (L1 · R1) | Palonnier gauche / droit |
+| A (✕) | Freins (maintenir) · « Continuer » dans le tutoriel · repartir après un crash |
+| B (○) · X (□) · Y (△) | Train · moteur · caméra |
+| Croix ↑ ↓ · ← → | Volets rentrer / sortir · trim |
+| L3 · R3 | Frein de parking · fumigène |
+| Menu (Options) | Pause |
+| Vue (Create) | Grande carte ; **maintenue** + A missions, + B réapparaître, + X plein, + Y journal, + LB feux, + RB largage, + ↑ HUD, + ↓ aide |
+
+Dans les menus (pause, hangar, carte, tableau des missions) : stick ou croix pour choisir, A (✕) pour valider,
+B (○) pour revenir, LB / RB pour changer d'onglet. Tous les boutons sont modifiables dans Pause → Touches (« + 🎮 »).
+Vibrations au toucher des roues et en cas de crash (si la manette et le navigateur le permettent).
+
 **Décollage :** `E` (moteur), `P` (desserrer le frein), volets 10°, plein gaz, garder l'axe au palonnier ; vers 100 km/h tirer doucement pour lever la roue avant (≈ 285 m de roulage), monter vers 130 km/h, puis rentrer le train et les volets.
 **Atterrissage :** train sorti sous 210 km/h, volets sous 165 km/h, approche vers 120 km/h en descendant de 3 à 4 m/s, ailes à plat ; arrondi juste au-dessus de la piste pour toucher à moins de 4 m/s (3 m/s en réaliste), puis freiner.
 
@@ -182,6 +203,10 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
   altitude, vitesse, rase-mottes, palier, vol sur le dos, escorte de bateau ou de montgolfière ; chronos avec bonus ;
   objets de mission (radeau, randonneur, caisse…).
 - **Missions de transport du jour** : 3 par aéroport, renouvelées chaque jour, identiques pour tous les joueurs.
+- **Note de fin de mission** (S, A, B, C, D) : atterrissage (vitesse verticale au toucher), pilotage (décrochage,
+  survitesse, facteur de charge), temps (missions avec un temps de référence) et avion intact. Bonus de 5 à 20 % de la
+  récompense pour B, A et S ; la meilleure note est gardée et affichée au tableau et au journal. Toute quête terminée
+  peut être rejouée (↻ Rejouer, 10 % de la récompense) pour améliorer sa note.
 - **Rangs de pilote** (Élève pilote → As du ciel) selon l'expérience gagnée ; certaines quêtes demandent un rang minimum.
 
 ## Contenu
