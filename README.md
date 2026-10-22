@@ -198,10 +198,12 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 
 ### Cinématique de début de partie
 
-Après « Décoller », une courte cinématique (environ 10 s, bandes noires) montre le pilote qui marche vers l'avion
-pendant que la caméra tourne autour de lui. Il ouvre la porte, monte à bord, la porte se referme et la caméra rejoint
-la vue de poursuite. Sur un avion à aile basse il monte sur l'aile ; quand la porte est haute (bimoteur, jet), un
-escabeau apparaît. Une touche, un clic ou un bouton de manette la passe ; elle se désactive dans Paramètres → Interface.
+Après « Décoller », une cinématique d'environ 15 s, filmée comme au cinéma (bandes noires, vignettage, fondu
+d'ouverture, focales réelles, coupes franches, léger bougé de caméra). Le pilote, sacoche à la main, marche vers
+l'avion : un plan large fixe, puis une caméra épaule qui le suit. Gros plan sur sa main qui ouvre la porte. Il monte
+(escabeau ou aile), se baisse, entre, pose sa sacoche et s'assoit ; il referme la porte, qui claque. La caméra rejoint
+ensuite la vue de poursuite en contournant l'avion. Elle ne traverse jamais l'avion : elle se décale si une aile ou une
+nacelle cache la vue. Une touche, un clic ou un bouton de manette la passe ; elle se désactive dans Paramètres → Interface.
 
 ## Quêtes et progression
 
