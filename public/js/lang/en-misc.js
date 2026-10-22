@@ -422,4 +422,7 @@ export default {
   "Meilleure note : {g}": "Best grade: {g}",
   "(dont bonus note {n} ₣)": "(incl. {n} ₣ grade bonus)",
   "Meilleure note": "Best grade",
+  // cinématique de début de partie
+  "Cinématique au début de la partie": "Cutscene at the start of the game",
+  "Appuie sur une touche pour passer ▸": "Press any key to skip ▸",
 };

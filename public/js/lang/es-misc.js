@@ -391,4 +391,7 @@ export default {
   "Meilleure note : {g}": "Mejor nota: {g}",
   "(dont bonus note {n} ₣)": "(incl. bonus de nota {n} ₣)",
   "Meilleure note": "Mejor nota",
+  // cinématique de début de partie
+  "Cinématique au début de la partie": "Cinemática al empezar la partida",
+  "Appuie sur une touche pour passer ▸": "Pulsa cualquier tecla para saltar ▸",
 };

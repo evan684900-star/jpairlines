@@ -196,6 +196,13 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 (1 ₣ le litre ; sans argent, l'aéroport offre du carburant de secours jusqu'à 40 L). La consommation est accélérée ×4 par défaut
 (≈ 50 min plein gaz, ≈ 200 km en croisière) ; on peut la passer en réaliste ou la désactiver dans les paramètres.
 
+### Cinématique de début de partie
+
+Après « Décoller », une courte cinématique (environ 10 s, bandes noires) montre le pilote qui marche vers l'avion
+pendant que la caméra tourne autour de lui. Il ouvre la porte, monte à bord, la porte se referme et la caméra rejoint
+la vue de poursuite. Sur un avion à aile basse il monte sur l'aile ; quand la porte est haute (bimoteur, jet), un
+escabeau apparaît. Une touche, un clic ou un bouton de manette la passe ; elle se désactive dans Paramètres → Interface.
+
 ## Quêtes et progression
 
 - **Tableau des missions** dans chaque aéroport (`Entrée` à l'arrêt) et balises jaunes « ! » pour les quêtes trouvées sur le terrain.

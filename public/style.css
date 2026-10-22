@@ -404,3 +404,13 @@ kbd.pad { white-space: nowrap; }
 #grade .g-row small { grid-column: 2 / 4; color: var(--dim); }
 #grade .g-gain { margin-top: 8px; font-weight: 700; color: var(--accent); }
 .g-badge { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 4px; font-size: 0.8em; font-weight: 800; color: #111; }
+
+/* cinématique de début de partie : bandes noires et HUD caché */
+#hud.cine-hide { visibility: hidden; }
+#cine { position: fixed; inset: 0; z-index: 25; pointer-events: none; }
+#cine::before, #cine::after { content: ''; position: absolute; left: 0; right: 0; height: 11vh; background: #000; animation: cine-in 0.6s ease both; }
+#cine::before { top: 0; transform-origin: top; }
+#cine::after { bottom: 0; transform-origin: bottom; }
+#cine span { position: absolute; right: 18px; bottom: calc(11vh + 10px); color: #fff; opacity: 0.75; font-size: 13px; text-shadow: 0 1px 3px #000; z-index: 1; }
+#cine.hidden { display: none; }
+@keyframes cine-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }

@@ -24,6 +24,7 @@ import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './acc
 import { Hangar } from './hangar.js';
 import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
+import { Intro } from './intro.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
 import { stickerThumb } from './stickers.js';
@@ -267,6 +268,7 @@ function padPress(k) {
     return;
   }
   if (chat.open) return;
+  if (intro.active) { if (intro.t > 0.4) intro.finish(); return; } // un bouton passe la cinématique
   const root = uiRoot();
   if (root) {
     const focused = root.contains(document.activeElement) && document.activeElement !== document.body ? document.activeElement : null;
@@ -1324,7 +1326,16 @@ function frame(now) {
     return;
   }
 
-  if (started) {
+  if (started && intro.active) {
+    // cinématique de début de partie : l'avion attend, moteur arrêté
+    planeMesh.position.copy(plane.pos);
+    planeMesh.quaternion.copy(plane.quat);
+    if (planeMesh.userData.cabin) planeMesh.userData.cabin.visible = true;
+    animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: 0, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
+    intro.update(realDt);
+    inCockpit = false;
+    netTick(now);
+  } else if (started) {
     if (!paused && !plane.crashed) {
       const steps = Number(settings.timeScale) || 1;
       for (let i = 0; i < steps && !plane.crashed; i++) simulate(realDt);
@@ -1542,11 +1553,20 @@ $('start').onclick = () => {
     respawn();
     started = true;
     connect();
-    // premier vol : tutoriel guidé avec flèches (sinon simple rappel)
-    if (!save.tutorialDone && !save.completed.length) tutorial.start();
-    else toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
+    const welcome = () => {
+      // premier vol : tutoriel guidé avec flèches (sinon simple rappel)
+      if (!save.tutorialDone && !save.completed.length) tutorial.start();
+      else toast(t('Bienvenue ! {engine} pour démarrer le moteur, {help} pour l\'aide.', { engine: keyName(keysFor('engine')[0] || 'e'), help: keyName(keysFor('help')[0] || 'h') }));
+    };
+    if (settings.showIntro === false) { welcome(); return; }
+    // cinématique : le pilote rejoint l'avion, puis l'affichage revient
+    $('hud').classList.add('cine-hide');
+    planeMesh.position.copy(plane.pos);
+    planeMesh.quaternion.copy(plane.quat);
+    intro.start(plane, planeMesh, () => { $('hud').classList.remove('cine-hide'); welcome(); });
   }, 0));
 };
+const intro = new Intro({ scene, camera, rig, ground: (x, z) => Math.max(0, groundHeight(x, z)) });
 const tutorial = new Tutorial({
   plane,
   agl: () => plane.pos.y - Math.max(0, groundHeight(plane.pos.x, plane.pos.z)) - plane.S.gear,
@@ -1557,4 +1577,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial };
+window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro };

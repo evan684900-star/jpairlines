@@ -946,13 +946,13 @@ function mountGlb(g, src, k) {
   for (const { b } of plates) {
     const sx = 1;
     const p = b.getCenter(new THREE.Vector3());
-    k.decals.push(...projectDecal(g, targets, p, new THREE.Vector3(Math.sign(p.x) || sx, 0, 0), b.max.z - b.min.z, (b.max.z - b.min.z) / 4, 0, k.regTex, Math.sign(p.x) < 0));
+    k.decals.push(...projectDecal(g, targets, p, new THREE.Vector3(Math.sign(p.x) || sx, 0, 0), b.max.z - b.min.z, (b.max.z - b.min.z) / 4, 0, k.regTex));
   }
   if (k.emblemTex) {
     const fin = find('Derive');
     if (fin) {
       const b = box(fin), p = b.getCenter(new THREE.Vector3()), sz = Math.min(b.max.y - b.min.y, b.max.z - b.min.z) * 0.55;
-      for (const sx of [-1, 1]) k.decals.push(...projectDecal(g, targets, new THREE.Vector3(sx * 0.06, p.y, p.z + 0.2), new THREE.Vector3(sx, 0, 0), sz, sz, 0, k.emblemTex, sx < 0));
+      for (const sx of [-1, 1]) k.decals.push(...projectDecal(g, targets, new THREE.Vector3(sx * 0.06, p.y, p.z + 0.2), new THREE.Vector3(sx, 0, 0), sz, sz, 0, k.emblemTex));
     }
   }
   return out;

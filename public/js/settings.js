@@ -37,6 +37,7 @@ export const SCHEMA = [
   { key: 'showInstruments', label: 'Instruments de vol (horizon, vitesse, altitude)', type: 'check', def: true },
   { key: 'showSystems', label: 'Voyants (moteur, train, volets…)', type: 'check', def: true },
   { key: 'showToolbar', label: 'Barre de boutons', type: 'check', def: true },
+  { key: 'showIntro', label: 'Cinématique au début de la partie', type: 'check', def: true },
   { key: 'units', label: 'Unités', type: 'select', def: 'metric', options: [['metric', 'km/h · m'], ['aviation', 'nœuds · pieds']] },
   { key: 'showNames', label: 'Noms des joueurs', type: 'check', def: true },
   { key: 'minimap', label: 'Mini-carte', type: 'check', def: true },
