@@ -5,6 +5,7 @@
 // Une touche, un clic ou un bouton de manette la passe.
 import * as THREE from 'three';
 import { t as tr } from './i18n.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 const clamp01 = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x);
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -113,6 +114,88 @@ function buildPilot() {
   return g;
 }
 
+// ----- Pilote 3D (models/pilote.glb, squelette Mixamo) piloté par le squelette simplifié ci-dessus -----
+// Le squelette simplifié (invisible) garde toute l'animation : marche, main sur la poignée, accroupi, assis. À chaque
+// image, chaque os du modèle est orienté comme le segment correspondant (cuisse, tibia, bras…), en partant de sa pose
+// de repos : les proportions du modèle sont gardées et rien ne se déforme. Bassin, dos, cou et tête copient
+// l'orientation de leur articulation (avec le décalage mesuré au repos).
+const DIRS = [ // os, articulation de départ, articulation d'arrivée (ou direction locale)
+  ['LeftUpLeg', (U) => U.legs[1].hip, (U) => U.legs[1].knee], ['LeftLeg', (U) => U.legs[1].knee, (U) => U.legs[1].ankle],
+  ['RightUpLeg', (U) => U.legs[0].hip, (U) => U.legs[0].knee], ['RightLeg', (U) => U.legs[0].knee, (U) => U.legs[0].ankle],
+  ['LeftFoot', (U) => U.legs[1].ankle, [0, -0.02, 1]], ['RightFoot', (U) => U.legs[0].ankle, [0, -0.02, 1]],
+  ['LeftArm', (U) => U.arms[1].sh, (U) => U.arms[1].el], ['LeftForeArm', (U) => U.arms[1].el, (U) => U.arms[1].hand],
+  ['RightArm', (U) => U.arms[0].sh, (U) => U.arms[0].el], ['RightForeArm', (U) => U.arms[0].el, (U) => U.arms[0].hand],
+  ['LeftHand', (U) => U.arms[1].hand, [0, -1, 0]], ['RightHand', (U) => U.arms[0].hand, [0, -1, 0]],
+];
+const COPY = [['Hips', 'pelvis'], ['Spine', 'spine'], ['Spine2', 'chest'], ['Neck', 'neck'], ['Head', 'head']];
+const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _ax = new THREE.Vector3(), _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
+
+class PilotSkin {
+  // proxy : groupe du squelette simplifié (au repos) ; gltf : modèle chargé
+  constructor(proxy, gltf) {
+    const root = gltf.scene;
+    this.root = root;
+    this.bones = {};
+    root.traverse((o) => {
+      if (o.isBone) this.bones[o.name.replace(/^mixamorig:?/, '')] = o; // GLTFLoader retire le « : » des noms
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; }
+    });
+    proxy.add(root);
+    proxy.updateMatrixWorld(true);
+    const U = proxy.userData;
+    this.rest = {};
+    for (const [k, b] of Object.entries(this.bones)) this.rest[k] = b.quaternion.clone();
+    this.hipsRest = this.bones.Hips.position.clone();
+    this.pelvisRest = U.pelvis.position.clone();
+    // décalage de repos entre l'articulation simplifiée et l'os (dans le repère du pilote)
+    const inv = proxy.getWorldQuaternion(new THREE.Quaternion()).invert();
+    this.offset = {};
+    for (const [bone, j] of COPY) {
+      const qj = inv.clone().multiply(U[j].getWorldQuaternion(new THREE.Quaternion()));
+      const qb = inv.clone().multiply(this.bones[bone].getWorldQuaternion(new THREE.Quaternion()));
+      this.offset[bone] = qj.invert().multiply(qb);
+    }
+    this.ratio = this.hipsRest.y / this.pelvisRest.y; // jambes du modèle un peu plus longues
+    // le modèle cache le squelette simplifié (sauf la sacoche)
+    proxy.traverse((o) => { if (o.isMesh && !U.bag.getObjectById(o.id) && !this.root.getObjectById(o.id)) o.visible = false; });
+  }
+  // orientation monde → locale (parent déjà à jour)
+  setWorld(bone, qWorld) {
+    bone.parent.getWorldQuaternion(_qa).invert();
+    bone.quaternion.copy(_qa.multiply(qWorld));
+    bone.updateMatrixWorld(true);
+  }
+  update(proxy) {
+    const U = proxy.userData, B = this.bones;
+    proxy.updateMatrixWorld(true);
+    for (const [k, q] of Object.entries(this.rest)) B[k].quaternion.copy(q);
+    // bassin : position (mise à l'échelle des jambes du modèle) et orientation
+    B.Hips.position.copy(this.hipsRest).addScaledVector(_w1.copy(U.pelvis.position).sub(this.pelvisRest), this.ratio);
+    B.Hips.position.y = this.hipsRest.y + (U.pelvis.position.y - this.pelvisRest.y) * this.ratio;
+    this.root.updateMatrixWorld(true);
+    for (const [bone, j] of COPY) {
+      this.setWorld(B[bone], U[j].getWorldQuaternion(_qb).multiply(this.offset[bone]));
+    }
+    // membres : chaque os pointe (axe +Y des os Mixamo) dans la direction du segment correspondant
+    for (const [bone, from, to] of DIRS) {
+      const b = B[bone];
+      if (!b) continue;
+      const a = from(U);
+      a.getWorldPosition(_w1);
+      if (Array.isArray(to)) _w2.set(...to).transformDirection(a.matrixWorld);
+      else to(U).getWorldPosition(_w2).sub(_w1);
+      if (_w2.lengthSq() < 1e-8) continue;
+      _w2.normalize();
+      b.getWorldQuaternion(_qc);
+      _ax.set(0, 1, 0).applyQuaternion(_qc);
+      _qb.setFromUnitVectors(_ax, _w2);
+      this.setWorld(b, _qb.multiply(_qc));
+    }
+  }
+  // position de la main gauche du modèle (la sacoche y est accrochée)
+  leftHand(out) { return this.bones.LeftHand.getWorldPosition(out); }
+}
+
 // cycle de marche (ph en cycles, amp 0 = immobile, climb 0..1 = monte des marches)
 // appui talon → pied à plat → poussée sur la pointe ; bassin qui oscille ; épaules en opposition ; tête stabilisée
 function poseGait(p, ph, amp, time, climb = 0) {
@@ -154,6 +237,10 @@ export class Intro {
     this.pilot = buildPilot();
     this.pilot.visible = false;
     ctx.scene.add(this.pilot);
+    // vrai personnage 3D : chargé en arrière-plan ; d'ici là, le pilote simplifié sert de secours
+    this.skin = null;
+    new GLTFLoader().loadAsync('models/pilote.glb').then((g) => { this.gltf = g; if (!this.active) this.mountSkin(); })
+      .catch((e) => console.warn('Pilote 3D indisponible, pilote simplifié utilisé', e));
     // vignettage + fondu d'ouverture
     this.fx = document.createElement('div');
     Object.assign(this.fx.style, { position: 'fixed', inset: '0', pointerEvents: 'none', zIndex: '5', display: 'none', background: '#000' });
@@ -201,6 +288,7 @@ export class Intro {
 
   start(plane, mesh, onDone) {
     this.stop();
+    this.mountSkin(); // modèle chargé pendant une cinématique précédente
     this.onDone = onDone;
     this.plane = plane;
     this.mesh = mesh;
@@ -352,6 +440,18 @@ export class Intro {
     };
     addEventListener('keydown', this.skip, true);
     addEventListener('pointerdown', this.skip, true);
+  }
+
+  // installe le modèle 3D : le squelette simplifié est remis au repos pour mesurer les décalages
+  mountSkin() {
+    if (this.skin || !this.gltf) return;
+    const U = this.pilot.userData;
+    this.pilot.traverse((o) => { if (!o.isMesh && o !== this.pilot) o.quaternion.identity(); });
+    U.pelvis.position.set(0, PELVIS_Y, 0);
+    const pos = this.pilot.position.clone(), q = this.pilot.quaternion.clone();
+    this.pilot.position.set(0, 0, 0); this.pilot.quaternion.identity();
+    this.skin = new PilotSkin(this.pilot, this.gltf);
+    this.pilot.position.copy(pos); this.pilot.quaternion.copy(q);
   }
 
   toWorld(v, out, onGround = true) {
@@ -554,6 +654,11 @@ export class Intro {
     }
     if (t >= T4 && !this.kicked) { this.kicked = true; this.kick = 1; }
     this.hinge.rotation.y = t >= T4 ? 0 : doorAngle;
+    if (this.skin && p.visible) {
+      this.skin.update(p);
+      // la sacoche suit la vraie main du modèle
+      if (U.bag.visible) U.bag.position.copy(U.arms[1].hand.worldToLocal(this.skin.leftHand(_w1))).add(_w2.set(0, -0.03, 0));
+    }
     if (p.visible && U.bag.visible) this.hangBag(bagSwing);
 
     // ----- caméra : quatre plans, puis fondu vers la vue de poursuite -----

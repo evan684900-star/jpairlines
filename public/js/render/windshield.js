@@ -21,6 +21,8 @@ const SIM_FS = /* glsl */`
   uniform vec4 wipe[2];   // pivot (u, v), angle précédent, angle actuel (radians, dans le plan de la vitre)
   uniform float wipeLen;  // longueur du balai (en hauteurs de vitre)
   uniform float wiping;
+  uniform vec4 deposit;   // balai qui change de sens : x = angle, y = 1 s'il dépose son eau à cet angle
+  const float B0 = 0.31, B1 = 0.93; // partie en caoutchouc du balai (fraction de la longueur du bras)
   varying vec2 vUv;
   float hash(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
 
@@ -68,21 +70,21 @@ const SIM_FS = /* glsl */`
     // séchage (rapide en vol, lent à l'arrêt ; plus vite quand il ne pleut plus)
     h = max(0.0, h - dt * (0.006 + h * 0.06 + air * 0.03 + (1.0 - rain) * 0.03));
     film = clamp(film + dt * (rain * 0.025 - 0.012 - air * 0.03), 0.0, 0.45);
-    // essuie-glaces : tout ce que le balai a parcouru depuis la dernière fois est effacé
-    if (wiping > 0.5) {
-      for (int i = 0; i < 2; i++) {
-        vec4 w = wipe[i];
-        vec2 q = (vUv - w.xy) * vec2(size, 1.0);
-        float r = length(q);
-        if (r < wipeLen && r > 0.02) {
-          float th = atan(q.y, q.x);
-          float lo = min(w.z, w.w) - 0.02, hi = max(w.z, w.w) + 0.02;
-          if (th > lo && th < hi) { h *= 0.02; film *= 0.05; }
-        } else if (r < wipeLen + 0.025 && r >= wipeLen) {
-          // un peu d'eau repoussée au bout du balai
-          float th = atan(q.y, q.x);
-          if (th > min(w.z, w.w) && th < max(w.z, w.w)) h += 0.06;
-        }
+    // essuie-glaces : seule la raclette touche la vitre (pas le bras, pas le pivot). Ce qu'elle a parcouru depuis la
+    // dernière fois est effacé ; l'eau poussée devant elle est déposée en ligne là où elle change de sens.
+    for (int i = 0; i < 2; i++) {
+      vec4 w = wipe[i];
+      vec2 q = (vUv - w.xy) * vec2(size, 1.0);
+      float r = length(q) / wipeLen;
+      if (r < B0 || r > B1) continue;
+      float th = atan(q.y, q.x);
+      float half_ = 0.006 / max(length(q), 0.05);       // demi-largeur de la raclette (angle)
+      if (wiping > 0.5 && th > min(w.z, w.w) - half_ && th < max(w.z, w.w) + half_) { h *= 0.03; film *= 0.08; }
+      if (deposit.y > 0.5) {
+        float d = abs(th - deposit.x) * length(q);           // distance à la raclette (en hauteurs de vitre)
+        float n = hash(vec3(floor(r * 60.0), float(i), frame));
+        // fin cordon irrégulier de gouttelettes, plus fourni vers le bout du balai
+        h += smoothstep(0.012, 0.0, d) * step(0.35, n) * mix(0.25, 0.55, r) * rain;
       }
     }
     // bas de la vitre : l'eau s'écoule par le joint ; en vol, le vent la chasse par le haut et par les côtés
@@ -106,7 +108,7 @@ export class WindshieldRain {
       uniforms: {
         tPrev: { value: null }, texel: { value: new THREE.Vector2(1 / W, 1 / H) },
         rain: { value: 0 }, air: { value: 0 }, frame: { value: 0 }, dt: { value: STEP }, size: { value: 1.6 },
-        wipe: { value: [new THREE.Vector4(), new THREE.Vector4()] }, wipeLen: { value: 0.8 }, wiping: { value: 0 },
+        wipe: { value: [new THREE.Vector4(), new THREE.Vector4()] }, wipeLen: { value: 0.8 }, wiping: { value: 0 }, deposit: { value: new THREE.Vector4() },
       },
     }));
     this.acc = 0;
@@ -146,8 +148,10 @@ export class WindshieldRain {
     this.size = w / h;
     this.pivots = [[0.27, 0.04], [0.68, 0.04]];
     this.len = 0.82; // en hauteurs de vitre
+    // repère direct (U, V, U×V) : l'angle des bras suit le même sens que dans la simulation. Les pièces sont posées
+    // du côté extérieur de la vitre (signe « out »).
     const N = new THREE.Vector3().crossVectors(U, V).normalize();
-    if (N.dot(C.clone().sub(mesh.userData.eye || new THREE.Vector3())) < 0) N.negate(); // vers l'extérieur
+    const out = N.dot(C.clone().sub(mesh.userData.eye || new THREE.Vector3())) < 0 ? -1 : 1;
     this.N = N;
     const armM = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.5, metalness: 0.6 });
     const rubber = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.9 });
@@ -157,10 +161,11 @@ export class WindshieldRain {
       const hub = new THREE.Group();
       const basis = new THREE.Matrix4().makeBasis(U.clone().normalize(), V.clone().normalize(), N);
       hub.quaternion.setFromRotationMatrix(basis);
-      hub.position.copy(C).addScaledVector(U, pu * 2 - 1).addScaledVector(V, pv * 2 - 1).addScaledVector(N, 0.012);
+      hub.position.copy(C).addScaledVector(U, pu * 2 - 1).addScaledVector(V, pv * 2 - 1).addScaledVector(N, 0.012 * out);
       const arm = new THREE.Group();
-      const rod = new THREE.Mesh(new THREE.BoxGeometry(L * 0.92, 0.012, 0.008).translate(L * 0.46, 0, 0.004), armM);
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(L * 0.62, 0.016, 0.014).translate(L * 0.62, 0, 0.012), rubber);
+      // bras de 0 à 92 % ; raclette (caoutchouc) de 31 à 93 %, comme dans la simulation (B0, B1)
+      const rod = new THREE.Mesh(new THREE.BoxGeometry(L * 0.92, 0.012, 0.008).translate(L * 0.46, 0, 0.016 * out), armM);
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(L * 0.62, 0.016, 0.014).translate(L * 0.62, 0, 0.004 * out), rubber);
       const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.02, 12).rotateX(Math.PI / 2), armM);
       arm.add(rod, blade, cap);
       hub.add(arm);
@@ -186,6 +191,10 @@ export class WindshieldRain {
       if (!on && this.wipePhase % (Math.PI * 2) < dt * 4.4) this.wipePhase = 0; // revenu en position garée
     }
     const a = this.parkAngle() + (2.0 - this.parkAngle()) * (0.5 - 0.5 * Math.cos(this.wipePhase));
+    // changement de sens (en haut, ou retour en bas) : la raclette lâche l'eau qu'elle poussait
+    const dir = Math.sign(a - prevA);
+    if (dir && this.lastDir && dir !== this.lastDir) this.depositAt = prevA;
+    if (dir) this.lastDir = dir;
     this.setBlades(a);
     this.sweepLo = Math.min(this.sweepLo ?? prevA, prevA, a);
     this.sweepHi = Math.max(this.sweepHi ?? prevA, prevA, a);
@@ -203,6 +212,8 @@ export class WindshieldRain {
       u.wiping.value = this.sweepHi - this.sweepLo > 1e-4 ? 1 : 0;
       this.pivots.forEach(([pu, pv], k) => u.wipe.value[k].set(pu, pv, this.sweepLo, this.sweepHi));
       this.sweepLo = this.sweepHi = a;
+      u.deposit.value.set(this.depositAt ?? 0, this.depositAt !== undefined && this.depositAt !== null ? 1 : 0, 0, 0);
+      this.depositAt = null;
       u.tPrev.value = this.rt[this.cur].texture;
       this.cur ^= 1;
       r.setRenderTarget(this.rt[this.cur]);
