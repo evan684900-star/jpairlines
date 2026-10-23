@@ -589,7 +589,7 @@ function runTileQueue() {
     tiles.set(k, cv);
     tileQueue.delete(k);
     if (tiles.size > MAX_TILES) tiles.delete(tiles.keys().next().value);
-    if (performance.now() - t0 > 12) break; // ne pas ralentir le jeu
+    if (performance.now() - t0 > 14) break; // ne pas ralentir le jeu
   }
   if (!$('bigmap').classList.contains('hidden')) drawBigMap();
   if (tileQueue.size && !tileJob) tileJob = requestAnimationFrame(runTileQueue); // drawBigMap a pu déjà programmé la suite
@@ -1691,4 +1691,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro };
+window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
