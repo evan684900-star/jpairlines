@@ -169,7 +169,7 @@ const CINEMA_FS = /* glsl */`
           wet = inside * clamp(w0.g * 1.5 + drop, 0.0, 1.0);
           dropC = drop * inside;
           blurR = w0.g * 2.5 * (1.0 - drop) * inside;
-          uv -= dn * inside * 0.35;
+          uv -= dn * inside * 0.18;
         }
       }
     }

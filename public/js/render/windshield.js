@@ -30,13 +30,14 @@ const SIM_FS = /* glsl */`
     vec2 g = uv * cells;
     vec2 id = floor(g);
     float add = 0.0;
-    float p = rain * (0.012 + air * 0.02);       // chance par cellule et par mise à jour
+    // ≈ 45 gouttes par seconde sur tout le pare-brise sous une vraie pluie (le double en vol : on fonce dedans)
+    float p = rain * (0.00033 + air * 0.0004);
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
       vec2 c = id + vec2(x, y);
       float h = hash(vec3(c, frame));
       if (h < p) {
         vec2 ctr = c + vec2(hash(vec3(c, frame + 17.0)), hash(vec3(c, frame + 31.0)));
-        float r = mix(0.25, 0.75, hash(vec3(c, frame + 53.0)));    // rayon (en cellules)
+        float r = mix(0.3, 0.8, pow(hash(vec3(c, frame + 53.0)), 2.0));    // rayon (en cellules)
         vec2 d = (g - ctr) * vec2(1.0, 1.0);
         float k = 1.0 - dot(d, d) / (r * r);
         if (k > 0.0) add += sqrt(k) * mix(0.25, 0.5, r);             // dôme d'eau
@@ -65,7 +66,7 @@ const SIM_FS = /* glsl */`
     h += spawn(vUv);
     // séchage (rapide en vol, lent à l'arrêt ; plus vite quand il ne pleut plus)
     h = max(0.0, h - dt * (0.004 + air * 0.03 + (1.0 - rain) * 0.03));
-    film = clamp(film + dt * (rain * 0.09 - 0.03 - air * 0.06), 0.0, 1.0);
+    film = clamp(film + dt * (rain * 0.025 - 0.012 - air * 0.03), 0.0, 0.45);
     // essuie-glaces : tout ce que le balai a parcouru depuis la dernière fois est effacé
     if (wiping > 0.5) {
       for (int i = 0; i < 2; i++) {
@@ -83,7 +84,9 @@ const SIM_FS = /* glsl */`
         }
       }
     }
-    gl_FragColor = vec4(min(h, 2.0), film, 0.0, 1.0);
+    // bas de la vitre : l'eau s'écoule par le joint
+    h *= mix(0.6, 1.0, smoothstep(0.0, 0.025, vUv.y));
+    gl_FragColor = vec4(min(h, 1.5), film, 0.0, 1.0);
   }
 `;
 const QUAD_VS = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
