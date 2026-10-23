@@ -284,11 +284,13 @@ const CINEMA_FS = /* glsl */`
     // la vitre mouillée est un peu plus claire et voilée ; les bords des gouttes accrochent la lumière du ciel
     if (wet > 0.001) {
       // vitre mouillée un peu voilée ; gouttes : bord sombre (réfraction totale), reflet du ciel en haut, éclat d'éclair
-      col = mix(col, col * 0.9 + vec3(0.02, 0.024, 0.03) / max(exposure, 0.1), wet * 0.35);
+      col = mix(col, col * 0.92 + vec3(0.02, 0.024, 0.03) / max(exposure, 0.1), wet * 0.25);
       float g = length(dn) * 60.0;
-      col *= 1.0 - S(0.35, 1.0, g) * dropC * 0.45;
+      col *= 1.0 - S(0.5, 1.0, g) * dropC * 0.16;
       float hi = S(0.2, 0.9, dot(normalize(dn + 1e-6), vec2(0.35, 0.94))) * S(0.3, 0.9, g);
-      col += vec3(0.75, 0.8, 0.85) * hi * dropC * (0.09 + flash * 0.6) / max(exposure, 0.1);
+      col += vec3(0.8, 0.85, 0.9) * hi * dropC * (0.14 + flash * 0.6) / max(exposure, 0.1);
+      // cœur de la goutte un peu plus lumineux (la lumière du ciel s'y concentre)
+      col *= 1.0 + dropC * 0.06;
     }
     // étalonnage : couleurs un peu plus franches
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));

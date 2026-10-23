@@ -178,7 +178,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   const rubber = new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.92 });
   const glassMat = new THREE.MeshPhysicalMaterial({
     color: 0x2a3a48, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.2, side: THREE.DoubleSide,
-    depthWrite: false, clearcoat: 0.4, clearcoatRoughness: 0.05, envMapIntensity: 0.7,
+    depthWrite: false, clearcoat: 0.25, clearcoatRoughness: 0.05, envMapIntensity: 0.5,
   });
   // habitacle : léger éclairage propre (lumière renvoyée par les vitres et la planche)
   const cabin = new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.85, metalness: 0, emissive: 0x1d2024 });
@@ -284,12 +284,22 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   const shell = new THREE.Mesh(fuseGeo, isGlass ? [cabin, hidden] : cabin);
   g.add(shell);
   // verrière en bulle (avion de voltige)
+  const canopyParts = [];
   if (MD.canopy) {
     const cp = MD.canopy;
     const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2).scale(cp.w, cp.h, (cp.z1 - cp.z0) / 2), glassMat);
     bubble.position.set(0, cp.y, (cp.z0 + cp.z1) / 2);
     bubble.renderOrder = 2;
     g.add(bubble);
+    // fond de l'habitacle sous la bulle : sans lui, on voyait à travers le verre le dessus du fuselage peint
+    // (un « voile blanc » sur la verrière) au lieu d'un cockpit sombre
+    let top = cp.y;
+    for (const [z, , h, yc] of keysZ) if (z > cp.z0 && z < cp.z1) top = Math.max(top, yc + h);
+    const tub = new THREE.Mesh(new THREE.CircleGeometry(1, 36).rotateX(-Math.PI / 2).scale(cp.w * 0.94, 1, ((cp.z1 - cp.z0) / 2) * 0.94),
+      new THREE.MeshStandardMaterial({ color: 0x16191d, roughness: 0.9 }));
+    tub.position.set(0, Math.min(top + 0.004, cp.y + cp.h * 0.6), (cp.z0 + cp.z1) / 2);
+    g.add(tub);
+    canopyParts.push(tub); // caché en vue cockpit, comme les décalcomanies
     const rim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.025, 6, 40).rotateX(Math.PI / 2).scale(cp.w, 1, (cp.z1 - cp.z0) / 2), dark);
     rim.position.copy(bubble.position);
     g.add(rim);
@@ -685,7 +695,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   const hr = fr[2], wr0 = fuseWidthAt(MD.fuse, zr);
   const regTex = decalTexture('reg', reg, LV, BODY);
   const regH = Math.max(0.12, hr * 0.55), regW = regH * 4;
-  const decals = [];
+  const decals = [...canopyParts];
   for (const s of [-1, 1]) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(regW, regH), decalMat(regTex));
     m.position.set(s * (wr0 + 0.012), fr[3] + hr * 0.05, zr);
