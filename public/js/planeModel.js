@@ -661,6 +661,65 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     g.add(pilot);
   }
 
+  // ----- habitacle vu de l'intérieur (vue cockpit seulement) -----
+  // La carrosserie est cachée en vue cockpit (elle boucherait tout) ; à la place, un habitacle fait pour être vu de
+  // la place du pilote : montants de pare-brise fins, casquette, rebords de fenêtre, panneaux de porte, plafond.
+  // Le pare-brise et les vitres latérales restent dégagés : on voit devant soi et sur les côtés (ailes, moteurs).
+  const cockpitSet = new THREE.Group();
+  cockpitSet.visible = false;
+  if (detail && !GLB[def.id]) {
+    const E = new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1);
+    const trim = new THREE.MeshStandardMaterial({ color: 0x3a3f46, roughness: 0.85, side: THREE.DoubleSide });
+    const lining = new THREE.MeshStandardMaterial({ color: 0x7d8087, roughness: 0.95, side: THREE.DoubleSide });
+    const frameM = new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.55, side: THREE.DoubleSide });
+    const box = (w, h, d, x, y, z, mat, rx = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.rotation.x = rx; cockpitSet.add(m); return m; };
+    const canopy = !!MD.canopy;
+    const zP = CB.panel.z, glareY = CB.panel.y + 0.235;
+    const halfW = THREE.MathUtils.clamp(fuseWidthAt(MD.fuse, E.z) * 0.95, 0.38, 0.75);
+    const halfWf = THREE.MathUtils.clamp(fuseWidthAt(MD.fuse, zP) * 0.95, 0.3, halfW); // plus étroit vers le nez
+    const zBack = E.z + 0.7;
+    const sillY = E.y - (canopy ? 0.4 : 0.33);
+    // casquette au-dessus de la planche de bord (anti-reflets) et bas du pare-brise
+    box(halfWf * 2, 0.04, 0.42, 0, glareY, zP - 0.14, frameM);
+    // rebords de fenêtre et panneaux de porte (sous le rebord) de chaque côté
+    for (const sgn of [-1, 1]) {
+      const x = sgn * halfW, xf = sgn * halfWf;
+      const sill = rod(new THREE.Vector3(xf, glareY - 0.02, zP), new THREE.Vector3(x, sillY, zBack), 0.035, trim, 1.6);
+      cockpitSet.add(sill);
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(zBack - zP, sillY - CB.floor.y).rotateY(Math.PI / 2), trim);
+      door.position.set((x + xf) / 2, (sillY + CB.floor.y) / 2 - 0.02, (zP + zBack) / 2);
+      door.rotation.y = Math.atan2(x - xf, zBack - zP) * 0.5;
+      cockpitSet.add(door);
+      // accoudoir
+      box(0.07, 0.05, 0.5, x - sgn * 0.06, sillY - 0.12, E.z + 0.05, lining);
+      if (!canopy) {
+        // montant de pare-brise (fin, incliné) puis montant arrière derrière l'épaule
+        const roofY = E.y + 0.3, zTop = zP + 0.5;
+        cockpitSet.add(rod(new THREE.Vector3(xf * 0.97, glareY, zP - 0.3), new THREE.Vector3(x * 0.94, roofY, zTop), 0.028, frameM, 1.4));
+        cockpitSet.add(rod(new THREE.Vector3(x, sillY, zBack - 0.05), new THREE.Vector3(x * 0.95, roofY, zBack - 0.1), 0.05, trim, 1.5));
+        // montant de porte au milieu de la vitre latérale
+        cockpitSet.add(rod(new THREE.Vector3(x, sillY, E.z - 0.25), new THREE.Vector3(x * 0.95, roofY, E.z - 0.2), 0.022, frameM, 1.2));
+      }
+    }
+    if (!canopy) {
+      const roofY = E.y + 0.3, zTop = zP + 0.5;
+      // plafond (garniture claire) avec traverse au-dessus du pare-brise et plafonnier
+      box(halfW * 2, 0.03, zBack - zTop + 0.1, 0, roofY + 0.02, (zTop + zBack) / 2, lining);
+      box(halfW * 1.95, 0.06, 0.07, 0, roofY, zTop, frameM);
+      box(0.12, 0.02, 0.08, 0, roofY, (zTop + zBack) / 2 + 0.1, new THREE.MeshStandardMaterial({ color: 0xd8d8d0, emissive: 0x302c24, roughness: 0.4 }));
+      // compas magnétique sur la traverse
+      const compass = box(0.08, 0.06, 0.06, 0, roofY - 0.05, zTop + 0.03, frameM);
+      compass.add(new THREE.Mesh(new THREE.CircleGeometry(0.024, 16), new THREE.MeshBasicMaterial({ color: 0xe8e4d8 })).translateZ(0.031));
+    } else {
+      // verrière : arceau avant fin (la bulle elle-même reste visible)
+      cockpitSet.add(rod(new THREE.Vector3(-halfWf * 0.9, glareY, zP - 0.32), new THREE.Vector3(halfWf * 0.9, glareY, zP - 0.32), 0.02, frameM, 1));
+    }
+    // plancher et pédales
+    for (const sgn of [-1, 1]) box(0.08, 0.02, 0.14, E.x + sgn * 0.09, CB.floor.y + 0.1, zP + 0.25, frameM, -0.6);
+    cockpitSet.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
+  }
+  g.add(cockpitSet);
+
   // ----- feux : lampe + halo (visible de loin, brille avec le bloom) -----
   const light = (c, x, y, z, r = 0.07, halo = 0.7) => {
     const m = new THREE.Mesh(new THREE.SphereGeometry(r, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(6) }));
@@ -736,6 +795,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     flapL: glbInfo?.flapL ?? flapL, flapR: glbInfo?.flapR ?? flapR, ailL: glbInfo?.ailL ?? ailL, ailR: glbInfo?.ailR ?? ailR,
     elevator: glbInfo?.elevator ?? elevator, rudder: glbInfo?.rudder ?? rudder,
     fuse, interior, pilot, panel, yokes: glbInfo?.yokes ?? yokes, decals, cabin: glbInfo?.cabin ?? null,
+    shell: glbInfo ? null : shell, cockpitSet: glbInfo ? null : cockpitSet,
     // points utiles aux effets et à la caméra (repère de l'avion)
     eye: glbInfo?.eye ?? new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
     exhaust: glbInfo?.exhaust ?? new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
@@ -936,7 +996,7 @@ function mountGlb(g, src, k) {
   }
   if (seat) {
     const b = box(seat);
-    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.08, b.max.z - 0.3); // tête contre l'appuie-tête
+    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.04, b.max.z - 0.5); // tête droite, un peu en avant de l'appuie-tête : on voit mieux par le pare-brise
   }
   const exh = at('Echappement');
   if (exh) out.exhaust = exh.add(new THREE.Vector3(0, -0.02, 0.1));
@@ -1179,6 +1239,8 @@ export function disposePlaneMesh(mesh) {
 export function setCockpitView(mesh, inside) {
   const u = mesh.userData;
   u.fuse.visible = !inside;
+  if (u.shell) u.shell.visible = !inside; // parois vues du dehors à travers les vitres ; dedans, l'habitacle prend le relais
+  if (u.cockpitSet) u.cockpitSet.visible = inside;
   for (const d of u.decals || []) d.visible = !inside;
   if (u.pilot) u.pilot.visible = !inside;
 }
