@@ -215,6 +215,18 @@ pointillé (comme une quête) ; arrivé à moins de 250 m, il disparaît et le p
   En vol, le vent relatif pousse l'eau vers le haut et sur les côtés. Les gouttes ne s'affichent que sur la vitre,
   pas sur la planche de bord.
 
+- **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux balais nettoient le pare-brise ; la pluie revient peu à peu
+  derrière eux. À l'arrêt, ils finissent leur balayage et se garent.
+
+### Sons des moteurs
+
+Chaque moteur est synthétisé en direct (AudioWorklet, `public/js/ui/engine-worklet.js`) : les cylindres explosent
+à tour de rôle (plus fort et plus irrégulier quand on met les gaz, petits ratés au ralenti), le son résonne dans le pot
+d'échappement, et l'hélice ajoute son souffle rythmé par les pales. Cub-1 : 4 cylindres à plat ; Moustique : Rotax
+qui tourne vite avec réducteur ; Faucon : 6 cylindres de voltige, le plus fort ; Mistral : deux 6 cylindres
+désaccordés (battement des bimoteurs, en stéréo) ; Albatros : moteur en étoile à 9 cylindres ; Éclair : turbine
+(fan, compresseur, souffle). Plus sourd dans le cockpit et au loin.
+
 ### Vue cockpit
 
 Chaque avion a un habitacle fait pour être vu depuis le siège du pilote : montants de pare-brise fins, casquette,
