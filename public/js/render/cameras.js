@@ -15,6 +15,7 @@ export const CAMERA_MODES = [
 
 const TRANSITION = 0.75; // s
 const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.09);
+const cockpitTilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.1);
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _m = new THREE.Matrix4();
 const ease = (t) => t * t * (3 - 2 * t);
 
@@ -62,7 +63,8 @@ export class CameraRig {
       out.quat.copy(_q).multiply(tilt);
     } else if (id === 'cockpit') {
       out.pos.copy(mesh.userData.eye).applyQuaternion(plane.quat).add(plane.pos);
-      out.quat.copy(plane.quat).multiply(_q2);
+      // regard légèrement plongeant (comme un vrai pilote) : la piste et l'horizon au centre, pas le plafond
+      out.quat.copy(plane.quat).multiply(_q2).multiply(cockpitTilt);
     } else if (id === 'orbit') {
       // orbite libre : indépendante de l'attitude de l'avion (cliquer-glisser pour tourner)
       const yaw = this.free.yaw + o.yaw, pitch = THREE.MathUtils.clamp(this.free.pitch + o.pitch, -0.5, 1.4);
