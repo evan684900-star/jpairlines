@@ -360,8 +360,9 @@ export class Effects {
     // orage : éclairs au loin, puis tonnerre (le son arrive plus tard)
     this.flash *= Math.exp(-dt * 9);
     this.bolt.visible = this.flash > 0.25;
-    if (w.storm > 0.5) {
-      this.nextBolt -= dt;
+    // éclairs en orage, et plus rarement quand il pleut simplement
+    if (w.storm > 0.5 || w.rain > 0.6) {
+      this.nextBolt -= dt * (w.storm > 0.5 ? 1 : 0.3);
       if (this.nextBolt <= 0) {
         this.nextBolt = 5 + Math.random() * 14;
         const a = Math.random() * Math.PI * 2, d = 2500 + Math.random() * 8000;

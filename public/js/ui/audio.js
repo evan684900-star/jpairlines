@@ -92,7 +92,20 @@ export class SoundEngine {
 
     // ----- vent, pluie -----
     this.wind = this.noise('bandpass', 500, 0.7, this.bus.wind);
-    this.rain = this.noise('highpass', 2500, 0.5, this.bus.rain);
+    this.rain = this.noise('highpass', 2500, 0.5, this.bus.rain); // bruit de secours tant que l'enregistrement charge
+    // vraie pluie (enregistrement en boucle) : plus sourde dans le cockpit grâce au filtre passe-bas
+    this.rainLoop = null;
+    fetch('sounds/pluie.mp3').then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => {
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      this.rainFilter = ctx.createBiquadFilter();
+      this.rainFilter.type = 'lowpass'; this.rainFilter.frequency.value = 9000;
+      this.rainLoopGain = ctx.createGain();
+      this.rainLoopGain.gain.value = 0;
+      src.connect(this.rainFilter).connect(this.rainLoopGain).connect(this.bus.rain);
+      src.start(0, Math.random() * buf.duration);
+      this.rainLoop = src;
+    }).catch(() => { /* garde le bruit de secours */ });
     // ----- moteurs électriques (train, volets) -----
     this.motor = ctx.createOscillator();
     this.motor.type = 'sawtooth';
@@ -179,10 +192,18 @@ export class SoundEngine {
     set(this.starterGain.gain, on && starting ? 0.05 * atten : 0, 0.05);
     // vent : augmente avec la vitesse (plus étouffé dans le cockpit)
     const v = s.speed;
-    set(this.wind.g.gain, on ? Math.min(0.22, v * v * 0.00004) * (inside ? 0.6 : 1) : 0);
+    // + le vent de la météo (sifflement qui monte avec les rafales de pluie et d'orage)
+    const gale = weather ? Math.max(0, (weather.windNow ?? weather.wind) - 8) * 0.006 : 0;
+    set(this.wind.g.gain, !paused ? Math.min(0.3, (on ? v * v * 0.00004 : 0) + gale) * (inside ? 0.6 : 1) : 0);
     set(this.wind.f.frequency, 250 + v * 9);
     // pluie (tambourine sur la verrière dans le cockpit)
-    set(this.rain.g.gain, !paused ? Math.min(1, weather?.rain ?? 0) * (inside ? 0.12 : 0.06) : 0, 0.5);
+    const rainK = !paused ? Math.min(1, weather?.rain ?? 0) : 0;
+    if (this.rainLoop) {
+      // enregistrement : fort dehors, étouffé dans le cockpit ; l'intensité suit la pluie (1 = pluie, 1,6 = orage)
+      set(this.rainLoopGain.gain, rainK * (inside ? 0.55 : 0.8) * Math.min(1.25, 0.7 + (weather?.rain ?? 0) * 0.3), 0.6);
+      set(this.rainFilter.frequency, inside ? 2600 : 9000, 0.3);
+      set(this.rain.g.gain, 0, 0.5);
+    } else set(this.rain.g.gain, rainK * (inside ? 0.12 : 0.06), 0.5);
     // train et volets en mouvement
     const moving = (this.prevGear !== null && Math.abs(s.gearPos - this.prevGear) > 1e-4) || (this.prevFlap !== null && Math.abs(s.flapPos - this.prevFlap) > 1e-4);
     if (this.prevGear !== null && this.prevGear < 1 && s.gearPos >= 1) this.clunk(0.25);

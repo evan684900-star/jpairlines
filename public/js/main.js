@@ -520,30 +520,101 @@ $('board-close').onclick = () => quests.closeBoard();
 // ================= Cartes =================
 const MAP_RES = 512;
 const mapImg = document.createElement('canvas');
+const _mc = new THREE.Color();
+// couleur d'un point de la carte (relief ombré depuis le nord-ouest, eau plus sombre en profondeur, courbes de niveau
+// quand on est assez près) ; px = taille d'un pixel de la carte en mètres
+function mapPixel(wx, wz, px, data, i, contour) {
+  const h = terrainHeight(wx, wz);
+  data[i + 3] = 255;
+  if (h < 0.5) {
+    const k = Math.min(1, -h / 300);
+    data[i] = 50 - k * 25; data[i + 1] = 125 - k * 45; data[i + 2] = 190 - k * 40;
+    // rivage : fine ligne claire à l'endroit où l'eau commence
+    if (contour && h > -px * 0.6 && terrainHeight(wx + px, wz) >= 0.5) { data[i] += 60; data[i + 1] += 50; data[i + 2] += 30; }
+    return;
+  }
+  const hx = terrainHeight(wx + px, wz), hz = terrainHeight(wx, wz + px);
+  terrainColor(h, Math.hypot(hx - h, hz - h) / px, wx, wz, _mc).convertLinearToSRGB();
+  let shade = THREE.MathUtils.clamp(1 + ((h - hx) / px + (h - hz) / px) * 0.9, 0.55, 1.3);
+  if (contour) { // courbe de niveau tous les 50 m (plus marquée tous les 250 m)
+    const a = Math.floor(h / 50), b = Math.floor(hx / 50), d = Math.floor(hz / 50);
+    if (a !== b || a !== d) shade *= Math.max(a, b, d) % 5 === 0 ? 0.72 : 0.88;
+  }
+  data[i] = _mc.r * 255 * shade; data[i + 1] = _mc.g * 255 * shade; data[i + 2] = _mc.b * 255 * shade;
+}
 function buildMapImage() {
   mapImg.width = MAP_RES; mapImg.height = MAP_RES;
   const ctx = mapImg.getContext('2d');
   const img = ctx.createImageData(MAP_RES, MAP_RES);
-  const c = new THREE.Color();
   const px = WORLD.size / MAP_RES;
   for (let y = 0; y < MAP_RES; y++) {
-    for (let x = 0; x < MAP_RES; x++) {
-      const wx = -HALF + (x + 0.5) * px, wz = -HALF + (y + 0.5) * px;
-      const h = terrainHeight(wx, wz);
-      const i = (y * MAP_RES + x) * 4;
-      img.data[i + 3] = 255;
-      if (h < 0.5) {
-        const k = Math.min(1, -h / 300);
-        img.data[i] = 50 - k * 25; img.data[i + 1] = 125 - k * 45; img.data[i + 2] = 190 - k * 40;
-        continue;
-      }
-      const hx = terrainHeight(wx + px, wz);
-      terrainColor(h, Math.abs(hx - h) / px, wx, wz, c).convertLinearToSRGB();
-      const shade = THREE.MathUtils.clamp(1 + ((h - hx) / px) * 1.5, 0.6, 1.25);
-      img.data[i] = c.r * 255 * shade; img.data[i + 1] = c.g * 255 * shade; img.data[i + 2] = c.b * 255 * shade;
-    }
+    for (let x = 0; x < MAP_RES; x++) mapPixel(-HALF + (x + 0.5) * px, -HALF + (y + 0.5) * px, px, img.data, (y * MAP_RES + x) * 4, false);
   }
   ctx.putImageData(img, 0, 0);
+}
+
+// Cartes détaillées : en zoomant, des tuiles plus fines sont calculées à la demande (quelques-unes par image)
+// et gardées en mémoire. Niveaux : 20 km, 5 km, 1,25 km et 312 m de côté, 128 pixels chacun (156 → 2,4 m par pixel).
+const TILE_PX = 128;
+const TILE_SIZES = [20000, 5000, 1250, 312.5];
+const tiles = new Map(); // 'niveau/tx/tz' → canvas
+const tileQueue = new Map(); // clé → { lv, tx, tz }
+let tileJob = 0, tileFocus = [0, 0];
+const MAX_TILES = 500;
+function tileFor(lv, tx, tz, wantBuild) {
+  const key = `${lv}/${tx}/${tz}`;
+  const c = tiles.get(key);
+  if (c) { tiles.delete(key); tiles.set(key, c); return c; } // le plus récemment utilisé passe en dernier
+  if (wantBuild && !tileQueue.has(key)) tileQueue.set(key, { lv, tx, tz });
+  return null;
+}
+function runTileQueue() {
+  tileJob = 0;
+  if (!tileQueue.size) return;
+  // les tuiles les plus proches du centre de la vue d'abord
+  const list = [...tileQueue.entries()].map(([k, q]) => {
+    const sz = TILE_SIZES[q.lv];
+    return [k, q, Math.hypot(-HALF + (q.tx + 0.5) * sz - tileFocus[0], -HALF + (q.tz + 0.5) * sz - tileFocus[1])];
+  }).sort((a, b) => a[2] - b[2]);
+  const t0 = performance.now();
+  for (const [k, q] of list) {
+    const sz = TILE_SIZES[q.lv], px = sz / TILE_PX;
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = TILE_PX;
+    const ctx = cv.getContext('2d');
+    const img = ctx.createImageData(TILE_PX, TILE_PX);
+    const x0 = -HALF + q.tx * sz, z0 = -HALF + q.tz * sz;
+    for (let y = 0; y < TILE_PX; y++) for (let x = 0; x < TILE_PX; x++) mapPixel(x0 + (x + 0.5) * px, z0 + (y + 0.5) * px, px, img.data, (y * TILE_PX + x) * 4, px <= 40);
+    ctx.putImageData(img, 0, 0);
+    tiles.set(k, cv);
+    tileQueue.delete(k);
+    if (tiles.size > MAX_TILES) tiles.delete(tiles.keys().next().value);
+    if (performance.now() - t0 > 12) break; // ne pas ralentir le jeu
+  }
+  if (!$('bigmap').classList.contains('hidden')) drawBigMap();
+  if (tileQueue.size) tileJob = requestAnimationFrame(runTileQueue);
+}
+// dessine les tuiles utiles pour une vue (coarse d'abord, puis le niveau voulu par-dessus)
+function drawTiles(ctx, cx, cz, span, W, toX, toY) {
+  const need = span / W; // mètres par pixel d'écran
+  let top = -1;
+  TILE_SIZES.forEach((sz, lv) => { if (sz / TILE_PX <= need * 1.5) top = lv; });
+  if (top < 0 && need < TILE_SIZES[TILE_SIZES.length - 1] / TILE_PX) top = TILE_SIZES.length - 1;
+  if (top < 0) return;
+  tileFocus = [cx, cz];
+  ctx.imageSmoothingQuality = 'high';
+  for (let lv = Math.max(0, top - 1); lv <= top; lv++) {
+    const sz = TILE_SIZES[lv], half = span / 2;
+    const tx0 = Math.max(0, Math.floor((cx - half + HALF) / sz)), tx1 = Math.min(Math.ceil(WORLD.size / sz) - 1, Math.floor((cx + half + HALF) / sz));
+    const tz0 = Math.max(0, Math.floor((cz - half + HALF) / sz)), tz1 = Math.min(Math.ceil(WORLD.size / sz) - 1, Math.floor((cz + half + HALF) / sz));
+    for (let tz = tz0; tz <= tz1; tz++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const c = tileFor(lv, tx, tz, lv === top);
+        if (c) ctx.drawImage(c, toX(-HALF + tx * sz), toY(-HALF + tz * sz), sz * (W / span) + 0.6, sz * (W / span) + 0.6);
+      }
+    }
+  }
+  if (tileQueue.size && !tileJob) tileJob = requestAnimationFrame(runTileQueue);
 }
 
 function drawMap(cv, cx, cz, span, full) {
@@ -556,6 +627,7 @@ function drawMap(cv, cx, cz, span, full) {
   ctx.fillRect(0, 0, W, W);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(mapImg, toX(-HALF), toY(-HALF), WORLD.size * s, WORLD.size * s);
+  drawTiles(ctx, cx, cz, span, W, toX, toY);
 
   ctx.font = `bold ${full ? 14 : 11}px system-ui`;
   ctx.lineWidth = 3;
@@ -577,6 +649,26 @@ function drawMap(cv, cx, cz, span, full) {
     if (span < 45000) for (const t of TOWNS) text('• ' + t.name, toX(t.x) - 4, toY(t.z) + 4, '#e8dcc0');
   }
   quests?.drawMap(ctx, toX, toY, full, span, text);
+  // repères posés par le joueur (clic sur la grande carte)
+  for (const m of save.markers || []) {
+    const x = toX(m.x), y = toY(m.z);
+    if (x < -20 || y < -20 || x > W + 20 || y > W + 20) continue;
+    const r = full ? 9 : 6;
+    ctx.fillStyle = '#ff4f4f';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x - r * 1.1, y - r * 1.2, x - r, y - r * 2.6, x, y - r * 2.6);
+    ctx.bezierCurveTo(x + r, y - r * 2.6, x + r * 1.1, y - r * 1.2, x, y);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(x, y - r * 1.6, r * 0.35, 0, Math.PI * 2); ctx.fill();
+    if (full) {
+      const d = Math.hypot(m.x - plane.pos.x, m.z - plane.pos.z);
+      text(d > 1000 ? `${(d / 1000).toFixed(1)} km` : `${Math.round(d)} m`, x + r + 4, y - r * 1.4, '#ffd0d0');
+    }
+  }
   for (const r of remotes.values()) {
     ctx.fillStyle = '#ff7ad9';
     ctx.beginPath();
@@ -608,11 +700,33 @@ const bigCanvas = $('bigmap-canvas');
 function drawBigMap() { drawMap(bigCanvas, mapView.cx, mapView.cz, mapView.span, true); }
 bigCanvas.addEventListener('wheel', (e) => {
   e.preventDefault();
-  mapView.span = THREE.MathUtils.clamp(mapView.span * (e.deltaY > 0 ? 1.2 : 0.83), 3000, WORLD.size * 1.1);
+  mapView.span = THREE.MathUtils.clamp(mapView.span * (e.deltaY > 0 ? 1.2 : 0.83), 600, WORLD.size * 1.1);
   drawBigMap();
 }, { passive: false });
-bigCanvas.addEventListener('pointerdown', (e) => { mapView.drag = [e.clientX, e.clientY]; bigCanvas.setPointerCapture(e.pointerId); });
-bigCanvas.addEventListener('pointerup', () => { mapView.drag = null; });
+const MAX_MARKERS = 30;
+// clic gauche (sans glisser) : pose un repère ; clic sur un repère : le retire
+function mapClick(e) {
+  const r = bigCanvas.getBoundingClientRect();
+  const k = mapView.span / r.width;
+  const wx = mapView.cx + (e.clientX - r.left - r.width / 2) * k, wz = mapView.cz + (e.clientY - r.top - r.height / 2) * k;
+  save.markers ||= [];
+  const hit = save.markers.findIndex((m) => {
+    const sx = (m.x - mapView.cx) / k + r.width / 2 + r.left, sy = (m.z - mapView.cz) / k + r.height / 2 + r.top;
+    return Math.hypot(e.clientX - sx, e.clientY - (sy - 12)) < 16; // la pointe est sous l'icône
+  });
+  if (hit >= 0) { save.markers.splice(hit, 1); toast(t('Repère retiré')); }
+  else if (save.markers.length >= MAX_MARKERS) { toast(t('{n} repères maximum : retires-en un (clic dessus)', { n: MAX_MARKERS })); return; }
+  else { save.markers.push({ x: Math.round(wx), z: Math.round(wz) }); toast(t('📍 Repère posé (clic dessus pour le retirer)')); }
+  persist();
+  drawBigMap();
+}
+$('map-clear').onclick = () => { if (!save.markers?.length) return; save.markers = []; persist(); drawBigMap(); toast(t('Repères effacés')); };
+bigCanvas.addEventListener('pointerdown', (e) => { if (e.button !== 0) return; mapView.drag = [e.clientX, e.clientY]; mapView.start = [e.clientX, e.clientY]; bigCanvas.setPointerCapture(e.pointerId); });
+bigCanvas.addEventListener('pointerup', (e) => {
+  const st = mapView.start;
+  mapView.drag = null; mapView.start = null;
+  if (st && Math.hypot(e.clientX - st[0], e.clientY - st[1]) < 5) mapClick(e);
+});
 bigCanvas.addEventListener('pointermove', (e) => {
   if (!mapView.drag) return;
   const scale = mapView.span / bigCanvas.clientWidth;
@@ -1276,7 +1390,7 @@ let mapTimer = 0, labelTimer = 0, placeTimer = 0;
 function simulate(dt) {
   const input = readInput();
   plane.trim = THREE.MathUtils.clamp(plane.trim + input.trim * dt * 0.25, -0.5, 0.5);
-  plane.update(dt, input, { difficulty: settings.difficulty, fuelScale: FUEL_SCALE[settings.fuelMode] ?? 4, sensitivity: settings.sensitivity });
+  plane.update(dt, input, { difficulty: settings.difficulty, fuelScale: FUEL_SCALE[settings.fuelMode] ?? 4, sensitivity: settings.sensitivity, turbulence: gfx.weatherState?.gust ?? 0, windDir: gfx.weather?.windDir ?? 0 });
   if (input.refuel && canRefuel()) doRefuel(dt);
   // limite de la carte : on renvoie l'avion vers le centre
   const lim = HALF * 0.97;

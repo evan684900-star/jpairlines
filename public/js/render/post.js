@@ -126,23 +126,34 @@ const CINEMA_FS = /* glsl */`
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
 
-  // gouttes de pluie sur la verrière : cellules avec une goutte qui glisse
+  // gouttes de pluie sur le pare-brise : grosses gouttes rondes qui font loupe (l'image est renversée dedans),
+  // petites gouttes fines, et gouttes qui glissent en laissant une traînée. Retourne (décalage xy, voile)
   vec3 drops(vec2 uv) {
-    vec2 st = uv * vec2(aspect, 1.0) * 9.0;
     vec2 off = vec2(0.0);
     float wet = 0.0;
-    for (int l = 0; l < 2; l++) {
-      vec2 g = st * (1.0 + float(l) * 0.7) + vec2(0.0, time * (0.25 + float(l) * 0.15));
+    for (int l = 0; l < 3; l++) {
+      float sc = 6.0 + float(l) * 7.0;                 // 3 tailles de gouttes
+      vec2 st = uv * vec2(aspect, 1.0) * sc;
+      // la goutte glisse lentement vers le bas (plus vite quand elle est grosse), puis une autre se forme
+      float slide = time * (0.05 + 0.04 * float(2 - l));
+      vec2 g = st + vec2(0.0, slide * sc * 0.25);
       vec2 id = floor(g), f = fract(g) - 0.5;
-      vec2 r = hash2(id + float(l) * 17.0);
-      if (r.x > 0.55) {
-        vec2 c = (r - 0.5) * 0.6;
-        c.y += fract(time * 0.1 * (0.5 + r.y) + r.x) * 0.3 - 0.15;
-        vec2 dv = (f - c) * vec2(1.0, 0.7);
+      vec2 r = hash2(id + float(l) * 31.0);
+      float life = fract(time * 0.03 + r.x * 7.0);     // naissance, grossit, glisse, disparaît
+      if (r.y < 0.62) {
+        vec2 c = (r - 0.5) * 0.5;
+        c.y += (life - 0.5) * 0.35 * float(2 - l);
+        vec2 dv = (f - c) * vec2(1.0, 1.15);
+        float rad = (0.13 - float(l) * 0.025) * smoothstep(0.0, 0.25, life) * (1.0 - 0.5 * smoothstep(0.85, 1.0, life));
         float d = length(dv);
-        float m = smoothstep(0.16, 0.08, d);
-        off += dv * m * 0.6;
+        float m = smoothstep(rad, rad * 0.45, d);
+        // la goutte est une loupe : l'image y est renversée, d'où ce décalage opposé au centre
+        off += -dv * m * 1.7;
         wet += m;
+        // traînée fine laissée au-dessus d'une goutte qui glisse
+        float trail = smoothstep(0.03, 0.0, abs(f.x - c.x)) * step(c.y, f.y) * step(f.y, c.y + 0.4 * life) * (1.0 - life) * step(0.85, r.x);
+        wet += trail * 0.45;
+        off.x += trail * 0.01 * (r.y - 0.3);
       }
     }
     return vec3(off, wet);
@@ -151,7 +162,7 @@ const CINEMA_FS = /* glsl */`
   void main() {
     vec2 uv = vUv;
     vec3 dr = vec3(0.0);
-    if (rain > 0.01) { dr = drops(uv) * rain; uv -= dr.xy * 0.035; }
+    if (rain > 0.01) { dr = drops(uv); dr.xy *= min(rain, 1.0); dr.z *= min(rain, 1.0); uv += dr.xy * 0.05; }
     vec2 fromC = uv - 0.5;
     float edge = dot(fromC, fromC);
     // distorsion de vitesse : léger étirement radial vers les bords
@@ -202,7 +213,10 @@ const CINEMA_FS = /* glsl */`
     // éclair d'orage
     col += vec3(0.75, 0.8, 1.0) * flash / max(exposure, 0.1) * 0.22;
     // verrière mouillée : un peu plus floue et plus claire
-    col = mix(col, col * 1.05 + 0.02 / max(exposure, 0.1), clamp(dr.z, 0.0, 1.0) * 0.3);
+    // la vitre mouillée est un peu plus claire et voilée ; les bords des gouttes accrochent la lumière du ciel
+    float wetK = clamp(dr.z, 0.0, 1.0);
+    col = mix(col, col * 0.88 + vec3(0.022, 0.026, 0.03) / max(exposure, 0.1), wetK * 0.55);
+    col += vec3(0.6, 0.66, 0.72) * smoothstep(0.55, 1.0, wetK) * 0.05 / max(exposure, 0.1);
     // étalonnage : couleurs un peu plus franches
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = max(mix(vec3(lum), col, saturation), 0.0);

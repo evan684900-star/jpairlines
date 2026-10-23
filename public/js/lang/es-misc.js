@@ -394,4 +394,9 @@ export default {
   // cinématique de début de partie
   "Cinématique au début de la partie": "Cinemática al empezar la partida",
   "Appuie sur une touche pour passer ▸": "Pulsa cualquier tecla para saltar ▸",
+  // repères de la carte
+  "Repère retiré": "Marcador quitado",
+  "{n} repères maximum : retires-en un (clic dessus)": "Máximo {n} marcadores: quita uno (clic encima)",
+  "📍 Repère posé (clic dessus pour le retirer)": "📍 Marcador puesto (clic encima para quitarlo)",
+  "Repères effacés": "Marcadores borrados",
 };

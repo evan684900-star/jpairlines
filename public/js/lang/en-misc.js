@@ -425,4 +425,9 @@ export default {
   // cinématique de début de partie
   "Cinématique au début de la partie": "Cutscene at the start of the game",
   "Appuie sur une touche pour passer ▸": "Press any key to skip ▸",
+  // repères de la carte
+  "Repère retiré": "Marker removed",
+  "{n} repères maximum : retires-en un (clic dessus)": "{n} markers maximum: remove one (click on it)",
+  "📍 Repère posé (clic dessus pour le retirer)": "📍 Marker placed (click it to remove)",
+  "Repères effacés": "Markers cleared",
 };

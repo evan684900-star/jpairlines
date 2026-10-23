@@ -16,9 +16,9 @@ export const SPECS = aircraftById('cub').specs;
 
 // Aides au pilotage et tolérance selon la difficulté
 export const DIFFICULTY = {
-  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, turnComp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity, altLapse: 0.35 },
-  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8, altLapse: 0.6 },
-  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6, altLapse: 1 },
+  easy: { wingLeveler: 1, autoCoord: 1, pitchDamp: 1, turnComp: 1, crashVs: 6, damage: false, wingDrop: 0, autoEngine: true, gLimit: Infinity, altLapse: 0.35, gust: 0.4 },
+  normal: { wingLeveler: 0.35, autoCoord: 1, pitchDamp: 0.5, turnComp: 0.75, crashVs: 4, damage: true, wingDrop: 0.5, autoEngine: false, gLimit: 8, altLapse: 0.6, gust: 0.8 },
+  realistic: { wingLeveler: 0, autoCoord: 0, pitchDamp: 0, turnComp: 0, crashVs: 3, damage: true, wingDrop: 1, autoEngine: false, gLimit: 6, altLapse: 1, gust: 1.2 },
 };
 
 const DT = 1 / 240; // pas de simulation (s)
@@ -173,6 +173,24 @@ export class Plane {
     this.pos.copy(cg).sub(_r.copy(CG).applyQuaternion(this.quat));
   }
 
+  // Turbulence de pluie et d'orage : rafales verticales, petits coups de roulis et de tangage, léger poussée du vent.
+  // turb 0..1 (0 = air calme) ; sans effet au sol et à basse vitesse.
+  gustForces(dt, turb, windDir, diff) {
+    if (turb <= 0.01 || this.onGround || this.speed < 15) return;
+    const k = turb * (diff.gust ?? 0.8), t = (this.gustT = (this.gustT || 0) + dt);
+    const n = (f, o) => Math.sin(t * f + o) * 0.55 + Math.sin(t * f * 2.31 + o * 1.7) * 0.3 + Math.sin(t * f * 4.73 + o * 0.6) * 0.15;
+    // masse d'air montante / descendante (jusqu'à ~0,3 g en orage réaliste)
+    _tmp.set(0, 1, 0).multiplyScalar(n(0.9, 1.1) * 3.2 * k);
+    this.velocity.addScaledVector(_tmp, dt);
+    // poussée horizontale du vent, vers l'aval
+    this.velocity.x += -Math.cos(windDir) * Math.max(0, n(0.45, 3.3)) * 1.2 * k * dt;
+    this.velocity.z += -Math.sin(windDir) * Math.max(0, n(0.45, 3.3)) * 1.2 * k * dt;
+    // l'air secoue l'avion : roulis et tangage (repère avion)
+    const f = clamp(this.speed / 60, 0.3, 1.4);
+    this.omega.z += n(1.7, 0.4) * 0.5 * k * f * dt;
+    this.omega.x += n(1.3, 2.2) * 0.2 * k * f * dt;
+  }
+
   // ----- boucle principale -----
   update(dt, input, opts) {
     if (this.crashed) return;
@@ -194,6 +212,8 @@ export class Plane {
     const rollGain = gentle + (1 - gentle) * smooth(clamp((this.rollHold - 0.3) / 1.2, 0, 1));
     this.ctrl.roll = ramp(this.ctrl.roll, clamp(input.roll * sens * rollGain, -1, 1), 3, 4);
     this.ctrl.yaw = ramp(this.ctrl.yaw, clamp(input.yaw, -1, 1), 3, 4);
+
+    this.gustForces(dt, opts.turbulence || 0, opts.windDir || 0, diff);
 
     let t = dt;
     while (t > 1e-6 && !this.crashed) {

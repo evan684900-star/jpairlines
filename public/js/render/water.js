@@ -256,7 +256,7 @@ export class Water {
     // la grille suit la caméra, alignée sur 2 m pour éviter que les vagues « glissent »
     this.mesh.position.x = Math.round(camera.position.x / 2) * 2;
     this.mesh.position.z = Math.round(camera.position.z / 2) * 2;
-    const wind = weather.wind;
+    const wind = weather.windNow ?? weather.wind;
     this.uniforms.waveAmp.value += (Math.min(1.6, 0.35 + wind / 10) - this.uniforms.waveAmp.value) * Math.min(1, dt);
     this.uniforms.waveDir.value.set(Math.cos(windDir), Math.sin(windDir));
     // de nuit l'eau est plus sombre
