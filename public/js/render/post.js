@@ -126,43 +126,101 @@ const CINEMA_FS = /* glsl */`
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
 
-  // gouttes de pluie sur le pare-brise : grosses gouttes rondes qui font loupe (l'image est renversée dedans),
-  // petites gouttes fines, et gouttes qui glissent en laissant une traînée. Retourne (décalage xy, voile)
-  vec3 drops(vec2 uv) {
-    vec2 off = vec2(0.0);
-    float wet = 0.0;
-    for (int l = 0; l < 3; l++) {
-      float sc = 6.0 + float(l) * 7.0;                 // 3 tailles de gouttes
-      vec2 st = uv * vec2(aspect, 1.0) * sc;
-      // la goutte glisse lentement vers le bas (plus vite quand elle est grosse), puis une autre se forme
-      float slide = time * (0.05 + 0.04 * float(2 - l));
-      vec2 g = st + vec2(0.0, slide * sc * 0.25);
-      vec2 id = floor(g), f = fract(g) - 0.5;
-      vec2 r = hash2(id + float(l) * 31.0);
-      float life = fract(time * 0.03 + r.x * 7.0);     // naissance, grossit, glisse, disparaît
-      if (r.y < 0.5) {
-        vec2 c = (r - 0.5) * 0.5;
-        c.y += (life - 0.5) * 0.35 * float(2 - l);
-        vec2 dv = (f - c) * vec2(1.0, 1.15);
-        float rad = (0.21 - float(l) * 0.035) * smoothstep(0.0, 0.25, life) * (1.0 - 0.5 * smoothstep(0.85, 1.0, life));
-        float d = length(dv);
-        float m = smoothstep(rad, rad * 0.45, d);
-        // la goutte est une loupe : l'image y est renversée, d'où ce décalage opposé au centre
-        off += -dv * m * 2.8;
-        wet += m;
-        // traînée fine laissée au-dessus d'une goutte qui glisse
-        float trail = smoothstep(0.03, 0.0, abs(f.x - c.x)) * step(c.y, f.y) * step(f.y, c.y + 0.4 * life) * (1.0 - life) * step(0.85, r.x);
-        wet += trail * 0.45;
-        off.x += trail * 0.01 * (r.y - 0.3);
-      }
-    }
-    return vec3(off, wet);
+  // ----- Gouttes de pluie sur le pare-brise -----
+  // D'après « Heartfelt » (Martijn Steinrucken) : gouttes posées qui apparaissent et sèchent, gouttes qui glissent en
+  // zigzag en laissant une traînée de gouttelettes, film d'eau qui floute la vitre (les traînées le nettoient).
+  // En vol, le vent relatif pousse l'eau vers le haut et vers les côtés, de plus en plus vite.
+  uniform sampler2D tDepth;
+  uniform vec2 camNF;
+  uniform float air;
+  float S(float a, float b, float t) { return smoothstep(a, b, t); }
+  float N21(vec2 p) { p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
+  vec3 N13(float p) {
+    vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.11369, 0.13787));
+    p3 += dot(p3, p3.yzx + 19.19);
+    return fract(vec3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
+  }
+  float saw(float b, float t) { return S(0.0, b, t) * S(1.0, b, t); }
+  // gouttes qui glissent : (masque, traînée)
+  vec2 dropLayer(vec2 uv, float t) {
+    vec2 UV = uv;
+    uv.y += t * 0.75;
+    vec2 a = vec2(6.0, 1.0);
+    vec2 grid = a * 2.0;
+    vec2 id = floor(uv * grid);
+    uv.y += N21(vec2(id.x, 0.0));
+    id = floor(uv * grid);
+    vec3 n = N13(id.x * 35.2 + id.y * 2376.1);
+    vec2 st = fract(uv * grid) - vec2(0.5, 0.0);
+    float x = n.x - 0.5;
+    float y = UV.y * 20.0;
+    float wiggle = sin(y + sin(y));
+    x += wiggle * (0.5 - abs(x)) * (n.z - 0.5);
+    x *= 0.7;
+    float ti = fract(t + n.z);
+    y = (saw(0.85, ti) - 0.5) * 0.9 + 0.5;
+    vec2 p = vec2(x, y);
+    float d = length((st - p) * a.yx);
+    float mainDrop = S(0.4, 0.0, d);
+    float r = sqrt(S(1.0, y, st.y));
+    float cd = abs(st.x - x);
+    float trail = S(0.23 * r, 0.15 * r * r, cd);
+    float trailFront = S(-0.02, 0.02, st.y - y);
+    trail *= trailFront * r * r;
+    y = fract(UV.y * 10.0) + (st.y - 0.5);
+    float droplets = S(0.3, 0.0, length(st - vec2(x, y)));
+    return vec2(mainDrop + droplets * r * trailFront, trail);
+  }
+  // gouttes posées : apparaissent, restent, puis sèchent
+  float staticDrops(vec2 uv, float t) {
+    uv *= 40.0;
+    vec2 id = floor(uv);
+    uv = fract(uv) - 0.5;
+    vec3 n = N13(id.x * 107.45 + id.y * 3543.654);
+    vec2 p = (n.xy - 0.5) * 0.7;
+    float d = length(uv - p);
+    float fade = saw(0.025, fract(t + n.z));
+    return S(0.3, 0.0, d) * fract(n.z * 10.0) * fade;
+  }
+  // (épaisseur d'eau, traînée)
+  vec2 rainDrops(vec2 uv, float t, float l0, float l1, float l2) {
+    float s = staticDrops(uv, t) * l0;
+    vec2 m1 = dropLayer(uv, t) * l1;
+    vec2 m2 = dropLayer(uv * 1.85, t) * l2;
+    float c = S(0.3, 1.0, s + m1.x + m2.x);
+    return vec2(c, max(m1.y * l0, m2.y * l1));
   }
 
   void main() {
     vec2 uv = vUv;
-    vec3 dr = vec3(0.0);
-    if (rain > 0.01) { dr = drops(uv); dr.xy *= min(rain, 1.0); dr.z *= min(rain, 1.0); uv += dr.xy * 0.07; }
+    // pluie sur la vitre : seulement là où l'on voit dehors à travers (pas sur la planche de bord, à moins d'1,5 m)
+    float wet = 0.0, dropC = 0.0, blurR = 0.0;
+    vec2 dn = vec2(0.0);
+    if (rain > 0.01) {
+      float z = texture2D(tDepth, vUv).x;
+      float vz = (camNF.x * camNF.y) / ((camNF.y - camNF.x) * z - camNF.y);
+      wet = S(1.3, 2.6, -vz) * clamp(rain, 0.0, 1.0);
+      if (wet > 0.001) {
+        // vent relatif : l'eau part vers le haut et s'écarte vers les bords
+        vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
+        float ang = 3.14159 * S(0.15, 0.7, air) + q.x * 1.1 * air;
+        float ca = cos(ang), sa = sin(ang);
+        q = mat2(ca, sa, -sa, ca) * q;
+        float t = time * 0.2 * (1.0 + air * 5.0);
+        float rk = clamp(rain, 0.0, 1.0);
+        float l0 = S(-0.5, 1.0, rk) * 2.0 * (1.0 - 0.75 * air); // les gouttes posées sont vite soufflées
+        float l1 = S(0.25, 0.75, rk), l2 = S(0.0, 0.5, rk);
+        vec2 c = rainDrops(q, t, l0, l1, l2);
+        vec2 e = vec2(0.001, 0.0);
+        float cx = rainDrops(q + e, t, l0, l1, l2).x;
+        float cy = rainDrops(q + e.yx, t, l0, l1, l2).x;
+        dn = mat2(ca, -sa, sa, ca) * vec2(cx - c.x, cy - c.x); // normale ramenée dans le repère de l'écran
+        dropC = c.x * wet;
+        // flou du film d'eau : fort sur la vitre, nul dans les gouttes et dans les traînées
+        blurR = mix(3.5 - c.y * 3.5, 0.0, S(0.1, 0.2, c.x)) * wet;
+        uv += dn * wet;
+      }
+    }
     vec2 fromC = uv - 0.5;
     float edge = dot(fromC, fromC);
     // distorsion de vitesse : léger étirement radial vers les bords
@@ -174,6 +232,16 @@ const CINEMA_FS = /* glsl */`
       }
       col /= 6.0;
     } else col = texture2D(tDiffuse, uv).rgb;
+    // film d'eau : flou doux (disque de 8 points)
+    if (blurR > 0.25) {
+      vec2 px = blurR / vec2(720.0 * aspect, 720.0);
+      vec3 b = col;
+      for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785 + 0.39;
+        b += texture2D(tDiffuse, uv + vec2(cos(a), sin(a)) * px * (i < 4 ? 0.55 : 1.0)).rgb;
+      }
+      col = mix(col, b / 9.0, clamp(blurR / 1.5, 0.0, 1.0));
+    }
     // aberration chromatique (plus forte sur les bords et à grande vitesse)
     if (chroma > 0.0) {
       vec2 o = fromC * edge * chroma * (1.0 + speed * 3.0) * 4.0;
@@ -214,9 +282,14 @@ const CINEMA_FS = /* glsl */`
     col += vec3(0.75, 0.8, 1.0) * flash / max(exposure, 0.1) * 0.22;
     // verrière mouillée : un peu plus floue et plus claire
     // la vitre mouillée est un peu plus claire et voilée ; les bords des gouttes accrochent la lumière du ciel
-    float wetK = clamp(dr.z, 0.0, 1.0);
-    col = mix(col, col * 0.88 + vec3(0.022, 0.026, 0.03) / max(exposure, 0.1), wetK * 0.55);
-    col += vec3(0.6, 0.66, 0.72) * smoothstep(0.55, 1.0, wetK) * 0.05 / max(exposure, 0.1);
+    if (wet > 0.001) {
+      // vitre mouillée un peu voilée ; gouttes : bord sombre (réfraction totale), reflet du ciel en haut, éclat d'éclair
+      col = mix(col, col * 0.9 + vec3(0.02, 0.024, 0.03) / max(exposure, 0.1), wet * 0.35);
+      float g = length(dn) * 60.0;
+      col *= 1.0 - S(0.35, 1.0, g) * dropC * 0.45;
+      float hi = S(0.2, 0.9, dot(normalize(dn + 1e-6), vec2(0.35, 0.94))) * S(0.3, 0.9, g);
+      col += vec3(0.75, 0.8, 0.85) * hi * dropC * (0.09 + flash * 0.6) / max(exposure, 0.1);
+    }
     // étalonnage : couleurs un peu plus franches
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
     col = max(mix(vec3(lum), col, saturation), 0.0);
@@ -388,6 +461,7 @@ export class PostFX {
       sunUv: { value: new THREE.Vector2() }, sunOn: { value: 0 }, sunColor: { value: new THREE.Color() }, aspect: { value: 1 },
       rays: { value: 0 }, flare: { value: 0 }, chroma: { value: 0 }, speed: { value: 0 }, vignette: { value: ART.vignette },
       grain: { value: ART.grain }, saturation: { value: ART.saturation }, rain: { value: 0 }, flash: { value: 0 }, time: { value: 0 }, exposure: { value: 1 },
+      tDepth: { value: null }, camNF: { value: new THREE.Vector2(0.5, 30000) }, air: { value: 0 },
     });
     this.output = new OutputPass();
     this.smaa = new SMAAPass(1, 1);
@@ -447,6 +521,9 @@ export class PostFX {
     u.chroma.value = this.cfg.chroma ? ART.chromaStrength : 0;
     u.speed.value = this.cfg.motionFx ? (fx.speed || 0) : 0;
     u.rain.value = fx.rain || 0;
+    u.air.value = fx.air || 0;
+    u.tDepth.value = sp.sceneRT.depthTexture;
+    u.camNF.value.set(cam.near, cam.far);
     u.flash.value = fx.flash || 0;
     u.time.value = this.time;
     u.exposure.value = exposure;

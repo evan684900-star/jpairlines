@@ -656,7 +656,19 @@ function drawMap(cv, cx, cz, span, full) {
     if (span < 45000) for (const t of TOWNS) text('• ' + t.name, toX(t.x) - 4, toY(t.z) + 4, '#e8dcc0');
   }
   quests?.drawMap(ctx, toX, toY, full, span, text);
-  // repères posés par le joueur (clic sur la grande carte)
+  // repères posés par le joueur (clic sur la grande carte) ; le dernier posé est la destination : trait pointillé
+  // depuis l'avion, comme pour une quête
+  const dest = save.markers?.[save.markers.length - 1];
+  if (dest) {
+    ctx.strokeStyle = '#ff5a5a';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(toX(plane.pos.x), toY(plane.pos.z));
+    ctx.lineTo(toX(dest.x), toY(dest.z));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   for (const m of save.markers || []) {
     const x = toX(m.x), y = toY(m.z);
     if (x < -20 || y < -20 || x > W + 20 || y > W + 20) continue;
@@ -711,6 +723,15 @@ bigCanvas.addEventListener('wheel', (e) => {
   drawBigMap();
 }, { passive: false });
 const MAX_MARKERS = 30;
+// destination atteinte (à moins de 250 m) : le repère disparaît et le précédent devient la destination
+function checkMarkerReached() {
+  const m = save.markers?.[save.markers.length - 1];
+  if (!m || Math.hypot(m.x - plane.pos.x, m.z - plane.pos.z) > 250) return;
+  save.markers.pop();
+  persist();
+  toast(save.markers.length ? t('📍 Repère atteint ! Cap sur le suivant') : t('📍 Repère atteint !'));
+  beep(880, 0.2);
+}
 // clic gauche (sans glisser) : pose un repère ; clic sur un repère : le retire
 function mapClick(e) {
   const r = bigCanvas.getBoundingClientRect();
@@ -723,7 +744,7 @@ function mapClick(e) {
   });
   if (hit >= 0) { save.markers.splice(hit, 1); toast(t('Repère retiré')); }
   else if (save.markers.length >= MAX_MARKERS) { toast(t('{n} repères maximum : retires-en un (clic dessus)', { n: MAX_MARKERS })); return; }
-  else { save.markers.push({ x: Math.round(wx), z: Math.round(wz) }); toast(t('📍 Repère posé (clic dessus pour le retirer)')); }
+  else { save.markers.push({ x: Math.round(wx), z: Math.round(wz) }); toast(t('📍 Repère posé : le trait rouge t\'y guide (clic dessus pour le retirer)')); }
   persist();
   drawBigMap();
 }
@@ -1497,7 +1518,7 @@ function frame(now) {
       if (!$('bigmap').classList.contains('hidden')) drawBigMap();
     }
     placeTimer -= realDt;
-    if (placeTimer <= 0) { placeTimer = 1; updatePlace(); updateWeatherChip(); }
+    if (placeTimer <= 0) { placeTimer = 1; updatePlace(); updateWeatherChip(); checkMarkerReached(); }
 
     sound?.update(realDt, plane, inCockpit ? 'cockpit' : 'outside', camera.position.distanceTo(plane.pos), gfx.weatherState, paused);
   } else {
@@ -1537,6 +1558,7 @@ function frame(now) {
   gfx.render(rawDt, {
     speed: started ? THREE.MathUtils.clamp((plane.ias - 62) / 30, 0, 1) : 0,
     rain: inCockpit ? Math.min(1, gfx.weatherState.rain) : 0,
+    air: started ? THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1) : 0, // vent relatif sur le pare-brise
     flash: gfx.effects.flash,
   });
   fpsTimer -= rawDt;

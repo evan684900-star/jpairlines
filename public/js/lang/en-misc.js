@@ -430,4 +430,7 @@ export default {
   "{n} repères maximum : retires-en un (clic dessus)": "{n} markers maximum: remove one (click on it)",
   "📍 Repère posé (clic dessus pour le retirer)": "📍 Marker placed (click it to remove)",
   "Repères effacés": "Markers cleared",
+  "📍 Repère atteint ! Cap sur le suivant": "📍 Marker reached! On to the next one",
+  "📍 Repère atteint !": "📍 Marker reached!",
+  "📍 Repère posé : le trait rouge t'y guide (clic dessus pour le retirer)": "📍 Marker placed: the red line guides you (click it to remove)",
 };
