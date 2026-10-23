@@ -25,7 +25,8 @@ const OPEN = 1.9, ENTER = 1.8, CLOSE = 1.0, BLEND = 2.3;
 const DOOR_MAX = 1.75;
 const STRIDE = 1.5, CRUISE = 1.35; // m par cycle de marche (2 pas), vitesse de croisière (m/s)
 // gabarit du pilote
-const THIGH = 0.44, SHIN = 0.41, LEG = THIGH + SHIN, PELVIS_Y = 0.96, UPPER = 0.31, FORE = 0.29;
+// bras aux mesures du modèle pilote.glb (0,26 et 0,265 m) : la main du modèle arrive bien sur la poignée
+const THIGH = 0.44, SHIN = 0.41, LEG = THIGH + SHIN, PELVIS_Y = 0.96, UPPER = 0.26, FORE = 0.265;
 
 const DOWN = new THREE.Vector3(0, -1, 0), XAXIS = new THREE.Vector3(1, 0, 0);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _r = new THREE.Vector3();
@@ -194,6 +195,33 @@ class PilotSkin {
   }
   // position de la main gauche du modèle (la sacoche y est accrochée)
   leftHand(out) { return this.bones.LeftHand.getWorldPosition(out); }
+  // amène la main droite du modèle sur un point (poignée) : bras à deux segments, le coude garde son côté actuel
+  reachRight(target, w) {
+    if (!(w > 0.001)) return;
+    const B = this.bones, up = B.RightArm, fore = B.RightForeArm, hand = B.RightHand;
+    const S = up.getWorldPosition(new THREE.Vector3()), E = fore.getWorldPosition(new THREE.Vector3()), H = hand.getWorldPosition(new THREE.Vector3());
+    const a = S.distanceTo(E), b = E.distanceTo(H);
+    const T = H.clone().lerp(target, w);
+    const toT = T.clone().sub(S);
+    const d = THREE.MathUtils.clamp(toT.length(), Math.abs(a - b) + 1e-3, a + b - 1e-3);
+    toT.normalize();
+    // plan du bras : contient l'épaule, la cible et le coude actuel
+    const pole = E.clone().sub(S);
+    const bend = pole.sub(toT.clone().multiplyScalar(pole.dot(toT)));
+    if (bend.lengthSq() < 1e-8) bend.set(0, -1, 0).sub(toT.clone().multiplyScalar(-toT.y));
+    bend.normalize();
+    const x = (a * a - b * b + d * d) / (2 * d), y = Math.sqrt(Math.max(0, a * a - x * x));
+    const E2 = S.clone().addScaledVector(toT, x).addScaledVector(bend, y);
+    const aim = (bone, from, to) => {
+      const dir = to.clone().sub(from).normalize();
+      bone.getWorldQuaternion(_qc);
+      _ax.set(0, 1, 0).applyQuaternion(_qc);
+      _qb.setFromUnitVectors(_ax, dir);
+      this.setWorld(bone, _qb.multiply(_qc));
+    };
+    aim(up, S, E2);
+    aim(fore, E2, T);
+  }
 }
 
 // cycle de marche (ph en cycles, amp 0 = immobile, climb 0..1 = monte des marches)
@@ -514,6 +542,7 @@ export class Intro {
   // bras à deux segments vers une cible (cinématique inverse) ; se penche si la cible est trop loin
   reach(arm, target, w, lean = true) {
     if (w <= 0.001) return;
+    if (arm === this.pilot.userData.arms[0]) this.goal = { p: target.clone(), w }; // repris par le modèle 3D
     const { sh, el } = arm, sp = this.pilot.userData.spine;
     const toLocal = () => { sh.parent.updateWorldMatrix(true, false); return sh.parent.worldToLocal(_r.copy(target)).sub(sh.position); };
     let d = toLocal();
@@ -568,6 +597,7 @@ export class Intro {
     if (!this.active) return;
     if (anyPad && this.t > 0.4) { this.finish(); return; }
     dt = Math.min(dt, 1 / 20);
+    this.goal = null; // cible de la main pour cette image (posée par reach)
     this.t += dt;
     const t = this.t, p = this.pilot, U = p.userData, cam = this.ctx.camera, M = this.mesh;
     const { T1, T2, T3, T4, T5, cutA } = this.times;
@@ -656,6 +686,8 @@ export class Intro {
     this.hinge.rotation.y = t >= T4 ? 0 : doorAngle;
     if (this.skin && p.visible) {
       this.skin.update(p);
+      if (this.goal) this.skin.reachRight(this.goal.p, this.goal.w);
+      this.goal = null;
       // la sacoche suit la vraie main du modèle
       if (U.bag.visible) U.bag.position.copy(U.arms[1].hand.worldToLocal(this.skin.leftHand(_w1))).add(_w2.set(0, -0.03, 0));
     }
