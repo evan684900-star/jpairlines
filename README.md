@@ -215,8 +215,9 @@ pointillé (comme une quête) ; arrivé à moins de 250 m, il disparaît et le p
   pleut fort ou en vol), se rejoignent, glissent (vers le bas à l'arrêt, vers le haut et les côtés en vol) et sèchent.
   Pour chaque pixel, le jeu calcule le point de la vitre traversé par le regard : les gouttes restent collées au
   pare-brise quand on tourne la tête. Option : Paramètres → Effets visuels → « Gouttes de pluie sur le pare-brise ».
-- **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux bras en 3D fixés au pare-brise ; ce qu'ils balaient est vraiment
-  effacé, puis la pluie revient au rythme normal. Coupés, ils finissent leur balayage et se garent.
+- **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux bras en 3D fixés au pare-brise. Seule la raclette en caoutchouc
+  essuie (pas le bras ni le pied) ; en changeant de sens, elle lâche un fin cordon de gouttelettes, comme une vraie.
+  La pluie revient ensuite au rythme normal. Coupés, ils finissent leur balayage et se garent.
 
 ### Sons des moteurs
 
@@ -241,7 +242,8 @@ cachée : on voit devant soi et sur les côtés. Le regard est légèrement plon
 
 ### Cinématique de début de partie
 
-Après « Décoller », une cinématique d'environ 15 s, filmée comme au cinéma (bandes noires, vignettage, fondu
+Après « Décoller », une cinématique (pilote en 3D : `public/models/pilote.glb`, son squelette suit l'animation
+de la cinématique, la main va sur la poignée) d'environ 15 s, filmée comme au cinéma (bandes noires, vignettage, fondu
 d'ouverture, focales réelles, coupes franches, léger bougé de caméra). Le pilote, sacoche à la main, marche vers
 l'avion : un plan large fixe, puis une caméra épaule qui le suit. Gros plan sur sa main qui ouvre la porte. Il monte
 (escabeau ou aile), se baisse, entre, pose sa sacoche et s'assoit ; il referme la porte, qui claque. La caméra rejoint
