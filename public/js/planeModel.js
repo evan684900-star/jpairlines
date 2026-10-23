@@ -695,10 +695,10 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
       if (!canopy) {
         // montant de pare-brise (fin, incliné) puis montant arrière derrière l'épaule
         const roofY = E.y + 0.3, zTop = zP + 0.5;
-        cockpitSet.add(rod(new THREE.Vector3(xf * 0.97, glareY, zP - 0.3), new THREE.Vector3(x * 0.94, roofY, zTop), 0.028, frameM, 1.4));
+        cockpitSet.add(rod(new THREE.Vector3(xf * 1.02, glareY, zP - 0.3), new THREE.Vector3(x * 1.0, roofY, zTop), 0.016, frameM, 1.3));
         cockpitSet.add(rod(new THREE.Vector3(x, sillY, zBack - 0.05), new THREE.Vector3(x * 0.95, roofY, zBack - 0.1), 0.05, trim, 1.5));
         // montant de porte au milieu de la vitre latérale
-        cockpitSet.add(rod(new THREE.Vector3(x, sillY, E.z - 0.25), new THREE.Vector3(x * 0.95, roofY, E.z - 0.2), 0.022, frameM, 1.2));
+        cockpitSet.add(rod(new THREE.Vector3(x, sillY, E.z - 0.25), new THREE.Vector3(x * 0.98, roofY, E.z - 0.2), 0.016, frameM, 1.2));
       }
     }
     if (!canopy) {
@@ -996,7 +996,7 @@ function mountGlb(g, src, k) {
   }
   if (seat) {
     const b = box(seat);
-    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.04, b.max.z - 0.5); // tête droite, un peu en avant de l'appuie-tête : on voit mieux par le pare-brise
+    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.13, b.max.z - 0.42); // tête droite, un peu en avant de l'appuie-tête : on voit mieux par le pare-brise
   }
   const exh = at('Echappement');
   if (exh) out.exhaust = exh.add(new THREE.Vector3(0, -0.02, 0.1));
