@@ -592,7 +592,7 @@ function runTileQueue() {
     if (performance.now() - t0 > 12) break; // ne pas ralentir le jeu
   }
   if (!$('bigmap').classList.contains('hidden')) drawBigMap();
-  if (tileQueue.size) tileJob = requestAnimationFrame(runTileQueue);
+  if (tileQueue.size && !tileJob) tileJob = requestAnimationFrame(runTileQueue); // drawBigMap a pu déjà programmé la suite
 }
 // dessine les tuiles utiles pour une vue (coarse d'abord, puis le niveau voulu par-dessus)
 function drawTiles(ctx, cx, cz, span, W, toX, toY) {
