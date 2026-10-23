@@ -201,7 +201,8 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 La grande carte (`M`, molette pour zoomer) calcule des tuiles de plus en plus fines en zoomant (jusqu'à 2,4 m par pixel),
 avec relief ombré, courbes de niveau tous les 50 m et rivages ; la mini-carte en profite aussi. **Clic gauche** (sans
 glisser) : pose un repère 📍 avec sa distance ; clic sur un repère : le retire ; « Effacer les repères » les retire tous
-(30 maximum, sauvegardés avec la progression).
+(30 maximum, sauvegardés avec la progression). Le dernier repère posé est relié à l'avion par un trait rouge
+pointillé (comme une quête) ; arrivé à moins de 250 m, il disparaît et le précédent prend le relais.
 
 ### Pluie, orage et vent
 
@@ -209,7 +210,16 @@ glisser) : pose un repère 📍 avec sa distance ; clic sur un repère : le reti
 - Éclairs et tonnerre visibles aussi quand il pleut (plus rarement qu'en orage).
 - La pluie et l'orage renforcent le vent (14 et 22 m/s) avec des rafales : arbres, vagues et sifflement suivent, et en vol
   l'avion est secoué (rafales verticales, roulis, tangage ; ×0,4 en facile, ×0,8 en normal, ×1,2 en réaliste).
-- En vue cockpit, des gouttes font loupe sur le pare-brise, certaines glissent en laissant une traînée.
+- En vue cockpit, le pare-brise se couvre de pluie : gouttes posées qui apparaissent et sèchent, gouttes qui glissent en
+  zigzag avec une traînée, film d'eau qui floute la vitre (les traînées le nettoient), reflets du ciel et des éclairs.
+  En vol, le vent relatif pousse l'eau vers le haut et sur les côtés. Les gouttes ne s'affichent que sur la vitre,
+  pas sur la planche de bord.
+
+### Vue cockpit
+
+Chaque avion a un habitacle fait pour être vu depuis le siège du pilote : montants de pare-brise fins, casquette,
+rebords de fenêtre, panneaux de porte, plafond et compas (verrière dégagée sur le Faucon). La carrosserie extérieure est
+cachée : on voit devant soi et sur les côtés. Le regard est légèrement plongeant, la piste et l'horizon au centre.
 
 ### Cinématique de début de partie
 
