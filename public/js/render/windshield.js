@@ -58,14 +58,14 @@ const SIM_FS = /* glsl */`
     float hu = texture2D(tPrev, vUv - dir * texel * speed).r;
     float out_ = max(h - T, 0.0) * k;
     float in_ = max(hu - T, 0.0) * k;
-    h += in_ * 0.93 - out_;                        // la goutte qui glisse laisse un peu d'eau derrière elle
+    h += in_ * 0.86 - out_;                        // la goutte qui glisse laisse un peu d'eau derrière elle
     // un peu de tension de surface : l'eau s'étale légèrement vers ses voisins plus pleins
     float hn = (texture2D(tPrev, vUv + vec2(texel.x, 0.0)).r + texture2D(tPrev, vUv - vec2(texel.x, 0.0)).r
               + texture2D(tPrev, vUv + vec2(0.0, texel.y)).r + texture2D(tPrev, vUv - vec2(0.0, texel.y)).r) * 0.25;
     h = mix(h, max(h, hn), 0.04 * step(0.08, hn));
     h += spawn(vUv);
     // séchage (rapide en vol, lent à l'arrêt ; plus vite quand il ne pleut plus)
-    h = max(0.0, h - dt * (0.004 + air * 0.03 + (1.0 - rain) * 0.03));
+    h = max(0.0, h - dt * (0.006 + h * 0.06 + air * 0.03 + (1.0 - rain) * 0.03));
     film = clamp(film + dt * (rain * 0.025 - 0.012 - air * 0.03), 0.0, 0.45);
     // essuie-glaces : tout ce que le balai a parcouru depuis la dernière fois est effacé
     if (wiping > 0.5) {
@@ -85,7 +85,7 @@ const SIM_FS = /* glsl */`
       }
     }
     // bas de la vitre : l'eau s'écoule par le joint
-    h *= mix(0.6, 1.0, smoothstep(0.0, 0.025, vUv.y));
+    h *= mix(0.0, 1.0, smoothstep(0.0, 0.06, vUv.y));
     gl_FragColor = vec4(min(h, 1.5), film, 0.0, 1.0);
   }
 `;
