@@ -25,6 +25,7 @@ import { Hangar } from './hangar.js';
 import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
 import { Intro } from './intro.js';
+import { WindshieldRain } from './render/windshield.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
 import { stickerThumb } from './stickers.js';
@@ -57,6 +58,7 @@ const { renderer, scene, camera } = gfx;
 
 
 const terrain = new Terrain(scene);
+const wsRain = new WindshieldRain(renderer); // pluie et essuie-glaces sur le pare-brise de l'avion du joueur
 gfx.attachTerrain(terrain);
 const decor = new Decor(scene);
 let world = null;
@@ -1506,6 +1508,12 @@ function frame(now) {
     if (planeMesh.userData.cabin) planeMesh.userData.cabin.visible = camera.position.distanceTo(planeMesh.position) < 35;
     animatePlaneMesh(planeMesh, { ...plane.ctrl, rpm: plane.rpm, gearPos: plane.gearPos, flapPos: plane.flapPos, lights: plane.lights, night: gfx.atmo.night }, realDt, wallT);
 
+    // pluie sur le pare-brise : simulée même hors du cockpit (la vitre est déjà mouillée quand on y entre)
+    wsRain.attach(planeMesh);
+    wsRain.update(realDt, {
+      rain: Math.min(1, gfx.weatherState?.rain ?? 0), air: THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1),
+      on: plane.wipers && !plane.crashed, enabled: gfx.cfg.post && gfx.cfg.raindrops !== false,
+    });
     updatePrompt();
     tutorial.update(realDt);
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });
@@ -1559,8 +1567,7 @@ function frame(now) {
   gfx.render(rawDt, {
     speed: started ? THREE.MathUtils.clamp((plane.ias - 62) / 30, 0, 1) : 0,
     rain: inCockpit ? Math.min(1, gfx.weatherState.rain) : 0,
-    air: started ? THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1) : 0, // vent relatif sur le pare-brise
-    wipers: started && plane.wipers && !plane.crashed,
+    glass: started && inCockpit && !intro.active ? wsRain.worldGlass() : null, // eau sur le pare-brise
     flash: gfx.effects.flash,
   });
   fpsTimer -= rawDt;
@@ -1722,4 +1729,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };

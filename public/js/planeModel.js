@@ -734,6 +734,18 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     cockpitSet.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
   }
   g.add(cockpitSet);
+  // pare-brise (pour la pluie et les essuie-glaces) : du bas, devant la planche de bord, jusqu'au toit ou à la bulle
+  let windshield = null;
+  {
+    const E = new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1);
+    const zP = CB.panel.z, glareY = CB.panel.y + 0.235;
+    const half = THREE.MathUtils.clamp(fuseWidthAt(MD.fuse, zP) * 0.9, 0.3, 0.7);
+    const bot = new THREE.Vector3(0, glareY, zP - 0.3);
+    const top = MD.canopy
+      ? new THREE.Vector3(0, MD.canopy.y + MD.canopy.h * 0.75, MD.canopy.z0 + (MD.canopy.z1 - MD.canopy.z0) * 0.3)
+      : new THREE.Vector3(0, E.y + 0.3, zP + 0.5);
+    windshield = { C: bot.clone().add(top).multiplyScalar(0.5), U: new THREE.Vector3(half, 0, 0), V: top.clone().sub(bot).multiplyScalar(0.5) };
+  }
 
   // ----- feux : lampe + halo (visible de loin, brille avec le bloom) -----
   const light = (c, x, y, z, r = 0.07, halo = 0.7) => {
@@ -811,6 +823,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     elevator: glbInfo?.elevator ?? elevator, rudder: glbInfo?.rudder ?? rudder,
     fuse, interior, pilot, panel, yokes: glbInfo?.yokes ?? yokes, decals, cabin: glbInfo?.cabin ?? null,
     shell: glbInfo ? null : shell, cockpitSet: glbInfo ? null : cockpitSet,
+    windshield: glbInfo?.windshield ?? windshield,
     // points utiles aux effets et à la caméra (repère de l'avion)
     eye: glbInfo?.eye ?? new THREE.Vector3(sx, CB.seatY + 0.83, sz - 0.1),
     exhaust: glbInfo?.exhaust ?? new THREE.Vector3(ex[0], ex[1] - 0.02, ex[2] + 0.12),
@@ -1008,6 +1021,13 @@ function mountGlb(g, src, k) {
   if (k.pilot && seat) {
     const b = box(seat);
     k.pilot.position.set(0, b.min.y + 0.12 - (-0.12), (b.min.z + b.max.z) / 2 + 0.95 - 0.03);
+  }
+  const shield = find('Pare_Brise');
+  if (shield) {
+    // vitre inclinée : bas vers l'avant (z min), haut vers l'arrière (z max)
+    const b = box(shield);
+    const bot = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, b.min.z), top = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y, b.max.z);
+    out.windshield = { C: bot.clone().add(top).multiplyScalar(0.5), U: new THREE.Vector3((b.max.x - b.min.x) / 2, 0, 0), V: top.sub(bot).multiplyScalar(0.5) };
   }
   if (seat) {
     const b = box(seat);

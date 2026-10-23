@@ -126,131 +126,51 @@ const CINEMA_FS = /* glsl */`
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   vec2 hash2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
 
-  // ----- Gouttes de pluie sur le pare-brise -----
-  // D'après « Heartfelt » (Martijn Steinrucken) : gouttes posées qui apparaissent et sèchent, gouttes qui glissent en
-  // zigzag en laissant une traînée de gouttelettes, film d'eau qui floute la vitre (les traînées le nettoient).
-  // En vol, le vent relatif pousse l'eau vers le haut et vers les côtés, de plus en plus vite.
-  uniform sampler2D tDepth;
+  // ----- Pluie sur le pare-brise -----
+  // L'eau est simulée sur la vitre (windshield.js). Ici, on retrouve pour chaque pixel le point du pare-brise que
+  // traverse le regard (intersection rayon / plan de la vitre) et on y lit l'eau : les gouttes restent collées à la
+  // vitre quand la tête bouge. Les gouttes font loupe (réfraction), leurs bords sont sombres, le ciel s'y reflète.
+  uniform sampler2D tDepth, tWet;
   uniform vec2 camNF;
-  uniform float air;
-
+  uniform mat4 projInv;
+  uniform vec3 wsC, wsU, wsV; // pare-brise dans le repère de la caméra : centre, demi-largeur, demi-hauteur
+  uniform float wsOn;
   float S(float a, float b, float t) { return smoothstep(a, b, t); }
-  float N21(vec2 p) { p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
-  vec3 N13(float p) {
-    vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.11369, 0.13787));
-    p3 += dot(p3, p3.yzx + 19.19);
-    return fract(vec3((p3.x + p3.y) * p3.z, (p3.x + p3.z) * p3.y, (p3.y + p3.z) * p3.x));
-  }
-  float saw(float b, float t) { return S(0.0, b, t) * S(1.0, b, t); }
-  // gouttes qui glissent : (masque, traînée)
-  vec2 dropLayer(vec2 uv, float t) {
-    vec2 UV = uv;
-    uv.y += t * 0.75;
-    vec2 a = vec2(6.0, 1.0);
-    vec2 grid = a * 2.0;
-    vec2 id = floor(uv * grid);
-    uv.y += N21(vec2(id.x, 0.0));
-    id = floor(uv * grid);
-    vec3 n = N13(id.x * 35.2 + id.y * 2376.1);
-    vec2 st = fract(uv * grid) - vec2(0.5, 0.0);
-    float x = n.x - 0.5;
-    float y = UV.y * 20.0;
-    float wiggle = sin(y + sin(y));
-    x += wiggle * (0.5 - abs(x)) * (n.z - 0.5);
-    x *= 0.7;
-    float ti = fract(t + n.z);
-    y = (saw(0.85, ti) - 0.5) * 0.9 + 0.5;
-    vec2 p = vec2(x, y);
-    float d = length((st - p) * a.yx);
-    float mainDrop = S(0.4, 0.0, d);
-    float r = sqrt(S(1.0, y, st.y));
-    float cd = abs(st.x - x);
-    float trail = S(0.23 * r, 0.15 * r * r, cd);
-    float trailFront = S(-0.02, 0.02, st.y - y);
-    trail *= trailFront * r * r;
-    y = fract(UV.y * 10.0) + (st.y - 0.5);
-    float droplets = S(0.3, 0.0, length(st - vec2(x, y)));
-    return vec2(mainDrop + droplets * r * trailFront, trail);
-  }
-  // gouttes posées : apparaissent, restent, puis sèchent
-  float staticDrops(vec2 uv, float t) {
-    uv *= 40.0;
-    vec2 id = floor(uv);
-    uv = fract(uv) - 0.5;
-    vec3 n = N13(id.x * 107.45 + id.y * 3543.654);
-    vec2 p = (n.xy - 0.5) * 0.7;
-    float d = length(uv - p);
-    float fade = saw(0.025, fract(t + n.z));
-    return S(0.3, 0.0, d) * fract(n.z * 10.0) * fade;
-  }
-  // (épaisseur d'eau, traînée)
-  vec2 rainDrops(vec2 uv, float t, float l0, float l1, float l2) {
-    float s = staticDrops(uv, t) * l0;
-    vec2 m1 = dropLayer(uv, t) * l1;
-    vec2 m2 = dropLayer(uv * 1.85, t) * l2;
-    float c = S(0.3, 1.0, s + m1.x + m2.x);
-    return vec2(c, max(m1.y * l0, m2.y * l1));
-  }
-  uniform float wipers, wiperT; // essuie-glaces : 0..1 (en marche), phase du balayage (radians)
-  // Deux essuie-glaces pivotant au bas du pare-brise, qui balaient en même temps (comme sur un bimoteur).
-  // Retourne (propreté 0..1 laissée par le dernier passage, lame 0..1 à dessiner ici)
-  const float W_MID = 1.5708, W_AMP = 1.2, W_LEN = 0.78;
-  vec2 wiperAt(vec2 p, vec2 pivot) {
-    vec2 d = p - pivot;
-    float r = length(d);
-    if (r > W_LEN || d.y < -0.02) return vec2(0.0);
-    float th = atan(d.y, d.x);
-    float x = clamp((th - W_MID) / W_AMP, -1.0, 1.0);
-    // le balai passe à l'angle th deux fois par aller-retour : temps écoulé depuis le dernier passage
-    float ph = asin(x);
-    float d1 = mod(wiperT - ph, 6.2832), d2 = mod(wiperT - (3.1416 - ph), 6.2832);
-    float since = min(d1, d2) / 2.6;                       // ≈ 2,4 s par aller-retour
-    float clean = exp(-since * 0.35) * S(W_LEN, W_LEN - 0.05, r) * S(0.03, 0.08, r);
-    // lame : bras fin vers le pivot, raclette plus épaisse vers le bout
-    float a = W_MID + W_AMP * sin(wiperT);
-    vec2 dir = vec2(cos(a), sin(a));
-    float along = dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x)));
-    float wid = mix(0.006, 0.011, S(0.2, 0.35, along));
-    float blade = S(wid, wid * 0.4, off) * S(0.0, 0.02, along) * S(W_LEN, W_LEN - 0.01, along);
-    return vec2(clean, blade);
-  }
 
   void main() {
     vec2 uv = vUv;
-    // pluie sur la vitre : seulement là où l'on voit dehors à travers (pas sur la planche de bord, à moins d'1,5 m)
-    float wet = 0.0, dropC = 0.0, blurR = 0.0, bladeK = 0.0;
+    // pluie sur la vitre : point du pare-brise traversé par le regard
+    float wet = 0.0, dropC = 0.0, blurR = 0.0;
     vec2 dn = vec2(0.0);
-    if (rain > 0.01) {
-      float z = texture2D(tDepth, vUv).x;
-      float vz = (camNF.x * camNF.y) / ((camNF.y - camNF.x) * z - camNF.y);
-      wet = S(1.3, 2.6, -vz) * clamp(rain, 0.0, 1.0);
-      if (wet > 0.001) {
-        // vent relatif : l'eau part vers le haut et s'écarte vers les bords
-        vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
-        float ang = 3.14159 * S(0.15, 0.7, air) + q.x * 1.1 * air;
-        float ca = cos(ang), sa = sin(ang);
-        q = mat2(ca, sa, -sa, ca) * q;
-        float t = time * 0.2 * (1.0 + air * 5.0);
-        float rk = clamp(rain, 0.0, 1.0);
-        float l0 = S(-0.5, 1.0, rk) * 2.0 * (1.0 - 0.75 * air); // les gouttes posées sont vite soufflées
-        float l1 = S(0.25, 0.75, rk), l2 = S(0.0, 0.5, rk);
-        vec2 c = rainDrops(q, t, l0, l1, l2);
-        vec2 e = vec2(0.001, 0.0);
-        float cx = rainDrops(q + e, t, l0, l1, l2).x;
-        float cy = rainDrops(q + e.yx, t, l0, l1, l2).x;
-        dn = mat2(ca, -sa, sa, ca) * vec2(cx - c.x, cy - c.x); // normale ramenée dans le repère de l'écran
-        dropC = c.x * wet;
-        // flou du film d'eau : fort sur la vitre, nul dans les gouttes et dans les traînées
-        blurR = mix(3.5 - c.y * 3.5, 0.0, S(0.1, 0.2, c.x)) * wet;
-        // essuie-glaces : la zone balayée est nette, puis la pluie revient peu à peu
-        if (wipers > 0.01) {
-          vec2 p = (vUv - vec2(0.5, 0.0)) * vec2(aspect, 1.0);
-          vec2 wl = wiperAt(p, vec2(-0.27 * aspect, 0.36)), wr = wiperAt(p, vec2(0.2 * aspect, 0.36));
-          float clean = max(wl.x, wr.x) * wipers;
-          dn *= 1.0 - clean; dropC *= 1.0 - clean; blurR *= 1.0 - clean;
-          bladeK = max(wl.y, wr.y) * wipers * S(0.5, 1.0, wet / max(rain, 0.01));
+    if (wsOn > 0.5) {
+      vec4 r4 = projInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+      vec3 ray = normalize(r4.xyz / r4.w);
+      vec3 N = cross(wsU, wsV);
+      float den = dot(ray, N);
+      if (abs(den) > 1e-5) {
+        float tt = dot(wsC, N) / den;
+        vec3 P = ray * tt;
+        vec3 d = P - wsC;
+        vec2 g = vec2(dot(d, wsU) / dot(wsU, wsU), dot(d, wsV) / dot(wsV, wsV)); // -1..1 sur la vitre
+        // la vitre doit être devant ce qu'on voit (pas derrière la planche de bord)
+        float z = texture2D(tDepth, vUv).x;
+        float vz = (camNF.x * camNF.y) / ((camNF.y - camNF.x) * z - camNF.y);
+        float inside = S(1.0, 0.96, abs(g.x)) * S(1.0, 0.96, abs(g.y)) * step(0.0, tt) * step(vz, P.z + 0.02);
+        if (inside > 0.001) {
+          vec2 wuv = g * 0.5 + 0.5;
+          vec2 tx = vec2(1.0 / 512.0, 1.0 / 256.0);
+          vec4 w0 = texture2D(tWet, wuv);
+          float hx = texture2D(tWet, wuv + vec2(tx.x, 0.0)).r - texture2D(tWet, wuv - vec2(tx.x, 0.0)).r;
+          float hy = texture2D(tWet, wuv + vec2(0.0, tx.y)).r - texture2D(tWet, wuv - vec2(0.0, tx.y)).r;
+          float h = w0.r;
+          float drop = S(0.04, 0.16, h);
+          // pente de la surface de l'eau ramenée dans l'écran (le haut de la vitre est vers le haut de l'écran)
+          dn = vec2(hx, hy) * drop * 0.5;
+          wet = inside * clamp(w0.g * 1.5 + drop, 0.0, 1.0);
+          dropC = drop * inside;
+          blurR = w0.g * 2.5 * (1.0 - drop) * inside;
+          uv -= dn * inside * 0.35;
         }
-        uv += dn * wet;
       }
     }
     vec2 fromC = uv - 0.5;
@@ -317,14 +237,13 @@ const CINEMA_FS = /* glsl */`
     if (wet > 0.001) {
       // vitre mouillée un peu voilée ; gouttes : bord sombre (réfraction totale), reflet du ciel en haut, éclat d'éclair
       col = mix(col, col * 0.92 + vec3(0.02, 0.024, 0.03) / max(exposure, 0.1), wet * 0.25);
-      float g = length(dn) * 60.0;
+      float g = length(dn) * 30.0;
       col *= 1.0 - S(0.5, 1.0, g) * dropC * 0.16;
       float hi = S(0.2, 0.9, dot(normalize(dn + 1e-6), vec2(0.35, 0.94))) * S(0.3, 0.9, g);
       col += vec3(0.8, 0.85, 0.9) * hi * dropC * (0.14 + flash * 0.6) / max(exposure, 0.1);
       // cœur de la goutte un peu plus lumineux (la lumière du ciel s'y concentre)
       col *= 1.0 + dropC * 0.06;
-      // lame d'essuie-glace (caoutchouc noir, bras métal sombre)
-      col = mix(col, vec3(0.012, 0.013, 0.015) / max(exposure, 0.1), bladeK * 0.95);
+
     }
     // étalonnage : couleurs un peu plus franches
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
@@ -497,7 +416,8 @@ export class PostFX {
       sunUv: { value: new THREE.Vector2() }, sunOn: { value: 0 }, sunColor: { value: new THREE.Color() }, aspect: { value: 1 },
       rays: { value: 0 }, flare: { value: 0 }, chroma: { value: 0 }, speed: { value: 0 }, vignette: { value: ART.vignette },
       grain: { value: ART.grain }, saturation: { value: ART.saturation }, rain: { value: 0 }, flash: { value: 0 }, time: { value: 0 }, exposure: { value: 1 },
-      tDepth: { value: null }, camNF: { value: new THREE.Vector2(0.5, 30000) }, air: { value: 0 }, wipers: { value: 0 }, wiperT: { value: 0 },
+      tDepth: { value: null }, camNF: { value: new THREE.Vector2(0.5, 30000) }, tWet: { value: null }, projInv: { value: new THREE.Matrix4() },
+      wsC: { value: new THREE.Vector3() }, wsU: { value: new THREE.Vector3() }, wsV: { value: new THREE.Vector3() }, wsOn: { value: 0 },
     });
     this.output = new OutputPass();
     this.smaa = new SMAAPass(1, 1);
@@ -556,15 +476,18 @@ export class PostFX {
     u.flare.value = this.cfg.godrays ? ART.flareStrength : 0;
     u.chroma.value = this.cfg.chroma ? ART.chromaStrength : 0;
     u.speed.value = this.cfg.motionFx ? (fx.speed || 0) : 0;
-    u.rain.value = this.cfg.raindrops === false ? 0 : fx.rain || 0;
-    u.air.value = fx.air || 0;
-    // essuie-glaces : démarrent et s'arrêtent en douceur, la lame finit son balayage avant de se garer
-    this.wipe = this.wipe || { on: 0, t: -1.5708 };
-    const wantOn = fx.wipers ? 1 : 0;
-    if (wantOn || Math.sin(this.wipe.t) > -0.995) this.wipe.t += dt * 2.6; // ne s'arrête qu'en position garée
-    this.wipe.on += (Math.max(wantOn, Math.sin(this.wipe.t) > -0.995 ? 1 : 0) - this.wipe.on) * Math.min(1, dt * 6);
-    u.wipers.value = this.wipe.on;
-    u.wiperT.value = this.wipe.t % 62.832;
+    u.rain.value = 0;
+    // pare-brise (repère du monde) → repère de la caméra
+    const gl = fx.glass;
+    u.wsOn.value = gl && this.cfg.raindrops !== false ? 1 : 0;
+    if (gl) {
+      const vm = cam.matrixWorldInverse;
+      u.wsC.value.copy(gl.C).applyMatrix4(vm);
+      u.wsU.value.copy(gl.U).transformDirection(vm).multiplyScalar(gl.U.length());
+      u.wsV.value.copy(gl.V).transformDirection(vm).multiplyScalar(gl.V.length());
+      u.tWet.value = gl.tex;
+    }
+    u.projInv.value.copy(cam.projectionMatrixInverse);
     u.tDepth.value = sp.sceneRT.depthTexture;
     u.camNF.value.set(cam.near, cam.far);
     u.flash.value = fx.flash || 0;
