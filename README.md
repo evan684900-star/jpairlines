@@ -196,6 +196,21 @@ Réservoir de 160 L pour le Cub-1 (de 80 L pour l'ULM à 900 L de kérosène pou
 (1 ₣ le litre ; sans argent, l'aéroport offre du carburant de secours jusqu'à 40 L). La consommation est accélérée ×4 par défaut
 (≈ 50 min plein gaz, ≈ 200 km en croisière) ; on peut la passer en réaliste ou la désactiver dans les paramètres.
 
+### Carte détaillée et repères
+
+La grande carte (`M`, molette pour zoomer) calcule des tuiles de plus en plus fines en zoomant (jusqu'à 2,4 m par pixel),
+avec relief ombré, courbes de niveau tous les 50 m et rivages ; la mini-carte en profite aussi. **Clic gauche** (sans
+glisser) : pose un repère 📍 avec sa distance ; clic sur un repère : le retire ; « Effacer les repères » les retire tous
+(30 maximum, sauvegardés avec la progression).
+
+### Pluie, orage et vent
+
+- Son de pluie (`public/sounds/pluie.mp3`) en boucle : fort dehors, étouffé dans le cockpit.
+- Éclairs et tonnerre visibles aussi quand il pleut (plus rarement qu'en orage).
+- La pluie et l'orage renforcent le vent (14 et 22 m/s) avec des rafales : arbres, vagues et sifflement suivent, et en vol
+  l'avion est secoué (rafales verticales, roulis, tangage ; ×0,4 en facile, ×0,8 en normal, ×1,2 en réaliste).
+- En vue cockpit, des gouttes font loupe sur le pare-brise, certaines glissent en laissant une traînée.
+
 ### Cinématique de début de partie
 
 Après « Décoller », une cinématique d'environ 15 s, filmée comme au cinéma (bandes noires, vignettage, fondu
