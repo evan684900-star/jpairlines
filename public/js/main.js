@@ -561,11 +561,14 @@ const tiles = new Map(); // 'niveau/tx/tz' → canvas
 const tileQueue = new Map(); // clé → { lv, tx, tz }
 let tileJob = 0, tileFocus = [0, 0];
 const MAX_TILES = 500;
-function tileFor(lv, tx, tz, wantBuild) {
+function tileFor(lv, tx, tz, owner, wanted) {
   const key = `${lv}/${tx}/${tz}`;
   const c = tiles.get(key);
   if (c) { tiles.delete(key); tiles.set(key, c); return c; } // le plus récemment utilisé passe en dernier
-  if (wantBuild && !tileQueue.has(key)) tileQueue.set(key, { lv, tx, tz });
+  if (wanted) {
+    wanted.add(key);
+    if (!tileQueue.has(key)) tileQueue.set(key, { lv, tx, tz, owner });
+  }
   return null;
 }
 function runTileQueue() {
@@ -595,12 +598,14 @@ function runTileQueue() {
   if (tileQueue.size && !tileJob) tileJob = requestAnimationFrame(runTileQueue); // drawBigMap a pu déjà programmé la suite
 }
 // dessine les tuiles utiles pour une vue (coarse d'abord, puis le niveau voulu par-dessus)
-function drawTiles(ctx, cx, cz, span, W, toX, toY) {
+function drawTiles(ctx, cx, cz, span, W, toX, toY, owner) {
   const need = span / W; // mètres par pixel d'écran
-  let top = -1;
-  TILE_SIZES.forEach((sz, lv) => { if (sz / TILE_PX <= need * 1.5) top = lv; });
-  if (top < 0 && need < TILE_SIZES[TILE_SIZES.length - 1] / TILE_PX) top = TILE_SIZES.length - 1;
-  if (top < 0) return;
+  // niveau le plus grossier qui reste assez net (au plus 2,2 fois plus flou que l'écran) ; sinon le plus fin
+  let top = TILE_SIZES.findIndex((sz) => sz / TILE_PX <= need * 2.2);
+  if (top < 0) top = TILE_SIZES.length - 1;
+  const wanted = new Set();
+  // la carte de base (156 m par pixel) suffit tant qu'on est dézoomé
+  if (top === 0) { for (const [k, q] of tileQueue) if (q.owner === owner) tileQueue.delete(k); return; }
   tileFocus = [cx, cz];
   ctx.imageSmoothingQuality = 'high';
   for (let lv = Math.max(0, top - 1); lv <= top; lv++) {
@@ -609,11 +614,13 @@ function drawTiles(ctx, cx, cz, span, W, toX, toY) {
     const tz0 = Math.max(0, Math.floor((cz - half + HALF) / sz)), tz1 = Math.min(Math.ceil(WORLD.size / sz) - 1, Math.floor((cz + half + HALF) / sz));
     for (let tz = tz0; tz <= tz1; tz++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        const c = tileFor(lv, tx, tz, lv === top);
+        const c = tileFor(lv, tx, tz, owner, lv === top ? wanted : null);
         if (c) ctx.drawImage(c, toX(-HALF + tx * sz), toY(-HALF + tz * sz), sz * (W / span) + 0.6, sz * (W / span) + 0.6);
       }
     }
   }
+  // les tuiles qui ne sont plus à l'écran n'ont plus besoin d'être calculées
+  for (const [k, q] of tileQueue) if (q.owner === owner && !wanted.has(k)) tileQueue.delete(k);
   if (tileQueue.size && !tileJob) tileJob = requestAnimationFrame(runTileQueue);
 }
 
@@ -627,7 +634,7 @@ function drawMap(cv, cx, cz, span, full) {
   ctx.fillRect(0, 0, W, W);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(mapImg, toX(-HALF), toY(-HALF), WORLD.size * s, WORLD.size * s);
-  drawTiles(ctx, cx, cz, span, W, toX, toY);
+  drawTiles(ctx, cx, cz, span, W, toX, toY, full ? 'big' : 'mini');
 
   ctx.font = `bold ${full ? 14 : 11}px system-ui`;
   ctx.lineWidth = 3;
