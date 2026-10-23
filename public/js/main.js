@@ -1698,4 +1698,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
