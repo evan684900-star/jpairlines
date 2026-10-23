@@ -80,7 +80,7 @@ const CUB = {
       { p: V3(0, -0.72, 1.0), kind: 'belly' },
     ],
   },
-  sound: { kind: 'piston', base: 9, range: 81 },
+  sound: { kind: 'piston', base: 9, range: 81, cyl: 4, blades: 2, pipe: 130 }, // 4 cylindres à plat, 160 ch
   model: {
     fuse: CUB_FUSE,
     glass: {
@@ -133,7 +133,7 @@ const MOUSTIQUE = {
     tail: [0.1, 3.45], bellies: [[-0.5, -1.3], [-0.3, 0.3]],
   }),
   cg: V3(0, -0.1, -0.9),
-  sound: { kind: 'piston', base: 14, range: 105, rough: 0.6 },
+  sound: { kind: 'piston', base: 14, range: 105, rough: 0.6, cyl: 4, blades: 3, gear: 0.41, pipe: 210 }, // Rotax : tourne vite, réducteur
   model: {
     fuse: [
       [-2.62, 0.22, 0.22, 0.0], [-2.5, 0.36, 0.34, 0.02], [-2.15, 0.46, 0.46, 0.06], [-1.6, 0.55, 0.6, 0.16],
@@ -193,7 +193,7 @@ const FAUCON = {
     tail: [-0.05, 3.55], bellies: [[-0.55, -1.4], [-0.45, 0.6]],
   }),
   cg: V3(0, -0.05, -1.0),
-  sound: { kind: 'piston', base: 7, range: 70, rough: 1.3, loud: 1.3 },
+  sound: { kind: 'piston', base: 7, range: 70, rough: 1.3, loud: 1.3, cyl: 6, blades: 3, pipe: 100 }, // 6 cylindres de voltige
   model: {
     fuse: [
       [-3.42, 0.2, 0.2, 0.05], [-3.3, 0.38, 0.38, 0.05], [-3.0, 0.48, 0.48, 0.06], [-2.3, 0.52, 0.56, 0.08],
@@ -247,7 +247,7 @@ const MISTRAL = {
     tail: [0.05, 4.5], bellies: [[-0.7, -2.0], [-0.55, 0.5]],
   }),
   cg: V3(0, -0.2, -1.0),
-  sound: { kind: 'twin', base: 8, range: 76 },
+  sound: { kind: 'twin', base: 8, range: 76, cyl: 6, blades: 3, pipe: 115 },
   model: {
     fuse: [
       [-4.65, 0.12, 0.12, -0.12], [-4.4, 0.3, 0.28, -0.1], [-3.9, 0.46, 0.42, -0.06], [-3.2, 0.58, 0.56, 0.02],
@@ -307,7 +307,7 @@ const ALBATROS = {
     extraTails: [[-1.3, -1.85, 3.0], [1.3, -1.85, 3.0]],
   }),
   cg: V3(0, -0.2, -1.2),
-  sound: { kind: 'piston', base: 8, range: 74, rough: 1.1 },
+  sound: { kind: 'piston', base: 8, range: 74, rough: 1.1, cyl: 9, blades: 3, pipe: 88 }, // moteur en étoile : grondement rauque
   model: {
     fuse: CUB_FUSE.map(([z, w, h, y]) => [z, w * 1.04, h * 1.04, y]),
     glass: {

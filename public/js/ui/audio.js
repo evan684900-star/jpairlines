@@ -81,6 +81,22 @@ export class SoundEngine {
     this.jetRoar = this.noise('bandpass', 400, 0.5, this.bus.engine);
     this.jetRumble = this.noise('lowpass', 120, 0.7, this.bus.engine);
 
+    // ----- moteur réaliste (AudioWorklet : explosions des cylindres, pot d'échappement, hélice, turbine) -----
+    // Tant qu'il n'est pas chargé (ou si le navigateur ne le permet pas), les oscillateurs ci-dessus servent de secours.
+    this.engNode = null;
+    ctx.audioWorklet?.addModule('js/ui/engine-worklet.js').then(() => {
+      const n = new AudioWorkletNode(ctx, 'jp-engine', { numberOfInputs: 0, outputChannelCount: [2] });
+      // cockpit : la cabine étouffe les aigus ; dehors : le son s'assourdit avec la distance
+      this.engMuffle = ctx.createBiquadFilter();
+      this.engMuffle.type = 'lowpass'; this.engMuffle.frequency.value = 6000; this.engMuffle.Q.value = 0.5;
+      // un peu de compression pour que les explosions claquent sans saturer
+      const comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -16; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.12;
+      n.connect(this.engMuffle).connect(comp).connect(this.bus.engine);
+      this.engNode = n;
+      this.engCfg = '';
+    }).catch(() => { /* garde le moteur de secours */ });
+
     // ----- démarreur -----
     this.starter = ctx.createOscillator();
     this.starter.type = 'sawtooth';
@@ -168,12 +184,28 @@ export class SoundEngine {
     const running = s.engineOn || s.engineStart > 0;
     // moteur à pistons : allumage = régime/30 ; à plein régime ≈ 90 Hz pour l'avion de base
     const rpmHz = (snd.base ?? 9) + s.rpm * (snd.range ?? 81);
+    if (this.engNode) {
+      // configuration de l'avion (cylindres, pales, pot, bimoteur, réacteur), envoyée une seule fois par avion
+      const cfg = JSON.stringify(snd);
+      if (cfg !== this.engCfg) {
+        this.engCfg = cfg;
+        this.engNode.port.postMessage({ kind: jet ? 'jet' : 'piston', cyl: snd.cyl ?? 4, rough: snd.rough ?? 1, blades: snd.blades ?? 2, gear: snd.gear ?? 1, pipe: snd.pipe ?? 130, twin: snd.kind === 'twin' });
+      }
+      const P = this.engNode.parameters;
+      // vilebrequin (tours/s) : rpmHz est la fréquence d'allumage d'un 4 cylindres, soit 2 explosions par tour
+      set(P.get('crank'), jet ? s.rpm * 100 : rpmHz / 2, 0.06);
+      set(P.get('load'), running ? Math.min(1, s.throttle * 0.85 + s.rpm * 0.25) : 0, 0.1);
+      const lv = jet ? (running || s.rpm > 0.05 ? 0.5 + s.rpm * 0.9 : 0) : (running ? 0.9 + s.throttle * 0.5 : s.rpm * 0.6);
+      set(P.get('level'), on ? lv * (snd.loud ?? 1) * atten * 0.55 : 0, 0.06);
+      set(this.engMuffle.frequency, inside ? 1500 + s.throttle * 900 : Math.max(900, 7000 / (1 + Math.max(0, dist - 20) / 60)), 0.1);
+    }
     for (const { o, mul } of this.engOsc) set(o.frequency, rpmHz * mul, 0.05);
     for (const { o, mul } of this.engOsc2) set(o.frequency, rpmHz * mul * 1.018, 0.05);
     set(this.prop.frequency, rpmHz, 0.05);
     const level = (running ? 0.06 + s.rpm * 0.16 + s.throttle * 0.05 : s.rpm * 0.03) * (snd.loud ?? 1);
-    set(this.engGain.gain, on && !jet ? level * atten : 0);
-    set(this.propDepth.gain, on && !jet ? level * atten * 0.45 : 0);
+    const old = this.engNode ? 0 : 1; // moteur de secours coupé quand le moteur réaliste est prêt
+    set(this.engGain.gain, on && !jet ? level * atten * old : 0);
+    set(this.propDepth.gain, on && !jet ? level * atten * 0.45 * old : 0);
     set(this.twinGain.gain, snd.kind === 'twin' ? 0.8 : 0, 0.2);
     set(this.crackle.g.gain, 0.35 * (snd.rough ?? 1), 0.2);
     set(this.engFilter.frequency, (inside ? 380 : 650) + s.throttle * (inside ? 900 : 1800) + s.rpm * 500);
@@ -181,8 +213,8 @@ export class SoundEngine {
     const jr = jet ? s.rpm : 0;
     set(this.jetWhine.frequency, 500 + jr * 5200, 0.3);
     set(this.jetWhineFilter.frequency, 900 + jr * 4200, 0.3);
-    set(this.jetWhineGain.gain, on && jet && (running || jr > 0.05) ? (0.012 + jr * 0.05) * atten * (inside ? 0.6 : 1) : 0, 0.2);
-    set(this.jetRoar.g.gain, on && jet ? jr * jr * 0.22 * atten * (inside ? 0.35 : 1) : 0, 0.2);
+    set(this.jetWhineGain.gain, on && jet && (running || jr > 0.05) ? (0.012 + jr * 0.05) * atten * (inside ? 0.6 : 1) * (this.engNode ? 0.35 : 1) : 0, 0.2);
+    set(this.jetRoar.g.gain, on && jet && !this.engNode ? jr * jr * 0.22 * atten * (inside ? 0.35 : 1) : 0, 0.2);
     set(this.jetRoar.f.frequency, 250 + jr * 900, 0.3);
     set(this.jetRumble.g.gain, on && jet ? jr * jr * 0.3 * atten * (inside ? 0.5 : 1) : 0, 0.2);
     // démarreur pendant la mise en route
