@@ -31,13 +31,13 @@ const SIM_FS = /* glsl */`
     vec2 id = floor(g);
     float add = 0.0;
     // ≈ 45 gouttes par seconde sur tout le pare-brise sous une vraie pluie (le double en vol : on fonce dedans)
-    float p = rain * (0.00033 + air * 0.0004);
+    float p = rain * (0.00033 + air * 0.0035); // en vol on fonce dans la pluie : bien plus d'impacts
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
       vec2 c = id + vec2(x, y);
       float h = hash(vec3(c, frame));
       if (h < p) {
         vec2 ctr = c + vec2(hash(vec3(c, frame + 17.0)), hash(vec3(c, frame + 31.0)));
-        float r = mix(0.3, 0.8, pow(hash(vec3(c, frame + 53.0)), 2.0));    // rayon (en cellules)
+        float r = mix(0.3, 0.8, pow(hash(vec3(c, frame + 53.0)), 2.0)) * (1.0 - 0.45 * air); // impacts plus fins en vol    // rayon (en cellules)
         vec2 d = (g - ctr) * vec2(1.0, 1.0);
         float k = 1.0 - dot(d, d) / (r * r);
         if (k > 0.0) add += sqrt(k) * mix(0.25, 0.5, r);             // dôme d'eau
@@ -52,8 +52,9 @@ const SIM_FS = /* glsl */`
     // sens d'écoulement : vers le bas à l'arrêt ; en vol, vers le haut et vers les bords (vent relatif)
     float a = smoothstep(0.1, 0.55, air);
     vec2 dir = normalize(mix(vec2(0.0, -1.0), vec2((vUv.x - 0.5) * 1.2, 1.0), a));
-    float speed = mix(0.7, 3.5, a);                // texels par mise à jour
-    const float T = 0.42;                          // au-delà, l'eau est trop lourde et glisse
+    float speed = mix(0.7, 2.4, a);                // texels par mise à jour
+    // seuil au-delà duquel l'eau glisse : en vol, le vent arrache même les petites gouttes (traînées)
+    float T = mix(0.42, 0.24, a);
     float k = mix(0.5, 0.85, a);
     float hu = texture2D(tPrev, vUv - dir * texel * speed).r;
     float out_ = max(h - T, 0.0) * k;
@@ -84,8 +85,9 @@ const SIM_FS = /* glsl */`
         }
       }
     }
-    // bas de la vitre : l'eau s'écoule par le joint
+    // bas de la vitre : l'eau s'écoule par le joint ; en vol, le vent la chasse par le haut et par les côtés
     h *= mix(0.0, 1.0, smoothstep(0.0, 0.06, vUv.y));
+    h *= mix(1.0, smoothstep(1.0, 0.93, vUv.y) * smoothstep(0.0, 0.05, min(vUv.x, 1.0 - vUv.x)), a);
     gl_FragColor = vec4(min(h, 1.5), film, 0.0, 1.0);
   }
 `;

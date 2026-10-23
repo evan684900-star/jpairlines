@@ -478,6 +478,9 @@ export class PostFX {
     const gl = fx.glass;
     u.wsOn.value = gl && this.cfg.raindrops !== false ? 1 : 0;
     if (gl) {
+      // la caméra vient d'être placée pour cette image : sa matrice n'est recalculée qu'au rendu, donc on la met à
+      // jour ici (sinon la vitre est décalée d'une image : à 200 km/h, plus d'un mètre, et la pluie « décroche »)
+      cam.updateMatrixWorld();
       const vm = cam.matrixWorldInverse;
       u.wsC.value.copy(gl.C).applyMatrix4(vm);
       u.wsU.value.copy(gl.U).transformDirection(vm).multiplyScalar(gl.U.length());
