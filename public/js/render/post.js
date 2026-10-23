@@ -133,29 +133,7 @@ const CINEMA_FS = /* glsl */`
   uniform sampler2D tDepth;
   uniform vec2 camNF;
   uniform float air;
-  uniform float wipers, wiperT; // essuie-glaces : 0..1 (en marche), phase du balayage (radians)
-  // Deux essuie-glaces pivotant au bas du pare-brise, qui balaient en même temps (comme sur un bimoteur).
-  // Retourne (propreté 0..1 laissée par le dernier passage, lame 0..1 à dessiner ici)
-  const float W_MID = 1.5708, W_AMP = 1.15, W_LEN = 0.62;
-  vec2 wiperAt(vec2 p, vec2 pivot) {
-    vec2 d = p - pivot;
-    float r = length(d);
-    if (r > W_LEN || d.y < -0.02) return vec2(0.0);
-    float th = atan(d.y, d.x);
-    float x = clamp((th - W_MID) / W_AMP, -1.0, 1.0);
-    // le balai passe à l'angle th deux fois par aller-retour : temps écoulé depuis le dernier passage
-    float ph = asin(x);
-    float d1 = mod(wiperT - ph, 6.2832), d2 = mod(wiperT - (3.1416 - ph), 6.2832);
-    float since = min(d1, d2) / 2.6;                       // ≈ 2,4 s par aller-retour
-    float clean = exp(-since * 0.55) * S(W_LEN, W_LEN - 0.04, r);
-    // lame : bras fin vers le pivot, raclette plus épaisse vers le bout
-    float a = W_MID + W_AMP * sin(wiperT);
-    vec2 dir = vec2(cos(a), sin(a));
-    float along = dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x)));
-    float wid = mix(0.0035, 0.007, S(0.15, 0.3, along));
-    float blade = S(wid, wid * 0.4, off) * S(0.0, 0.02, along) * S(W_LEN, W_LEN - 0.01, along);
-    return vec2(clean, blade);
-  }
+
   float S(float a, float b, float t) { return smoothstep(a, b, t); }
   float N21(vec2 p) { p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
   vec3 N13(float p) {
@@ -212,6 +190,29 @@ const CINEMA_FS = /* glsl */`
     vec2 m2 = dropLayer(uv * 1.85, t) * l2;
     float c = S(0.3, 1.0, s + m1.x + m2.x);
     return vec2(c, max(m1.y * l0, m2.y * l1));
+  }
+  uniform float wipers, wiperT; // essuie-glaces : 0..1 (en marche), phase du balayage (radians)
+  // Deux essuie-glaces pivotant au bas du pare-brise, qui balaient en même temps (comme sur un bimoteur).
+  // Retourne (propreté 0..1 laissée par le dernier passage, lame 0..1 à dessiner ici)
+  const float W_MID = 1.5708, W_AMP = 1.15, W_LEN = 0.62;
+  vec2 wiperAt(vec2 p, vec2 pivot) {
+    vec2 d = p - pivot;
+    float r = length(d);
+    if (r > W_LEN || d.y < -0.02) return vec2(0.0);
+    float th = atan(d.y, d.x);
+    float x = clamp((th - W_MID) / W_AMP, -1.0, 1.0);
+    // le balai passe à l'angle th deux fois par aller-retour : temps écoulé depuis le dernier passage
+    float ph = asin(x);
+    float d1 = mod(wiperT - ph, 6.2832), d2 = mod(wiperT - (3.1416 - ph), 6.2832);
+    float since = min(d1, d2) / 2.6;                       // ≈ 2,4 s par aller-retour
+    float clean = exp(-since * 0.55) * S(W_LEN, W_LEN - 0.04, r);
+    // lame : bras fin vers le pivot, raclette plus épaisse vers le bout
+    float a = W_MID + W_AMP * sin(wiperT);
+    vec2 dir = vec2(cos(a), sin(a));
+    float along = dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x)));
+    float wid = mix(0.0035, 0.007, S(0.15, 0.3, along));
+    float blade = S(wid, wid * 0.4, off) * S(0.0, 0.02, along) * S(W_LEN, W_LEN - 0.01, along);
+    return vec2(clean, blade);
   }
 
   void main() {
