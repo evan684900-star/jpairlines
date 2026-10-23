@@ -414,3 +414,7 @@ kbd.pad { white-space: nowrap; }
 #cine span { position: absolute; right: 18px; bottom: calc(11vh + 10px); color: #fff; opacity: 0.75; font-size: 13px; text-shadow: 0 1px 3px #000; z-index: 1; }
 #cine.hidden { display: none; }
 @keyframes cine-in { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* performances : en jeu, le HUD ne floute plus le décor qui bouge derrière lui (le flou en direct coûtait cher à
+   chaque image) ; un fond un peu plus opaque garde la lisibilité. Les menus gardent le verre dépoli (image figée). */
+#hud .glass, #hud .chip, #tuto, #grade { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(10, 18, 28, 0.74); }

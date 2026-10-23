@@ -945,6 +945,15 @@ attachPanel();
 // Le nouvel avion est sorti au dernier aéroport (réservoir plein) ; une quête en cours continue
 // si l'on change d'avion arrêté dans un aéroport, sinon elle est annulée (comme un voyage).
 // (re)construit le modèle de l'avion du joueur avec sa peinture du hangar
+// prépare les shaders de l'avion, y compris l'habitacle et les essuie-glaces qui ne s'affichent qu'en vue cockpit :
+// sinon leur première apparition (touche C, pluie) fige le jeu le temps que la carte graphique les compile
+function warmPlane() {
+  const cs = planeMesh.userData.cockpitSet;
+  wsRain.attach(planeMesh);
+  if (cs) cs.visible = true;
+  try { renderer.compile(scene, camera); } catch { /* sans gravité : compilé à la première image */ }
+  if (cs) cs.visible = false;
+}
 function rebuildPlaneMesh() {
   scene.remove(planeMesh);
   disposePlaneMesh(planeMesh);
@@ -953,6 +962,7 @@ function rebuildPlaneMesh() {
   planeMesh.quaternion.copy(plane.quat);
   scene.add(planeMesh);
   attachPanel();
+  warmPlane();
   plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);
   sendLivery();
 }
@@ -1433,7 +1443,7 @@ function simulate(dt) {
   }
 }
 
-let fpsTimer = 0, inCockpit = false;
+let fpsTimer = 0, inCockpit = false, frozenFrames = 0;
 
 // vibrations ressenties : moteur et roulage au sol, alarme de décrochage (tremblement), survitesse, turbulence
 function shakeAmount() {
@@ -1564,6 +1574,11 @@ function frame(now) {
     }
   }
 
+  // menu ouvert (pause, aide, carte, journal, missions) : le jeu est figé, on garde la dernière image au lieu de
+  // recalculer la 3D derrière un panneau flouté (c'était l'essentiel du délai d'affichage des menus)
+  const frozen = (paused || overlayOpen()) && started && !hg.active;
+  if (frozen && frozenFrames++ > 1) return;
+  if (!frozen) frozenFrames = 0;
   gfx.render(rawDt, {
     speed: started ? THREE.MathUtils.clamp((plane.ias - 62) / 30, 0, 1) : 0,
     rain: inCockpit ? Math.min(1, gfx.weatherState.rain) : 0,
@@ -1684,6 +1699,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status(t('Dessin de la carte…'), 82);
   await tick();
   buildMapImage();
+  warmPlane(); // shaders de l'avion (vue cockpit, essuie-glaces) prêts avant le décollage
   status(t('Prêt !'), 100);
   $('start').disabled = false;
   requestAnimationFrame(frame);

@@ -210,14 +210,13 @@ pointillé (comme une quête) ; arrivé à moins de 250 m, il disparaît et le p
 - Éclairs et tonnerre visibles aussi quand il pleut (plus rarement qu'en orage).
 - La pluie et l'orage renforcent le vent (14 et 22 m/s) avec des rafales : arbres, vagues et sifflement suivent, et en vol
   l'avion est secoué (rafales verticales, roulis, tangage ; ×0,4 en facile, ×0,8 en normal, ×1,2 en réaliste).
-- En vue cockpit, le pare-brise se couvre de pluie : gouttes posées qui apparaissent et sèchent, gouttes qui glissent en
-  zigzag avec une traînée, film d'eau qui floute la vitre (les traînées le nettoient), reflets du ciel et des éclairs.
-  En vol, le vent relatif pousse l'eau vers le haut et sur les côtés. Les gouttes ne s'affichent que sur la vitre,
-  pas sur la planche de bord. Option : Paramètres → Effets visuels → « Gouttes de pluie sur le pare-brise » (activée dès
-  la qualité Moyen ; demande le post-traitement).
-
-- **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux balais nettoient le pare-brise ; la pluie revient peu à peu
-  derrière eux. À l'arrêt, ils finissent leur balayage et se garent.
+- En vue cockpit, la pluie est **sur le pare-brise** (`public/js/render/windshield.js`) : l'eau est simulée dans une
+  petite image propre à la vitre (512 × 256, 30 fois par seconde). Les gouttes tombent une par une (plus vite quand il
+  pleut fort ou en vol), se rejoignent, glissent (vers le bas à l'arrêt, vers le haut et les côtés en vol) et sèchent.
+  Pour chaque pixel, le jeu calcule le point de la vitre traversé par le regard : les gouttes restent collées au
+  pare-brise quand on tourne la tête. Option : Paramètres → Effets visuels → « Gouttes de pluie sur le pare-brise ».
+- **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux bras en 3D fixés au pare-brise ; ce qu'ils balaient est vraiment
+  effacé, puis la pluie revient au rythme normal. Coupés, ils finissent leur balayage et se garent.
 
 ### Sons des moteurs
 
@@ -227,6 +226,12 @@ d'échappement, et l'hélice ajoute son souffle rythmé par les pales. Cub-1 : 4
 qui tourne vite avec réducteur ; Faucon : 6 cylindres de voltige, le plus fort ; Mistral : deux 6 cylindres
 désaccordés (battement des bimoteurs, en stéréo) ; Albatros : moteur en étoile à 9 cylindres ; Éclair : turbine
 (fan, compresseur, souffle). Plus sourd dans le cockpit et au loin.
+
+### Performances des menus
+
+Quand un menu est ouvert (pause, aide, carte, journal, missions), la 3D est figée sur la dernière image au lieu
+d'être recalculée derrière le panneau flouté. En vol, le HUD n'utilise plus de flou en direct. Les shaders de
+l'habitacle et des essuie-glaces sont préparés au chargement (plus d'à-coup à la première vue cockpit).
 
 ### Vue cockpit
 
