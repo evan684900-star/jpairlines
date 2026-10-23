@@ -684,7 +684,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     // rebords de fenêtre et panneaux de porte (sous le rebord) de chaque côté
     for (const sgn of [-1, 1]) {
       const x = sgn * halfW, xf = sgn * halfWf;
-      const sill = rod(new THREE.Vector3(xf, glareY - 0.02, zP), new THREE.Vector3(x, sillY, zBack), 0.035, trim, 1.6);
+      const sill = rod(new THREE.Vector3(xf, glareY - 0.02, zP), new THREE.Vector3(x, sillY, zBack), 0.016, trim, 1.3);
       cockpitSet.add(sill);
       const door = new THREE.Mesh(new THREE.PlaneGeometry(zBack - zP, sillY - CB.floor.y).rotateY(Math.PI / 2), trim);
       door.position.set((x + xf) / 2, (sillY + CB.floor.y) / 2 - 0.02, (zP + zBack) / 2);
@@ -716,6 +716,21 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     }
     // plancher et pédales
     for (const sgn of [-1, 1]) box(0.08, 0.02, 0.14, E.x + sgn * 0.09, CB.floor.y + 0.1, zP + 0.25, frameM, -0.6);
+    // bas de l'habitacle : les parois intérieures du fuselage sous le rebord des fenêtres (plancher, côtés, nez sous la
+    // planche de bord). Sans elles on voyait le sol à travers l'avion ; au-dessus, tout est dégagé.
+    {
+      const pos = fuseGeo.attributes.position, idx = fuseGeo.index.array, keep = [];
+      const cut = Math.max(sillY, glareY - 0.05);
+      for (let t = 0; t < idx.length; t += 3) {
+        const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+        if (pos.getY(a) < cut && pos.getY(b) < cut && pos.getY(c) < cut) keep.push(a, b, c);
+      }
+      const lower = new THREE.BufferGeometry();
+      lower.setAttribute('position', pos);
+      if (fuseGeo.attributes.normal) lower.setAttribute('normal', fuseGeo.attributes.normal);
+      lower.setIndex(keep);
+      cockpitSet.add(new THREE.Mesh(lower, cabin));
+    }
     cockpitSet.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
   }
   g.add(cockpitSet);
