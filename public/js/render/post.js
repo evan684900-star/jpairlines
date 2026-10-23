@@ -160,8 +160,9 @@ const CINEMA_FS = /* glsl */`
           vec2 wuv = g * 0.5 + 0.5;
           vec2 tx = vec2(1.0 / 512.0, 1.0 / 256.0);
           vec4 w0 = texture2D(tWet, wuv);
-          float hx = texture2D(tWet, wuv + vec2(tx.x, 0.0)).r - texture2D(tWet, wuv - vec2(tx.x, 0.0)).r;
-          float hy = texture2D(tWet, wuv + vec2(0.0, tx.y)).r - texture2D(tWet, wuv - vec2(0.0, tx.y)).r;
+          // pente de l'eau : différences avant (3 lectures au lieu de 5)
+          float hx = (texture2D(tWet, wuv + vec2(tx.x * 1.5, 0.0)).r - w0.r) * 2.0;
+          float hy = (texture2D(tWet, wuv + vec2(0.0, tx.y * 1.5)).r - w0.r) * 2.0;
           float h = w0.r;
           float drop = S(0.04, 0.16, h);
           // pente de la surface de l'eau ramenée dans l'écran (le haut de la vitre est vers le haut de l'écran)
@@ -184,15 +185,11 @@ const CINEMA_FS = /* glsl */`
       }
       col /= 6.0;
     } else col = texture2D(tDiffuse, uv).rgb;
-    // film d'eau : flou doux (disque de 8 points)
-    if (blurR > 0.25) {
-      vec2 px = blurR / vec2(720.0 * aspect, 720.0);
-      vec3 b = col;
-      for (int i = 0; i < 8; i++) {
-        float a = float(i) * 0.785 + 0.39;
-        b += texture2D(tDiffuse, uv + vec2(cos(a), sin(a)) * px * (i < 4 ? 0.55 : 1.0)).rgb;
-      }
-      col = mix(col, b / 9.0, clamp(blurR / 1.5, 0.0, 1.0));
+    // film d'eau : voile laiteux et contraste adouci (pas de flou : trop coûteux sur tout le pare-brise)
+    if (blurR > 0.05) {
+      float k = clamp(blurR / 2.5, 0.0, 1.0);
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(col, vec3(l) * 0.85 + vec3(0.03, 0.034, 0.04) / max(exposure, 0.1), k * 0.35);
     }
     // aberration chromatique (plus forte sur les bords et à grande vitesse)
     if (chroma > 0.0) {
