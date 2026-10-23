@@ -140,15 +140,15 @@ const CINEMA_FS = /* glsl */`
       vec2 id = floor(g), f = fract(g) - 0.5;
       vec2 r = hash2(id + float(l) * 31.0);
       float life = fract(time * 0.03 + r.x * 7.0);     // naissance, grossit, glisse, disparaît
-      if (r.y < 0.62) {
+      if (r.y < 0.5) {
         vec2 c = (r - 0.5) * 0.5;
         c.y += (life - 0.5) * 0.35 * float(2 - l);
         vec2 dv = (f - c) * vec2(1.0, 1.15);
-        float rad = (0.13 - float(l) * 0.025) * smoothstep(0.0, 0.25, life) * (1.0 - 0.5 * smoothstep(0.85, 1.0, life));
+        float rad = (0.21 - float(l) * 0.035) * smoothstep(0.0, 0.25, life) * (1.0 - 0.5 * smoothstep(0.85, 1.0, life));
         float d = length(dv);
         float m = smoothstep(rad, rad * 0.45, d);
         // la goutte est une loupe : l'image y est renversée, d'où ce décalage opposé au centre
-        off += -dv * m * 1.7;
+        off += -dv * m * 2.8;
         wet += m;
         // traînée fine laissée au-dessus d'une goutte qui glisse
         float trail = smoothstep(0.03, 0.0, abs(f.x - c.x)) * step(c.y, f.y) * step(f.y, c.y + 0.4 * life) * (1.0 - life) * step(0.85, r.x);
@@ -162,7 +162,7 @@ const CINEMA_FS = /* glsl */`
   void main() {
     vec2 uv = vUv;
     vec3 dr = vec3(0.0);
-    if (rain > 0.01) { dr = drops(uv); dr.xy *= min(rain, 1.0); dr.z *= min(rain, 1.0); uv += dr.xy * 0.05; }
+    if (rain > 0.01) { dr = drops(uv); dr.xy *= min(rain, 1.0); dr.z *= min(rain, 1.0); uv += dr.xy * 0.07; }
     vec2 fromC = uv - 0.5;
     float edge = dot(fromC, fromC);
     // distorsion de vitesse : léger étirement radial vers les bords
