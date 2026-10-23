@@ -556,7 +556,7 @@ export class PostFX {
     u.flare.value = this.cfg.godrays ? ART.flareStrength : 0;
     u.chroma.value = this.cfg.chroma ? ART.chromaStrength : 0;
     u.speed.value = this.cfg.motionFx ? (fx.speed || 0) : 0;
-    u.rain.value = fx.rain || 0;
+    u.rain.value = this.cfg.raindrops === false ? 0 : fx.rain || 0;
     u.air.value = fx.air || 0;
     // essuie-glaces : démarrent et s'arrêtent en douceur, la lame finit son balayage avant de se garer
     this.wipe = this.wipe || { on: 0, t: -1.5708 };

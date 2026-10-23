@@ -8,25 +8,25 @@ export const QUALITY_PRESETS = {
     label: 'Bas',
     pixelRatio: 0.75, shadowMap: 1024, shadowRange: 350, msaa: 0,
     cloudDensity: 0.45, waterRings: 24, particleDensity: 0.35, nearTrees: 90, nearTreeMax: 60, forestDensity: 1800,
-    effects: { shadows: false, post: false, bloom: false, ao: false, godrays: false, chroma: false, motionFx: true, particles: true },
+    effects: { shadows: false, post: false, bloom: false, ao: false, godrays: false, chroma: false, motionFx: true, particles: true, raindrops: false },
   },
   medium: {
     label: 'Moyen',
     pixelRatio: 1, shadowMap: 2048, shadowRange: 500, msaa: 0,
     cloudDensity: 0.7, waterRings: 40, particleDensity: 0.6, nearTrees: 150, nearTreeMax: 150, forestDensity: 3500,
-    effects: { shadows: true, post: true, bloom: true, ao: false, godrays: true, chroma: false, motionFx: true, particles: true },
+    effects: { shadows: true, post: true, bloom: true, ao: false, godrays: true, chroma: false, motionFx: true, particles: true, raindrops: true },
   },
   high: {
     label: 'Élevé',
     pixelRatio: 1.5, shadowMap: 4096, shadowRange: 650, msaa: 4,
     cloudDensity: 1, waterRings: 56, particleDensity: 1, nearTrees: 220, nearTreeMax: 300, forestDensity: 6000,
-    effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true },
+    effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true, raindrops: true },
   },
   ultra: {
     label: 'Ultra',
     pixelRatio: 2, shadowMap: 4096, shadowRange: 900, msaa: 4,
     cloudDensity: 1.35, waterRings: 72, particleDensity: 1.4, nearTrees: 320, nearTreeMax: 520, forestDensity: 9000,
-    effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true },
+    effects: { shadows: true, post: true, bloom: true, ao: true, godrays: true, chroma: true, motionFx: true, particles: true, raindrops: true },
   },
 };
 
@@ -73,6 +73,7 @@ export function renderConfig(settings) {
     chroma: post && on('chroma'),
     motionFx: on('motionFx') && !reducedMotion,
     particles: on('particles'),
+    raindrops: post && on('raindrops'), // gouttes sur le pare-brise (dessinées par le post-traitement)
     adaptive: settings.adaptiveRes,
   };
 }

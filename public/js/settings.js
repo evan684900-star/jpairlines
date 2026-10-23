@@ -19,6 +19,7 @@ export const SCHEMA = [
   { key: 'fx_ao', label: '· Occlusion ambiante (SSAO)', type: 'check', preset: true },
   { key: 'fx_godrays', label: '· Rayons du soleil et reflets d\'objectif', type: 'check', preset: true },
   { key: 'fx_chroma', label: '· Aberration chromatique', type: 'check', preset: true },
+  { key: 'fx_raindrops', label: '· Gouttes de pluie sur le pare-brise', type: 'check', preset: true },
   { key: 'fx_motionFx', label: 'Tremblements et distorsion de vitesse', type: 'check', preset: true },
   { key: 'fx_particles', label: 'Particules (poussière, fumée, traînées)', type: 'check', preset: true },
   { section: 'Ciel et météo' },
@@ -58,6 +59,8 @@ if ((settings.v || 1) < 2) { settings.adaptiveRes = false; settings.v = 2; }
 export function applyPreset() {
   for (const k of EFFECT_KEYS) settings[`fx_${k}`] = QUALITY_PRESETS[settings.quality].effects[k];
 }
+// nouvel effet ajouté depuis la dernière visite : valeur de la qualité choisie, sans toucher aux autres réglages
+for (const k of ['raindrops']) if (typeof settings[`fx_${k}`] !== 'boolean' && EFFECT_KEYS.some((x) => x !== k && typeof settings[`fx_${x}`] === 'boolean')) settings[`fx_${k}`] = QUALITY_PRESETS[settings.quality].effects[k];
 if (EFFECT_KEYS.some((k) => typeof settings[`fx_${k}`] !== 'boolean')) applyPreset();
 if (settings.fuel === false) settings.fuelMode = 'off'; // ancien réglage
 delete settings.fuel;

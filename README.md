@@ -213,7 +213,8 @@ pointillé (comme une quête) ; arrivé à moins de 250 m, il disparaît et le p
 - En vue cockpit, le pare-brise se couvre de pluie : gouttes posées qui apparaissent et sèchent, gouttes qui glissent en
   zigzag avec une traînée, film d'eau qui floute la vitre (les traînées le nettoient), reflets du ciel et des éclairs.
   En vol, le vent relatif pousse l'eau vers le haut et sur les côtés. Les gouttes ne s'affichent que sur la vitre,
-  pas sur la planche de bord.
+  pas sur la planche de bord. Option : Paramètres → Effets visuels → « Gouttes de pluie sur le pare-brise » (activée dès
+  la qualité Moyen ; demande le post-traitement).
 
 - **Essuie-glaces** (`I`, manette : Vue + ✚←) : deux balais nettoient le pare-brise ; la pluie revient peu à peu
   derrière eux. À l'arrêt, ils finissent leur balayage et se garent.

@@ -405,4 +405,5 @@ export default {
   "Essuie-glaces": "Limpiaparabrisas",
   "Essuie-glaces en marche": "Limpiaparabrisas encendidos",
   "Essuie-glaces arrêtés": "Limpiaparabrisas apagados",
+  "· Gouttes de pluie sur le pare-brise": "· Gotas de lluvia en el parabrisas",
 };

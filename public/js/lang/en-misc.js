@@ -436,4 +436,5 @@ export default {
   "Essuie-glaces": "Wipers",
   "Essuie-glaces en marche": "Wipers on",
   "Essuie-glaces arrêtés": "Wipers off",
+  "· Gouttes de pluie sur le pare-brise": "· Raindrops on the windshield",
 };
