@@ -115,9 +115,10 @@ export class Plane {
 
   placeOnRunway(a, engineOn = false) {
     this.reset();
-    // en bout de piste, face à la piste (léger décalage pour ne pas se superposer aux autres joueurs)
-    const back = a.length / 2 - 60 - Math.random() * 120;
-    const side = (Math.random() - 0.5) * a.width * 0.4;
+    // toujours au début de la piste, sur l'axe, face à toute sa longueur (juste après les marques du seuil).
+    // Les autres joueurs sont des fantômes sans collision : pas besoin de décaler au hasard.
+    const back = a.length / 2 - 40;
+    const side = 0;
     const [x, z] = runwayPoint(a.x, a.z, a.heading, side, back);
     this.quat.setFromEuler(new THREE.Euler(0, a.heading, 0, 'YXZ'));
     this.pos.set(x, groundHeight(x, z) + this.S.gear - 0.04, z);
