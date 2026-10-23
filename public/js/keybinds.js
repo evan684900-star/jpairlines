@@ -25,6 +25,7 @@ export const ACTIONS = [
   { id: 'gear', label: 'Train d\'atterrissage', def: ['g'] },
   { id: 'parking', label: 'Frein de parking', def: ['p'] },
   { id: 'lights', label: 'Feux de navigation', def: ['l'] },
+  { id: 'wipers', label: 'Essuie-glaces', def: ['i'] },
   { id: 'smoke', label: 'Fumigène de voltige', def: ['n'] },
   { id: 'refuel', label: 'Faire le plein (maintenir)', def: ['k'] },
   { group: 'Jeu' },
@@ -129,7 +130,7 @@ export const PAD_DEFAULTS = {
   brake: ['p0'], gear: ['p1'], engine: ['p2'], camera: ['p3'], yawLeft: ['p4'], yawRight: ['p5'],
   flapsUp: ['p12'], flapsDown: ['p13'], trimDown: ['p14'], trimUp: ['p15'], parking: ['p10'], smoke: ['p11'],
   map: ['p8'], board: ['p8+0'], respawn: ['p8+1'], refuel: ['p8+2'], journal: ['p8+3'], lights: ['p8+4'], drop: ['p8+5'],
-  hud: ['p8+12'], help: ['p8+13'],
+  hud: ['p8+12'], help: ['p8+13'], wipers: ['p8+14'],
 };
 // état partagé : manette branchée, dernière entrée venant de la manette, style des noms de boutons
 export const pad = { connected: false, active: false, style: 'xbox' };

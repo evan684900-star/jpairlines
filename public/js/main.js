@@ -232,6 +232,7 @@ function onAction(is) {
   if (is('gear')) plane.toggleGear();
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
+  if (is('wipers')) plane.toggleWipers();
   if (is('smoke')) {
     if (!isOwned('smoke')) { toast(t('💨 Achète le fumigène au hangar (onglet Fumigène)')); return; }
     plane.smokeOn = !plane.smokeOn;
@@ -1559,6 +1560,7 @@ function frame(now) {
     speed: started ? THREE.MathUtils.clamp((plane.ias - 62) / 30, 0, 1) : 0,
     rain: inCockpit ? Math.min(1, gfx.weatherState.rain) : 0,
     air: started ? THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1) : 0, // vent relatif sur le pare-brise
+    wipers: started && plane.wipers && !plane.crashed,
     flash: gfx.effects.flash,
   });
   fpsTimer -= rawDt;

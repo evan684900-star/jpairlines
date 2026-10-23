@@ -133,6 +133,29 @@ const CINEMA_FS = /* glsl */`
   uniform sampler2D tDepth;
   uniform vec2 camNF;
   uniform float air;
+  uniform float wipers, wiperT; // essuie-glaces : 0..1 (en marche), phase du balayage (radians)
+  // Deux essuie-glaces pivotant au bas du pare-brise, qui balaient en même temps (comme sur un bimoteur).
+  // Retourne (propreté 0..1 laissée par le dernier passage, lame 0..1 à dessiner ici)
+  const float W_MID = 1.5708, W_AMP = 1.15, W_LEN = 0.62;
+  vec2 wiperAt(vec2 p, vec2 pivot) {
+    vec2 d = p - pivot;
+    float r = length(d);
+    if (r > W_LEN || d.y < -0.02) return vec2(0.0);
+    float th = atan(d.y, d.x);
+    float x = clamp((th - W_MID) / W_AMP, -1.0, 1.0);
+    // le balai passe à l'angle th deux fois par aller-retour : temps écoulé depuis le dernier passage
+    float ph = asin(x);
+    float d1 = mod(wiperT - ph, 6.2832), d2 = mod(wiperT - (3.1416 - ph), 6.2832);
+    float since = min(d1, d2) / 2.6;                       // ≈ 2,4 s par aller-retour
+    float clean = exp(-since * 0.55) * S(W_LEN, W_LEN - 0.04, r);
+    // lame : bras fin vers le pivot, raclette plus épaisse vers le bout
+    float a = W_MID + W_AMP * sin(wiperT);
+    vec2 dir = vec2(cos(a), sin(a));
+    float along = dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x)));
+    float wid = mix(0.0035, 0.007, S(0.15, 0.3, along));
+    float blade = S(wid, wid * 0.4, off) * S(0.0, 0.02, along) * S(W_LEN, W_LEN - 0.01, along);
+    return vec2(clean, blade);
+  }
   float S(float a, float b, float t) { return smoothstep(a, b, t); }
   float N21(vec2 p) { p = fract(p * vec2(123.34, 345.45)); p += dot(p, p + 34.345); return fract(p.x * p.y); }
   vec3 N13(float p) {
@@ -194,7 +217,7 @@ const CINEMA_FS = /* glsl */`
   void main() {
     vec2 uv = vUv;
     // pluie sur la vitre : seulement là où l'on voit dehors à travers (pas sur la planche de bord, à moins d'1,5 m)
-    float wet = 0.0, dropC = 0.0, blurR = 0.0;
+    float wet = 0.0, dropC = 0.0, blurR = 0.0, bladeK = 0.0;
     vec2 dn = vec2(0.0);
     if (rain > 0.01) {
       float z = texture2D(tDepth, vUv).x;
@@ -218,6 +241,14 @@ const CINEMA_FS = /* glsl */`
         dropC = c.x * wet;
         // flou du film d'eau : fort sur la vitre, nul dans les gouttes et dans les traînées
         blurR = mix(3.5 - c.y * 3.5, 0.0, S(0.1, 0.2, c.x)) * wet;
+        // essuie-glaces : la zone balayée est nette, puis la pluie revient peu à peu
+        if (wipers > 0.01) {
+          vec2 p = (vUv - vec2(0.5, 0.0)) * vec2(aspect, 1.0);
+          vec2 wl = wiperAt(p, vec2(-0.32 * aspect, 0.06)), wr = wiperAt(p, vec2(0.12 * aspect, 0.06));
+          float clean = max(wl.x, wr.x) * wipers;
+          dn *= 1.0 - clean; dropC *= 1.0 - clean; blurR *= 1.0 - clean;
+          bladeK = max(wl.y, wr.y) * wipers * S(0.5, 1.0, wet / max(rain, 0.01));
+        }
         uv += dn * wet;
       }
     }
@@ -291,6 +322,8 @@ const CINEMA_FS = /* glsl */`
       col += vec3(0.8, 0.85, 0.9) * hi * dropC * (0.14 + flash * 0.6) / max(exposure, 0.1);
       // cœur de la goutte un peu plus lumineux (la lumière du ciel s'y concentre)
       col *= 1.0 + dropC * 0.06;
+      // lame d'essuie-glace (caoutchouc noir, bras métal sombre)
+      col = mix(col, vec3(0.012, 0.013, 0.015) / max(exposure, 0.1), bladeK * 0.95);
     }
     // étalonnage : couleurs un peu plus franches
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
@@ -463,7 +496,7 @@ export class PostFX {
       sunUv: { value: new THREE.Vector2() }, sunOn: { value: 0 }, sunColor: { value: new THREE.Color() }, aspect: { value: 1 },
       rays: { value: 0 }, flare: { value: 0 }, chroma: { value: 0 }, speed: { value: 0 }, vignette: { value: ART.vignette },
       grain: { value: ART.grain }, saturation: { value: ART.saturation }, rain: { value: 0 }, flash: { value: 0 }, time: { value: 0 }, exposure: { value: 1 },
-      tDepth: { value: null }, camNF: { value: new THREE.Vector2(0.5, 30000) }, air: { value: 0 },
+      tDepth: { value: null }, camNF: { value: new THREE.Vector2(0.5, 30000) }, air: { value: 0 }, wipers: { value: 0 }, wiperT: { value: 0 },
     });
     this.output = new OutputPass();
     this.smaa = new SMAAPass(1, 1);
@@ -524,6 +557,13 @@ export class PostFX {
     u.speed.value = this.cfg.motionFx ? (fx.speed || 0) : 0;
     u.rain.value = fx.rain || 0;
     u.air.value = fx.air || 0;
+    // essuie-glaces : démarrent et s'arrêtent en douceur, la lame finit son balayage avant de se garer
+    this.wipe = this.wipe || { on: 0, t: -1.5708 };
+    const wantOn = fx.wipers ? 1 : 0;
+    if (wantOn || Math.sin(this.wipe.t) > -0.995) this.wipe.t += dt * 2.6; // ne s'arrête qu'en position garée
+    this.wipe.on += (Math.max(wantOn, Math.sin(this.wipe.t) > -0.995 ? 1 : 0) - this.wipe.on) * Math.min(1, dt * 6);
+    u.wipers.value = this.wipe.on;
+    u.wiperT.value = this.wipe.t % 62.832;
     u.tDepth.value = sp.sceneRT.depthTexture;
     u.camNF.value.set(cam.near, cam.far);
     u.flash.value = fx.flash || 0;

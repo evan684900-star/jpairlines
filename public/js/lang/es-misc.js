@@ -402,4 +402,7 @@ export default {
   "📍 Repère atteint ! Cap sur le suivant": "📍 ¡Marcador alcanzado! Rumbo al siguiente",
   "📍 Repère atteint !": "📍 ¡Marcador alcanzado!",
   "📍 Repère posé : le trait rouge t'y guide (clic dessus pour le retirer)": "📍 Marcador puesto: la línea roja te guía (clic encima para quitarlo)",
+  "Essuie-glaces": "Limpiaparabrisas",
+  "Essuie-glaces en marche": "Limpiaparabrisas encendidos",
+  "Essuie-glaces arrêtés": "Limpiaparabrisas apagados",
 };

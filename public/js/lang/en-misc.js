@@ -433,4 +433,7 @@ export default {
   "📍 Repère atteint ! Cap sur le suivant": "📍 Marker reached! On to the next one",
   "📍 Repère atteint !": "📍 Marker reached!",
   "📍 Repère posé : le trait rouge t'y guide (clic dessus pour le retirer)": "📍 Marker placed: the red line guides you (click it to remove)",
+  "Essuie-glaces": "Wipers",
+  "Essuie-glaces en marche": "Wipers on",
+  "Essuie-glaces arrêtés": "Wipers off",
 };

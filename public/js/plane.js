@@ -80,6 +80,7 @@ export class Plane {
     this.parkingBrake = true;
     this.brake = false;
     this.lights = false;
+    this.wipers = false;
     this.trim = 0;
     this.onGround = true;
     this.onWater = false;
@@ -158,6 +159,10 @@ export class Plane {
   toggleParking() {
     this.parkingBrake = !this.parkingBrake;
     this.emit(this.parkingBrake ? 'Frein de parking serré' : 'Frein de parking desserré');
+  }
+  toggleWipers() {
+    this.wipers = !this.wipers;
+    this.emit(this.wipers ? 'Essuie-glaces en marche' : 'Essuie-glaces arrêtés');
   }
   toggleLights() {
     this.lights = !this.lights;
