@@ -194,7 +194,7 @@ const CINEMA_FS = /* glsl */`
   uniform float wipers, wiperT; // essuie-glaces : 0..1 (en marche), phase du balayage (radians)
   // Deux essuie-glaces pivotant au bas du pare-brise, qui balaient en même temps (comme sur un bimoteur).
   // Retourne (propreté 0..1 laissée par le dernier passage, lame 0..1 à dessiner ici)
-  const float W_MID = 1.5708, W_AMP = 1.15, W_LEN = 0.62;
+  const float W_MID = 1.5708, W_AMP = 1.2, W_LEN = 0.78;
   vec2 wiperAt(vec2 p, vec2 pivot) {
     vec2 d = p - pivot;
     float r = length(d);
@@ -205,12 +205,12 @@ const CINEMA_FS = /* glsl */`
     float ph = asin(x);
     float d1 = mod(wiperT - ph, 6.2832), d2 = mod(wiperT - (3.1416 - ph), 6.2832);
     float since = min(d1, d2) / 2.6;                       // ≈ 2,4 s par aller-retour
-    float clean = exp(-since * 0.55) * S(W_LEN, W_LEN - 0.04, r);
+    float clean = exp(-since * 0.35) * S(W_LEN, W_LEN - 0.05, r) * S(0.03, 0.08, r);
     // lame : bras fin vers le pivot, raclette plus épaisse vers le bout
     float a = W_MID + W_AMP * sin(wiperT);
     vec2 dir = vec2(cos(a), sin(a));
     float along = dot(d, dir), off = abs(dot(d, vec2(-dir.y, dir.x)));
-    float wid = mix(0.0035, 0.007, S(0.15, 0.3, along));
+    float wid = mix(0.006, 0.011, S(0.2, 0.35, along));
     float blade = S(wid, wid * 0.4, off) * S(0.0, 0.02, along) * S(W_LEN, W_LEN - 0.01, along);
     return vec2(clean, blade);
   }
@@ -245,7 +245,7 @@ const CINEMA_FS = /* glsl */`
         // essuie-glaces : la zone balayée est nette, puis la pluie revient peu à peu
         if (wipers > 0.01) {
           vec2 p = (vUv - vec2(0.5, 0.0)) * vec2(aspect, 1.0);
-          vec2 wl = wiperAt(p, vec2(-0.32 * aspect, 0.06)), wr = wiperAt(p, vec2(0.12 * aspect, 0.06));
+          vec2 wl = wiperAt(p, vec2(-0.27 * aspect, 0.36)), wr = wiperAt(p, vec2(0.2 * aspect, 0.36));
           float clean = max(wl.x, wr.x) * wipers;
           dn *= 1.0 - clean; dropC *= 1.0 - clean; blurR *= 1.0 - clean;
           bladeK = max(wl.y, wr.y) * wipers * S(0.5, 1.0, wet / max(rain, 0.01));
