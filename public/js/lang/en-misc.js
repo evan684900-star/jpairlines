@@ -525,4 +525,10 @@ export default {
   "Ailes": "Wings",
   "Finition de la peinture": "Paint finish",
   "Emblème sur la dérive": "Tail emblem",
+  // froid
+  "GIVRAGE": "ICING",
+  "PILOTE GELÉ": "PILOT FROZEN",
+  "Givrage ! L'avion s'alourdit : descends dans l'air plus chaud ou pose-toi pour dégivrer.": "Icing! The plane is getting heavier: descend into warmer air or land to de-ice.",
+  "Avion dégivré": "Plane de-iced",
+  "Le pilote grelotte ! Pose-toi sur un aéroport pour te réchauffer.": "The pilot is shivering! Land at an airport to warm up.",
 };

@@ -93,6 +93,9 @@ export class Plane {
     this.wingDropSign = 0;
     this.lastTailMsg = 0;
     this.time = 0;
+    this.ice = 0; // givre sur l'avion (0..1)
+    this.chill = 0; // froid ressenti par le pilote (0..1)
+    this.airTemp = 15;
   }
 
   get mass() { const S = this.S; return S.emptyMass + S.pilotMass + this.fuel * S.fuelDensity; }
@@ -110,8 +113,9 @@ export class Plane {
   }
   get stallSpeed() {
     const S = this.S;
-    const clMax = S.CL0 + S.CLflap * this.flapPos + S.CLa * (S.alphaStall + S.alphaStallFlap * this.flapPos);
-    return Math.sqrt((2 * this.mass * G) / (airDensity(this.pos.y) * S.S * clMax));
+    const ice = this.ice || 0;
+    const clMax = (S.CL0 + S.CLflap * this.flapPos + S.CLa * (S.alphaStall + S.alphaStallFlap * this.flapPos - ice * 0.06)) * (1 - ice * 0.25);
+    return Math.sqrt((2 * (this.mass + ice * 0.06 * S.emptyMass) * G) / (airDensity(this.pos.y) * S.S * clMax));
   }
 
   placeOnRunway(a, engineOn = false) {
@@ -205,6 +209,12 @@ export class Plane {
 
     this.diff = diff;
     this.updateSystems(dt, input, opts, diff);
+    this.updateCold(dt, opts.airTemp ?? 15, opts.wet || 0, diff);
+    // pilote gelé : les mains tremblent sur le manche
+    if (this.chill > 0.4) {
+      const k = (this.chill - 0.4) * 0.35, tt = this.time;
+      input = { ...input, pitch: input.pitch + k * Math.sin(tt * 9.1) * Math.sin(tt * 2.3), roll: input.roll + k * Math.sin(tt * 7.3 + 1) * Math.sin(tt * 1.7) };
+    }
 
     // commandes lissées (le clavier est tout-ou-rien : on amène les gouvernes progressivement)
     const sens = opts.sensitivity || 1;
@@ -267,9 +277,37 @@ export class Plane {
     }
   }
 
+  // Froid : dans l'air glacial (biomes du nord, altitude), l'avion givre, surtout dans les nuages et la neige.
+  // Le givre tend vers un niveau qui dépend du froid (sous −3 °C), de l'humidité et de l'altitude : en restant bas, il reste léger.
+  // Il fond dans l'air plus chaud (au-dessus de 1 °C) et on dégivre l'avion à l'arrêt sur un aéroport.
+  // Le pilote se refroidit aussi (moins dans un avion de ligne chauffé) : passé un seuil, ses mains tremblent.
+  updateCold(dt, temp, wet, diff) {
+    this.airTemp = temp;
+    const jet = this.S.engine === 'jet';
+    const parked = this.onGround && this.speed < 3 && this.landedAt;
+    const prevIce = this.ice, prevChill = this.chill;
+    let iceTarget = 0;
+    if (!this.onGround && temp < -3) {
+      const alt = smooth(clamp(this.pos.y / 1800, 0, 1));
+      iceTarget = clamp((-3 - temp) / 27, 0, 1) * (0.35 + 0.65 * clamp(wet, 0, 1)) * (0.4 + 0.6 * alt) * (jet ? 0.3 : 1) * (diff.damage ? 1 : 0.6);
+    }
+    if (parked) this.ice = Math.max(0, this.ice - dt * 0.12);
+    else if (temp > 1) this.ice = Math.max(0, this.ice - dt * 0.004 * Math.min(10, temp));
+    else if (this.ice < iceTarget) this.ice = Math.min(iceTarget, this.ice + dt * 0.012 * (0.4 + clamp(wet, 0, 1)));
+    else this.ice = Math.max(iceTarget, this.ice - dt * 0.006);
+    const chillTarget = temp < 0 ? clamp(-temp / 30, 0, 1) * (jet ? 0.15 : this.engineOn ? 0.75 : 1) : 0;
+    if (parked) this.chill = Math.max(0, this.chill - dt * 0.05);
+    else if (this.chill < chillTarget) this.chill = Math.min(chillTarget, this.chill + dt * 0.004);
+    else this.chill = Math.max(chillTarget, this.chill - dt * 0.01);
+    if (prevIce < 0.25 && this.ice >= 0.25) this.emit('Givrage ! L\'avion s\'alourdit : descends dans l\'air plus chaud ou pose-toi pour dégivrer.');
+    if (prevIce > 0.05 && this.ice <= 0.05 && parked) this.emit('Avion dégivré');
+    if (prevChill < 0.5 && this.chill >= 0.5) this.emit('Le pilote grelotte ! Pose-toi sur un aéroport pour te réchauffer.');
+  }
+
   step(h, input, diff) {
     const S = this.S, CG = this.geo.cg;
-    const m = this.mass;
+    const ice = this.ice;
+    const m = this.mass + ice * 0.06 * S.emptyMass; // poids du givre
     _fwd.set(0, 0, -1).applyQuaternion(this.quat);
     _up.set(0, 1, 0).applyQuaternion(this.quat);
     _right.set(1, 0, 0).applyQuaternion(this.quat);
@@ -329,19 +367,19 @@ export class Plane {
 
     // coefficients de portance (linéaire, décrochage, puis plaque plane jusqu'à ±180°)
     const fp = this.flapPos;
-    const aS = S.alphaStall + S.alphaStallFlap * fp, aSN = S.alphaStallNeg;
+    const aS = S.alphaStall + S.alphaStallFlap * fp - ice * 0.06, aSN = S.alphaStallNeg;
     const cl0 = S.CL0 + S.CLflap * fp;
     let CL, stalled = 0;
-    if (alpha >= aSN && alpha <= aS) CL = cl0 + S.CLa * alpha;
+    if (alpha >= aSN && alpha <= aS) CL = (cl0 + S.CLa * alpha) * (1 - ice * 0.25); // une aile givrée porte moins
     else {
       const edge = alpha > aS ? aS : aSN;
-      const peak = cl0 + S.CLa * edge;
+      const peak = (cl0 + S.CLa * edge) * (1 - ice * 0.25);
       const t = smooth(clamp(Math.abs(alpha - edge) / 0.25, 0, 1));
       const flat = 1.05 * Math.sin(2 * alpha);
       CL = peak * (1 - t) + flat * t;
       stalled = clamp(Math.abs(alpha - edge) / 0.12, 0, 1);
     }
-    let CD = S.CD0 + S.CDgear * this.gearPos + S.CDflap * fp + (this.engineOn ? 0 : S.CDprop) + S.k * CL * CL * ge;
+    let CD = S.CD0 + ice * 0.035 + S.CDgear * this.gearPos + S.CDflap * fp + (this.engineOn ? 0 : S.CDprop) + S.k * CL * CL * ge;
     CD = Math.max(CD, S.CD0 + 1.25 * Math.sin(alpha) ** 2);
     const CY = S.CYb * beta;
 

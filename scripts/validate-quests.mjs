@@ -2,7 +2,7 @@
 // distances), faisabilité des chronos.
 // Usage : node scripts/validate-quests.mjs [fichier]   (ex : centre)  — sans argument : tout
 // chaque fichier est chargé séparément : un fichier cassé n'empêche pas de vérifier les autres
-const FILES = ['base', 'centre', 'ouest', 'nord', 'sud', 'est', 'defis', 'chrono'];
+const FILES = ['base', 'centre', 'ouest', 'nord', 'sud', 'est', 'defis', 'chrono', 'terres'];
 const QUEST_FILES = {};
 const loadErrors = [];
 for (const f of FILES) {

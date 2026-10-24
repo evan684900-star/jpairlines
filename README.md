@@ -122,7 +122,7 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
   volets, hélice, feux avec halos. Caméras **poursuite, cockpit, orbite libre, spectateur** (`C`) avec transitions fluides.
 - **Effets** : fumée et flamme au démarrage, échappement, poussière au roulage, fumée de pneus au toucher, crash,
   tourbillons de condensation en bout d'aile, tremblements de caméra.
-- **Météo** (visuelle, ne change pas le vol) : grand beau, nuageux, couvert, pluie, orage avec éclairs et tonnerre, brouillard ;
+- **Météo** (visuelle ; seuls la pluie et les nuages comptent pour le givrage par grand froid) : grand beau, nuageux, couvert, pluie, orage avec éclairs et tonnerre, brouillard ;
   en mode « changeante », elle change toutes les 20 min et elle est la même pour tous les joueurs.
 - **HUD « glass cockpit »** : horizon artificiel, bandes de vitesse et d'altitude, variomètre, cap, moteur et carburant ;
   polices B612 (celles des cockpits Airbus), icônes Lucide.
@@ -235,6 +235,17 @@ quêtes) ; autour, de nouvelles terres : un grand continent froid au nord (Boré
 des terres à l'est (Porte d'Orient, Savane Dorée), au sud (Grand Lagon), au sud-ouest (Mangrove) et à l'ouest
 (Ponant), avec quatre villes (Boréalis, Orientia, Ponant-la-Grande, Lagon-City) et des villages. Le climat continue :
 plus froid au nord, tropical au sud. Le bord du monde redevient océan.
+
+**Quêtes des nouvelles terres** (`quests/terres.js`) : quatre routes balisées pour y aller (Port-Levant → Porte
+d'Orient, Cap Nord → Boréal, Les Falaises → Ponant, l'archipel → Grand Lagon), puis six missions sur place
+(vivres pour la taïga, sauvetage au-dessus du fjord, tournée d'Orientia, safari, récif du lagon, facteur de la mangrove).
+
+**Froid** : la température de l'air (affichée dans la pastille météo) dépend du climat, de l'altitude (−8 °C par km)
+et de la nuit. Sous −3 °C, l'avion **givre**, d'autant plus vite qu'il fait froid, qu'on vole haut et dans les nuages
+ou la neige : le givre alourdit l'avion, fait perdre de la portance et décrocher plus tôt (alerte ❄ GIVRAGE, givre
+sur les bords du pare-brise en vue cockpit). Il fond dans l'air plus chaud et on dégivre à l'arrêt sur un aéroport.
+Le pilote se refroidit aussi (moins avec le moteur qui chauffe la cabine, presque pas en jet) : au-delà d'un seuil,
+ses mains tremblent sur le manche (alerte PILOTE GELÉ) jusqu'à ce qu'il se pose pour se réchauffer.
 
 ### Hangar : caisses et raretés
 

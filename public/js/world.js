@@ -242,7 +242,8 @@ export function onRunway(x, z) {
 }
 
 // ---------- Recherches de lieux ----------
-function search(x, z, R, step, test, score, lim = CORE_HALF - 1000) {
+function search(x, z, R, step, test, score, lim) {
+  lim ??= CORE_HALF - 1000;
   let best = null;
   for (let dx = -R; dx <= R; dx += step) {
     for (let dz = -R; dz <= R; dz += step) {
@@ -257,11 +258,13 @@ function search(x, z, R, step, test, score, lim = CORE_HALF - 1000) {
   return best || { x, z, y: terrainHeight(x, z) };
 }
 const nearWater = (x, z, r) => [[r, 0], [-r, 0], [0, r], [0, -r]].some(([dx, dz]) => terrainHeight(x + dx, z + dz) < -3);
-export const findCoast = (x, z, R = 6000) => search(x, z, R, 200, (px, pz, h) => h > 4 && h < 40 && nearWater(px, pz, 250));
-export const findSea = (x, z, depth, R = 8000) => search(x, z, R, 400, (px, pz, h) => h < -depth);
-export const findPeak = (x, z, R) => search(x, z, R, 250, () => true, (px, pz, h) => h);
-export const findFlat = (x, z, R, minH = 10) => search(x, z, R, 250, (px, pz, h) =>
-  h > minH && Math.abs(terrainHeight(px + 150, pz) - h) < 8 && Math.abs(terrainHeight(px, pz + 150) - h) < 8);
+// lim : demi-côté de la zone de recherche (par défaut le monde d'origine ; HALF - 1000 pour les nouvelles terres)
+export const findCoast = (x, z, R = 6000, lim) => search(x, z, R, 200, (px, pz, h) => h > 4 && h < 40 && nearWater(px, pz, 250), undefined, lim);
+export const findSea = (x, z, depth, R = 8000, lim) => search(x, z, R, 400, (px, pz, h) => h < -depth, undefined, lim);
+export const findPeak = (x, z, R, lim) => search(x, z, R, 250, () => true, (px, pz, h) => h, lim);
+export const findFlat = (x, z, R, minH = 10, lim) => search(x, z, R, 250, (px, pz, h) =>
+  h > minH && Math.abs(terrainHeight(px + 150, pz) - h) < 8 && Math.abs(terrainHeight(px, pz + 150) - h) < 8, undefined, lim);
+export const OUTER_LIM = HALF - 1000;
 
 // Point culminant de toute la carte (hors volcan)
 const SUMMIT = (() => {

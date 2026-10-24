@@ -494,4 +494,10 @@ export default {
   "Ailes": "Alas",
   "Finition de la peinture": "Acabado de la pintura",
   "Emblème sur la dérive": "Emblema en la deriva",
+  // froid
+  "GIVRAGE": "ENGELAMIENTO",
+  "PILOTE GELÉ": "PILOTO CONGELADO",
+  "Givrage ! L'avion s'alourdit : descends dans l'air plus chaud ou pose-toi pour dégivrer.": "¡Engelamiento! El avión pesa más: desciende a aire más cálido o aterriza para deshelarlo.",
+  "Avion dégivré": "Avión deshelado",
+  "Le pilote grelotte ! Pose-toi sur un aéroport pour te réchauffer.": "¡El piloto tirita! Aterriza en un aeropuerto para entrar en calor.",
 };
