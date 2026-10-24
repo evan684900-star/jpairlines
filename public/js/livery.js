@@ -54,15 +54,29 @@ export const SMOKE_MODES = [['uni', 'Une couleur'], ['bicolore', 'Deux couleurs 
 export const SUITS = [
   ['commandant', 'Commandant de bord'], ['voltige', 'Pilote de voltige'], ['vintage', 'Aviateur des années 30'],
   ['nuit', 'Vol de nuit'], ['tropique', 'Tropiques'], ['militaire', 'Escadrille'], ['vip', 'Jet privé'],
+  ['course', 'Pilote de course'], ['pompier', 'Pompier du ciel'], ['cowboy', 'Cow-boy du ciel'], ['pirate', 'Pirate de l\'air'],
+  ['noel', 'Père Noël'], ['astronaute', 'Cosmonaute'],
 ];
-export const SUIT_TINTS = {
-  commandant: { Shirt: '#ffffff', Cap: '#ffffff', Trousers: '#ffffff', Tie: '#ffffff' },
-  voltige: { Shirt: '#ff5a4a', Cap: '#ff3b30', Trousers: '#4a4a52', Tie: '#ffd23f' },
-  vintage: { Shirt: '#d9b48a', Cap: '#8a5a32', Trousers: '#b08a5e', Tie: '#7a3b1e' },
-  nuit: { Shirt: '#5a5f6a', Cap: '#3a3d44', Trousers: '#6a6d75', Tie: '#9fd4ff' },
-  tropique: { Shirt: '#9fe3c8', Cap: '#fff3a0', Trousers: '#e8dcc0', Tie: '#ff7a1a' },
-  militaire: { Shirt: '#9aa36a', Cap: '#7a8250', Trousers: '#8a9060', Tie: '#4a4f30' },
-  vip: { Shirt: '#2a2c33', Cap: '#1c1e22', Trousers: '#55575e', Tie: '#d4af37' },
+// Tenues : vêtements recolorés en entier (couleur ou motif, par matériau du modèle : Shirt, Trousers, Cap, Tie,
+// Leather = chaussures et ceinture), éléments cachés (hide) et accessoires (acc, voir pilotOutfit.js).
+const NO_UNIFORM = ['Cap', 'Tie', 'Insignia'];
+export const OUTFITS = {
+  commandant: {},
+  voltige: { cloth: { Shirt: '#d8261e', Trousers: '#d8261e' }, hide: NO_UNIFORM, acc: { helmet: { color: '#f4f4f0', stripe: '#d8261e' } } },
+  vintage: { cloth: { Shirt: '#6b4428', Trousers: '#a88458', Leather: '#3a2414' }, hide: NO_UNIFORM, acc: { leather: { color: '#5a3a20' }, scarf: { color: '#f4f1ea' } } },
+  nuit: { cloth: { Shirt: '#1a2233', Trousers: '#1a2233', Cap: '#1a2233' }, hide: ['Tie'], acc: { headset: { color: '#2a2c33' } } },
+  tropique: { cloth: { Shirt: { pattern: 'fleurs', color: '#1aa39a', color2: '#ff5a7a' }, Trousers: '#e8dcc0', Leather: '#a8784a' }, hide: NO_UNIFORM, acc: { straw: {}, shades: {} } },
+  militaire: {
+    cloth: { Shirt: { pattern: 'camo', color: '#6f7448', color2: '#4d5233' }, Trousers: { pattern: 'camo', color: '#6f7448', color2: '#4d5233' }, Leather: '#2a2418' },
+    hide: NO_UNIFORM, acc: { helmet: { color: '#4f5634', visor: '#2a2d20' } },
+  },
+  vip: { cloth: { Shirt: '#16171b', Trousers: '#16171b', Cap: '#16171b', Tie: '#d4af37' }, acc: { shades: {} } },
+  course: { cloth: { Shirt: { pattern: 'bandes', color: '#1d4fd8', color2: '#ffffff' }, Trousers: '#1d4fd8' }, hide: NO_UNIFORM, acc: { helmet: { color: '#1d4fd8', stripe: '#ffffff', visor: '#d4a52a' } } },
+  pompier: { cloth: { Shirt: { pattern: 'bandes', color: '#2c3a2a', color2: '#e8e24a' }, Trousers: '#2c3a2a', Leather: '#111111' }, hide: NO_UNIFORM, acc: { fire: {} } },
+  cowboy: { cloth: { Shirt: { pattern: 'carreaux', color: '#b3131b', color2: '#1c1e22' }, Trousers: '#2f4f80', Leather: '#6b3f1e' }, hide: NO_UNIFORM, acc: { cowboy: {}, scarf: { color: '#c8261e' } } },
+  pirate: { cloth: { Shirt: '#f1e6cf', Trousers: '#1c1e22', Leather: '#2a1a10' }, hide: NO_UNIFORM, acc: { pirate: {} } },
+  noel: { cloth: { Shirt: '#c8261e', Trousers: '#c8261e', Leather: '#111111' }, hide: NO_UNIFORM, acc: { santa: {}, scarf: { color: '#ffffff' } } },
+  astronaute: { cloth: { Shirt: '#f2f2ee', Trousers: '#f2f2ee', Leather: '#c0c6cc' }, hide: NO_UNIFORM, acc: { space: {} } },
 };
 export const MAX_STICKERS = 16;
 // couleurs proposées (le joueur peut aussi choisir n'importe quelle couleur)
@@ -190,11 +204,11 @@ export const RARITIES = [
 const CRATE_RARITY = {
   commun: ['sticker:nuage', 'sticker:pique', 'sticker:goutte', 'sticker:flocon', 'wings:fuite', 'wings:degrade', 'pattern:diagonale', 'emblem:helice', 'suit:nuit', 'suit:tropique'],
   rare: ['pattern:cheatline', 'pattern:retro', 'pattern:ecossais', 'pattern:pixel', 'sticker:avion', 'sticker:helice', 'sticker:galons', 'sticker:yinyang',
-    'sticker:bouclier', 'wings:etoiles', 'wings:invasion', 'emblem:soleil', 'emblem:bouclier', 'finish:givre', 'regColor', 'suit:voltige', 'suit:militaire'],
+    'sticker:bouclier', 'wings:etoiles', 'wings:invasion', 'emblem:soleil', 'emblem:bouclier', 'finish:givre', 'regColor', 'suit:voltige', 'suit:militaire', 'suit:pompier'],
   epique: ['pattern:invasion', 'pattern:zebre', 'pattern:leopard', 'pattern:hexa', 'pattern:eclabous', 'sticker:boussole', 'sticker:globe', 'sticker:arcenciel',
-    'wings:soleil', 'wings:flammes', 'emblem:boussole', 'emblem:globe', 'emblem:requin', 'finish:velours', 'finish:perle', 'smokeMode:bicolore', 'suit:vintage'],
-  legendaire: ['pattern:soleil', 'pattern:etoiles', 'pattern:carbone', 'emblem:aigle', 'emblem:crane', 'emblem:planete', 'finish:brosse', 'smokeMode:tricolore', 'suit:vip'],
-  exotique: ['pattern:warbird', 'finish:irise', 'finish:miroir', 'smokeMode:arcenciel'],
+    'wings:soleil', 'wings:flammes', 'emblem:boussole', 'emblem:globe', 'emblem:requin', 'finish:velours', 'finish:perle', 'smokeMode:bicolore', 'suit:vintage', 'suit:course', 'suit:cowboy'],
+  legendaire: ['pattern:soleil', 'pattern:etoiles', 'pattern:carbone', 'emblem:aigle', 'emblem:crane', 'emblem:planete', 'finish:brosse', 'smokeMode:tricolore', 'suit:vip', 'suit:pirate', 'suit:noel'],
+  exotique: ['pattern:warbird', 'finish:irise', 'finish:miroir', 'smokeMode:arcenciel', 'suit:astronaute'],
 };
 const RARITY_OF = {};
 for (const [r, keys] of Object.entries(CRATE_RARITY)) for (const k of keys) RARITY_OF[k] = r;

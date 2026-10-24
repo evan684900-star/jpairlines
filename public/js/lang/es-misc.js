@@ -508,4 +508,11 @@ export default {
   "Plus de carburant : chauffage coupé": "Sin combustible: calefacción apagada",
   "Couper le chauffage": "Apagar la calefacción",
   "🔒 {n} à débloquer": "🔒 {n} por desbloquear",
+  // tenues
+  "Pilote de course": "Piloto de carreras",
+  "Pompier du ciel": "Bombero del cielo",
+  "Cow-boy du ciel": "Vaquero del cielo",
+  "Pirate de l'air": "Pirata del aire",
+  "Père Noël": "Papá Noel",
+  "Cosmonaute": "Cosmonauta",
 };

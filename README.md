@@ -268,7 +268,15 @@ Nouveautés (57, dans les caisses) : 14 motifs (bandes du Débarquement, rayons 
 aérienne, rétro années 50, chasseur 1944, zèbre, léopard, nid d'abeille, écossais, éclaboussures, ciel étoilé, pixels,
 fibre de carbone, grande diagonale), 6 décors d'ailes, 6 finitions (caméléon, aluminium brossé, miroir, velours, givré,
 perle), 9 emblèmes, 12 autocollants, 3 effets de fumigène (deux couleurs, arc-en-ciel, bleu-blanc-rouge, visibles par
-les autres joueurs), la couleur de l'immatriculation et 6 tenues pour le pilote de la cinématique (onglet Pilote).
+les autres joueurs) et la couleur de l'immatriculation.
+
+**Tenues du pilote** (onglet Pilote, `pilotOutfit.js`) : 13 vraies tenues, visibles dans l'avion, au hangar et dans la
+cinématique. Chacune recolore entièrement les vêtements (en gardant les plis du modèle), avec parfois un motif
+(fleurs, camouflage, carreaux, bandes), cache la casquette et la cravate quand il le faut et ajoute des accessoires
+attachés à la tête ou au cou : casque à visière (voltige, escadrille, course), serre-tête en cuir et lunettes
+(années 30), casque radio (vol de nuit), chapeau de paille et lunettes de soleil (tropiques), chapeau de cow-boy,
+casque de pompier, bandana et bandeau de pirate, bonnet de Noël, bulle de cosmonaute, écharpes. Les six nouvelles
+(course, pompier, cow-boy, pirate, Père Noël, cosmonaute) se gagnent dans les caisses.
 
 ### Qualité « Personnalisé »
 

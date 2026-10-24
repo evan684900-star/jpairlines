@@ -539,4 +539,11 @@ export default {
   "Plus de carburant : chauffage coupé": "Out of fuel: heater off",
   "Couper le chauffage": "Turn the heater off",
   "🔒 {n} à débloquer": "🔒 {n} to unlock",
+  // tenues
+  "Pilote de course": "Racing pilot",
+  "Pompier du ciel": "Sky firefighter",
+  "Cow-boy du ciel": "Sky cowboy",
+  "Pirate de l'air": "Sky pirate",
+  "Père Noël": "Santa Claus",
+  "Cosmonaute": "Cosmonaut",
 };

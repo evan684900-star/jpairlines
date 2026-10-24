@@ -1,7 +1,8 @@
 // Modèles 3D des avions, construits à partir de leur description (aircraft.js) : nez vers -Z.
 import * as THREE from 'three';
 import { aircraftById } from './aircraft.js';
-import { cleanLivery, SUIT_TINTS } from './livery.js';
+import { cleanLivery } from './livery.js';
+import { dressPilot } from './pilotOutfit.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
@@ -953,17 +954,15 @@ function poseSeated(root) {
   root.updateMatrixWorld(true);
   return B.Hips.getWorldPosition(new THREE.Vector3());
 }
-// teinte des matériaux selon la tenue (chemise, casquette, pantalon, cravate)
+// habille une copie du pilote (vraie tenue : vêtements, chapeau ou casque, accessoires, voir pilotOutfit.js)
 function tintSuit(m, suit) {
-  const tint = SUIT_TINTS[suit] || SUIT_TINTS.commandant;
   m.traverse((o) => {
     if (!o.isMesh) return;
     o.frustumCulled = false;
     o.castShadow = true;
     o.userData.shared = true;
-    if (tint[o.material.name] && tint[o.material.name] !== '#ffffff') { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(tint[o.material.name])); }
   });
-  return m;
+  return dressPilot(m, suit);
 }
 // pilote debout dans sa tenue (aperçu du hangar), ou null si le modèle n'est pas chargé
 export function standingPilot(suit) {
