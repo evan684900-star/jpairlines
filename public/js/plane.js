@@ -22,6 +22,7 @@ export const DIFFICULTY = {
 };
 
 const DT = 1 / 240; // pas de simulation (s)
+export const SPAWN_GAP = 15; // m : distance minimale à un autre joueur au sol pour apparaître sur la piste
 const clamp = THREE.MathUtils.clamp;
 const smooth = (x) => x * x * (3 - 2 * x);
 
@@ -119,15 +120,26 @@ export class Plane {
     return Math.sqrt((2 * (this.mass + ice * 0.06 * S.emptyMass) * G) / (airDensity(this.pos.y) * S.S * clMax));
   }
 
-  placeOnRunway(a, engineOn = false) {
+  // occupied : positions {x, z} des autres joueurs au sol. Les avions ne se percutent pas (fantômes sans collision),
+  // mais apparaître dans un autre joueur est désagréable : on prend la première place libre, comme pour un décollage
+  // en formation : axe de la piste, puis à gauche et à droite de l'axe, puis un peu plus loin, puis l'autre bout.
+  placeOnRunway(a, engineOn = false, occupied = []) {
     this.reset();
-    // toujours au début de la piste, sur l'axe, face à toute sa longueur (juste après les marques du seuil).
-    // Les autres joueurs sont des fantômes sans collision : pas besoin de décaler au hasard.
     const back = a.length / 2 - 40;
-    const side = 0;
-    const [x, z] = runwayPoint(a.x, a.z, a.heading, side, back);
-    this.quat.setFromEuler(new THREE.Euler(0, a.heading, 0, 'YXZ'));
-    this.pos.set(x, groundHeight(x, z) + this.S.gear - 0.04, z);
+    const side = Math.max(8, a.width / 2 - 6); // décalage latéral : les ailes ne se touchent pas
+    const spots = [];
+    for (const [v0, dir, turn] of [[back, -1, 0], [-back, 1, Math.PI]]) {
+      for (let k = 0; k < 3; k++) for (const u of [0, side, -side]) spots.push([u, v0 + dir * 70 * k, turn]);
+    }
+    const free = (x, z) => occupied.every((o) => Math.hypot(o.x - x, o.z - z) > SPAWN_GAP);
+    let pick = null;
+    for (const [u, v, turn] of spots) {
+      const [x, z] = runwayPoint(a.x, a.z, a.heading, u, v);
+      if (free(x, z)) { pick = { x, z, h: a.heading + turn }; break; }
+    }
+    if (!pick) { const [x, z] = runwayPoint(a.x, a.z, a.heading, 0, back); pick = { x, z, h: a.heading }; }
+    this.quat.setFromEuler(new THREE.Euler(0, pick.h, 0, 'YXZ'));
+    this.pos.set(pick.x, groundHeight(pick.x, pick.z) + this.S.gear - 0.04, pick.z);
     this.landedAt = a;
     if (engineOn) { this.engineOn = true; this.rpm = 0.15; }
   }

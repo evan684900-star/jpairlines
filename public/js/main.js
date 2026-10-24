@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {
   WORLD, HALF, AIRPORTS, LANDMARKS, CITIES, TOWNS, terrainHeight, groundHeight, airportById, climate,
 } from './world.js';
-import { Plane, createPlaneMesh, animatePlaneMesh, DIFFICULTY } from './plane.js';
+import { Plane, createPlaneMesh, animatePlaneMesh, DIFFICULTY, SPAWN_GAP } from './plane.js';
 import { AIRCRAFT, aircraftById, aircraftIndex, unlockedAircraft } from './aircraft.js';
 import { Terrain, terrainColor } from './terrain.js';
 import { Decor } from './decor.js';
@@ -394,12 +394,17 @@ function doRefuel(dt) {
   }
 }
 
+// autres joueurs posés au sol (pour ne pas apparaître dans leur avion)
+function occupiedSpots() {
+  return [...remotes.values()].filter((r) => r.tp.y - Math.max(0, groundHeight(r.tp.x, r.tp.z)) < 20).map((r) => r.tp);
+}
+
 function respawn(airport, teleport = false) {
   const a = airport || airportById(save.lastAirport) || AIRPORTS[0];
   quests?.onRespawn(plane.crashed, teleport);
   const far = plane.pos.distanceTo(new THREE.Vector3(a.x, a.elev, a.z)) > 4000;
   const keepFuel = !plane.crashed && plane.fuel > 0 ? plane.fuel : plane.S.fuelCapacity;
-  plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine);
+  plane.placeOnRunway(a, DIFFICULTY[settings.difficulty]?.autoEngine, occupiedSpots());
   plane.fuel = keepFuel;
   rig.reset(plane);
   $('crash').classList.add('hidden');
@@ -800,6 +805,7 @@ function connect() {
     if (msg.t === 'welcome') {
       net.id = msg.id;
       net.known = null;
+      net.placed = false;
       $('chat-lines').textContent = '';
       for (const c of msg.chat || []) chatLine(c.name, c.text, 'old');
       net.liveries = new Map(Object.entries(msg.liveries || {}).map(([k, v]) => [Number(k), v]));
@@ -865,6 +871,17 @@ function syncRemotes(list) {
     r.id = p.id;
   }
   for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
+  // à la connexion, si on attend au début de la piste là où un autre joueur est déjà posé : on prend une place libre
+  if (!net.placed && plane.landedAt && plane.onGround && plane.speed < 0.5 && !plane.crashed) {
+    const occ = occupiedSpots();
+    if (occ.some((o) => Math.hypot(o.x - plane.pos.x, o.z - plane.pos.z) < SPAWN_GAP)) {
+      const fuel = plane.fuel, engine = plane.engineOn;
+      plane.placeOnRunway(plane.landedAt, engine, occ);
+      plane.fuel = fuel;
+      rig.reset(plane);
+    }
+  }
+  net.placed = true;
   $('online').textContent = remotes.size ? t('{n} pilotes en ligne', { n: remotes.size + 1 }) : t('{n} pilote en ligne', { n: 1 });
 }
 
@@ -981,7 +998,7 @@ function setAircraft(id) {
   save.aircraft = def.id;
   persist();
   if (here) {
-    plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine);
+    plane.placeOnRunway(here, DIFFICULTY[settings.difficulty]?.autoEngine, occupiedSpots());
     rig.reset(plane);
   } else respawn(undefined, true);
   toast(t('{name} sorti du hangar !', { name: def.name }));
