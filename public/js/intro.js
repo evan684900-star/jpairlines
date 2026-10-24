@@ -616,6 +616,8 @@ export class Intro {
     this.t += dt;
     const t = this.t, p = this.pilot, U = p.userData, cam = this.ctx.camera, M = this.mesh;
     const { T1, T2, T3, T4, T5, cutA } = this.times;
+    // le pilote assis de l'avion n'apparaît qu'une fois celui de la cinématique installé
+    if (M.userData.pilot) M.userData.pilot.visible = this.t >= T3;
     M.updateMatrixWorld(true);
     const fwd = new THREE.Vector3(0, 0, -1).transformDirection(M.matrixWorld).setY(0).normalize();
     const left = new THREE.Vector3(-1, 0, 0).transformDirection(M.matrixWorld).setY(0).normalize();
@@ -791,6 +793,7 @@ export class Intro {
     drop(this.stairs); this.stairs = null;
     drop(this.hinge); this.hinge = null;
     drop(this.hole); this.hole = null;
+    if (this.mesh?.userData.pilot) this.mesh.userData.pilot.visible = true;
     if (this.active && this.baseFov) { this.ctx.camera.fov = this.baseFov; this.ctx.camera.updateProjectionMatrix(); }
     this.pilot.visible = false;
     this.bars.classList.add('hidden');

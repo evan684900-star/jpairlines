@@ -1,9 +1,10 @@
 // Modèles 3D des avions, construits à partir de leur description (aircraft.js) : nez vers -Z.
 import * as THREE from 'three';
 import { aircraftById } from './aircraft.js';
-import { cleanLivery } from './livery.js';
+import { cleanLivery, SUIT_TINTS } from './livery.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { stickerTexture, drawSticker } from './stickers.js';
 // couleur claire (immatriculation en couleur sur fond clair : contour sombre pour rester lisible)
@@ -713,7 +714,22 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
   g.add(interior);
   const [sx, sz] = CB.seats[0];
   let pilot = null;
-  if (detail) {
+  if (detail && PILOT) {
+    // vrai pilote 3D, hanches sur le coussin du siège
+    pilot = new THREE.Group();
+    let hipY = CB.seatY + 0.13;
+    const sp = seatedPilot(new THREE.Vector3(sx, hipY, sz + 0.1), LV.suit);
+    if (MD.canopy) {
+      // verrière en bulle : le pilote est assis haut, la tête dans la bulle (sinon caché par le haut du fuselage)
+      let top = MD.canopy.y;
+      for (const [z, , h, yc] of MD.fuse) if (z > MD.canopy.z0 && z < MD.canopy.z1) top = Math.max(top, yc + h);
+      hipY = top - 0.48;
+      sp.scale.setScalar(0.88);
+      sp.position.copy(new THREE.Vector3(sx, hipY, sz + 0.1)).sub(PILOT.hips.clone().multiplyScalar(0.88).applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+    }
+    pilot.add(sp);
+    g.add(pilot);
+  } else if (detail) {
     pilot = new THREE.Group();
     const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.3, 4, 10), new THREE.MeshStandardMaterial({ color: 0x2f4a6b, roughness: 0.8 }));
     torso.position.set(sx, CB.seatY + 0.34, sz + 0.07);
@@ -905,8 +921,60 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
 // ----------------------------------------------------------------------------------------------------
 const GLB = {};
 const GLB_FILES = { cub: { file: 'cub.glb', offset: [0, -1.55, 0.45] } };
+// Pilote 3D (models/pilote.glb) mis une fois pour toutes en position assise, puis copié dans chaque avion.
+// Le modèle regarde vers +z et a les hanches à SEAT_HIPS.y : chaque os est orienté vers une direction voulue.
+let PILOT = null;
+function poseSeated(root) {
+  const B = {};
+  root.traverse((o) => { if (o.isBone) B[o.name.replace(/^mixamorig:?/, '')] = o; });
+  const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), qa = new THREE.Quaternion(), qb = new THREE.Quaternion();
+  // oriente l'os pour que la direction vers son premier os enfant devienne dir (repère du modèle)
+  const aim = (name, dir) => {
+    const b = B[name], c = b?.children.find((o) => o.isBone);
+    if (!b || !c) return;
+    root.updateMatrixWorld(true);
+    b.getWorldPosition(v1); c.getWorldPosition(v2);
+    qa.setFromUnitVectors(v2.sub(v1).normalize(), dir.clone().normalize());
+    b.getWorldQuaternion(qb);
+    const world = qa.multiply(qb);
+    b.parent.getWorldQuaternion(qb).invert();
+    b.quaternion.copy(qb.multiply(world));
+  };
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  aim('Spine', V(0, 1, -0.12)); aim('Spine1', V(0, 1, -0.08)); aim('Spine2', V(0, 1, -0.04)); aim('Neck', V(0, 1, 0.12)); aim('Head', V(0, 1, 0.05));
+  for (const [side, sx] of [['Left', 1], ['Right', -1]]) {
+    aim(`${side}UpLeg`, V(sx * 0.12, -0.12, 1));   // cuisses à l'horizontale sur le siège
+    aim(`${side}Leg`, V(sx * 0.03, -0.6, 1));      // jambes allongées vers les pédales (petit avion)
+    aim(`${side}Foot`, V(0, 0.45, 1));            // pieds sur les pédales
+    aim(`${side}Arm`, V(sx * 0.28, -0.75, 0.6));   // bras le long du corps, vers l'avant
+    aim(`${side}ForeArm`, V(-sx * 0.12, 0.05, 1)); // avant-bras vers le manche
+    aim(`${side}Hand`, V(-sx * 0.1, -0.1, 1));
+  }
+  root.updateMatrixWorld(true);
+  return B.Hips.getWorldPosition(new THREE.Vector3());
+}
+// copie du pilote assis, teinte selon sa tenue ; hips : point où poser les hanches (repère de l'avion)
+function seatedPilot(hips, suit) {
+  const m = cloneSkinned(PILOT.root);
+  const tint = SUIT_TINTS[suit] || SUIT_TINTS.commandant;
+  m.traverse((o) => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    o.castShadow = true;
+    o.userData.shared = true; // géométrie commune à tous les avions : ne pas la libérer
+    if (tint[o.material.name] && tint[o.material.name] !== '#ffffff') { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(tint[o.material.name])); }
+  });
+  m.rotation.y = Math.PI; // le modèle regarde vers +z, l'avion vers -z
+  m.position.copy(hips).sub(PILOT.hips.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  return m;
+}
+
 export async function loadPlaneModels(base = 'models/') {
   const loader = new GLTFLoader();
+  const pilotJob = loader.loadAsync(`${base}pilote.glb`).then((g) => {
+    const hips = poseSeated(g.scene);
+    PILOT = { root: g.scene, hips };
+  }).catch((e) => console.warn('Pilote 3D indisponible, pilote simplifié utilisé', e));
   await Promise.all(Object.entries(GLB_FILES).map(async ([id, f]) => {
     try {
       const gltf = await loader.loadAsync(base + f.file);
@@ -936,6 +1004,7 @@ export async function loadPlaneModels(base = 'models/') {
       console.warn(`Modèle 3D ${f.file} indisponible, modèle simplifié utilisé`, e);
     }
   }));
+  await pilotJob;
 }
 
 const PAINTED = /^(Peinture_Blanche|Bande_Bleue|Bande_Rouge)$/;
@@ -1096,7 +1165,7 @@ function mountGlb(g, src, k) {
   }
   if (seat) {
     const b = box(seat);
-    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.13, b.max.z - 0.42); // tête droite, un peu en avant de l'appuie-tête : on voit mieux par le pare-brise
+    out.eye = new THREE.Vector3((b.min.x + b.max.x) / 2, b.max.y - 0.21, b.max.z - 0.42); // un peu plus bas : on voit mieux la piste // tête droite, un peu en avant de l'appuie-tête : on voit mieux par le pare-brise
   }
   const exh = at('Echappement');
   if (exh) out.exhaust = exh.add(new THREE.Vector3(0, -0.02, 0.1));
