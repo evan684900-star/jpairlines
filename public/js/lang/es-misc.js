@@ -507,4 +507,5 @@ export default {
   "Plus de carburant : chauffage impossible": "Sin combustible: calefacción imposible",
   "Plus de carburant : chauffage coupé": "Sin combustible: calefacción apagada",
   "Couper le chauffage": "Apagar la calefacción",
+  "🔒 {n} à débloquer": "🔒 {n} por desbloquear",
 };

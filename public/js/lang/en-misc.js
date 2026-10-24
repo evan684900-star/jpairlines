@@ -538,4 +538,5 @@ export default {
   "Plus de carburant : chauffage impossible": "Out of fuel: heater unavailable",
   "Plus de carburant : chauffage coupé": "Out of fuel: heater off",
   "Couper le chauffage": "Turn the heater off",
+  "🔒 {n} à débloquer": "🔒 {n} to unlock",
 };

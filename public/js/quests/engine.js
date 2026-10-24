@@ -297,6 +297,7 @@ export class QuestSystem {
     for (const c of this.clusters) {
       const avail = c.quests.filter((q) => this.isAvailable(q) && this.active?.q !== q);
       c.available = avail.length;
+      c.locked = c.quests.filter((q) => !q.job && !this.isDone(q) && this.lockReason(q)).length; // à débloquer (affichées sur la carte)
       c.group.visible = avail.length > 0;
       const text = avail.length === 1 ? `! ${t(avail[0].title)}` : `! ${t('{n} quêtes', { n: avail.length })}`;
       if (c.labelText !== text) {
@@ -792,9 +793,23 @@ export class QuestSystem {
   // ----- carte -----
   drawMap(ctx, toX, toY, full, span, text) {
     for (const c of this.clusters) {
-      if (!c.available) continue;
-      text('!', toX(c.x) - 2, toY(c.z) + 4, '#ffd23f');
-      if (full && span < 40000) text(c.available === 1 ? t(c.quests.find((q) => this.isAvailable(q)).title) : t('{n} quêtes', { n: c.available }), toX(c.x) + 6, toY(c.z) + 16, '#ffd23f');
+      if (c.available) {
+        text('!', toX(c.x) - 2, toY(c.z) + 4, '#ffd23f');
+        if (full && span < 40000) text(c.available === 1 ? t(c.quests.find((q) => this.isAvailable(q)).title) : t('{n} quêtes', { n: c.available }), toX(c.x) + 6, toY(c.z) + 16, '#ffd23f');
+      } else if (c.locked) {
+        // quêtes pas encore débloquées : cadenas gris, pour savoir où elles se trouvent
+        const r = full ? 9 : 6, x = toX(c.x), y = toY(c.z);
+        ctx.save();
+        ctx.fillStyle = '#2b333bdd';
+        ctx.strokeStyle = '#b8c2cb';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.font = `${Math.round(r * 1.2)}px system-ui`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🔒', x, y + 1);
+        ctx.restore();
+      }
+      if (full && span < 40000 && c.locked) text(t('🔒 {n} à débloquer', { n: c.locked }), toX(c.x) + 6, toY(c.z) + (c.available ? 32 : 16), '#b8c2cb');
     }
     if (!this.active) return;
     const p = this.stepPoint(this.active.q.steps[this.active.step]);
