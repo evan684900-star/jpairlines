@@ -406,4 +406,15 @@ export default {
   "Essuie-glaces en marche": "Limpiaparabrisas encendidos",
   "Essuie-glaces arrêtés": "Limpiaparabrisas apagados",
   "· Gouttes de pluie sur le pare-brise": "· Gotas de lluvia en el parabrisas",
+  // qualité personnalisée
+  "Personnalisé (je choisis tout)": "Personalizado (lo elijo todo)",
+  "Résolution de l'image": "Resolución de la imagen",
+  "Finesse des ombres": "Detalle de las sombras",
+  "Basse": "Baja",
+  "Moyenne": "Media",
+  "Haute": "Alta",
+  "Anticrénelage": "Antialiasing",
+  "Rapide (SMAA)": "Rápido (SMAA)",
+  "Fin (MSAA ×4)": "Fino (MSAA ×4)",
+  "Détail du décor (nuages, eau, forêts)": "Detalle del paisaje (nubes, agua, bosques)",
 };

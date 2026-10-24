@@ -58,7 +58,13 @@ export const reducedMotion = typeof matchMedia === 'function' && matchMedia('(pr
 
 // Options effectives à partir des paramètres du joueur
 export function renderConfig(settings) {
-  const q = QUALITY_PRESETS[settings.quality] || QUALITY_PRESETS.medium;
+  let q = QUALITY_PRESETS[settings.quality] || QUALITY_PRESETS.medium;
+  if (settings.quality === 'custom') {
+    // personnalisé : le détail du décor vient d'un préréglage choisi, le reste des réglages du joueur
+    const base = QUALITY_PRESETS[settings.c_detail] || QUALITY_PRESETS.medium;
+    q = { ...base, label: 'Personnalisé', pixelRatio: Number(settings.c_pixelRatio) || 1, shadowMap: Number(settings.c_shadowMap) || 2048,
+      shadowRange: Number(settings.c_shadowMap) >= 4096 ? Math.max(base.shadowRange, 650) : base.shadowRange, msaa: Number(settings.c_msaa) || 0 };
+  }
   const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
   const on = (k) => settings[`fx_${k}`] ?? q.effects[k];
   const post = on('post');

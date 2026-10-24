@@ -66,7 +66,7 @@ let world = null;
 function applySettings(key) {
   gfx.applySettings(settings, key);
   if (!key || key === 'viewDist') terrain.setViewDistance(settings.viewDist * 1000);
-  if (!key || key === 'trees' || key === 'decoDist' || key === 'quality') decor.setOptions({ density: settings.trees, radius: settings.decoDist, q: gfx.cfg });
+  if (!key || key === 'trees' || key === 'decoDist' || key === 'quality' || key === 'c_detail') decor.setOptions({ density: settings.trees, radius: settings.decoDist, q: gfx.cfg });
   if (!key || key === 'showFps') $('fps').classList.toggle('hidden', !settings.showFps);
   if (!key || key === 'volume' || key === 'muted' || key.startsWith('snd_')) sound?.setVolume(settings);
   if (!key || key === 'minimap') $('minimap').classList.toggle('hidden', !settings.minimap);

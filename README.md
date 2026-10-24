@@ -228,6 +228,13 @@ qui tourne vite avec réducteur ; Faucon : 6 cylindres de voltige, le plus fort 
 désaccordés (battement des bimoteurs, en stéréo) ; Albatros : moteur en étoile à 9 cylindres ; Éclair : turbine
 (fan, compresseur, souffle). Plus sourd dans le cockpit et au loin.
 
+### Qualité « Personnalisé »
+
+Paramètres → Graphismes → Qualité → « Personnalisé » : on choisit soi-même chaque effet, la résolution de l'image, la
+finesse des ombres, l'anticrénelage et le détail du décor. Cocher ou décocher un effet sur un préréglage (Bas, Moyen…)
+passe automatiquement en « Personnalisé » en gardant le reste ; cocher un effet du post-traitement (lignes « · »)
+active aussi le post-traitement, dont ils dépendent.
+
 ### Performances des menus
 
 Quand un menu est ouvert (pause, aide, carte, journal, missions), la 3D est figée sur la dernière image au lieu

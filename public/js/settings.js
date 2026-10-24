@@ -5,7 +5,12 @@ import { t } from './i18n.js';
 // Paramètres du joueur (sauvegardés dans le navigateur)
 export const SCHEMA = [
   { section: 'Graphismes' },
-  { key: 'quality', label: 'Qualité', type: 'select', def: 'high', options: [['low', 'Bas'], ['medium', 'Moyen'], ['high', 'Élevé'], ['ultra', 'Ultra']] },
+  { key: 'quality', label: 'Qualité', type: 'select', def: 'high', options: [['low', 'Bas'], ['medium', 'Moyen'], ['high', 'Élevé'], ['ultra', 'Ultra'], ['custom', 'Personnalisé (je choisis tout)']] },
+  // réglages visibles seulement en « Personnalisé »
+  { key: 'c_pixelRatio', label: '· Résolution de l\'image', type: 'range', def: 1, min: 0.5, max: 2, step: 0.25, unit: '×', custom: true },
+  { key: 'c_shadowMap', label: '· Finesse des ombres', type: 'select', def: '2048', options: [['1024', 'Basse'], ['2048', 'Moyenne'], ['4096', 'Haute']], custom: true },
+  { key: 'c_msaa', label: '· Anticrénelage', type: 'select', def: '0', options: [['0', 'Rapide (SMAA)'], ['4', 'Fin (MSAA ×4)']], custom: true },
+  { key: 'c_detail', label: '· Détail du décor (nuages, eau, forêts)', type: 'select', def: 'medium', options: [['low', 'Bas'], ['medium', 'Moyen'], ['high', 'Élevé'], ['ultra', 'Ultra']], custom: true },
   { key: 'adaptiveRes', label: 'Résolution adaptative (baisse un peu la netteté si le jeu rame)', type: 'check', def: false },
   { key: 'viewDist', label: 'Distance de vue', type: 'range', def: 20, min: 8, max: 36, step: 2, unit: ' km' },
   { key: 'trees', label: 'Densité de végétation', type: 'range', def: 1, min: 0, max: 2, step: 0.25, unit: '×' },
@@ -52,15 +57,25 @@ export const SCHEMA = [
 const KEY = 'jpairlines-settings';
 export const settings = Object.fromEntries(SCHEMA.filter((s) => s.key && !s.preset).map((s) => [s.key, s.def]));
 try { Object.assign(settings, JSON.parse(localStorage.getItem(KEY)) || {}); } catch { /* pas de sauvegarde */ }
-if (!QUALITY_PRESETS[settings.quality]) settings.quality = 'high';
+if (!QUALITY_PRESETS[settings.quality] && settings.quality !== 'custom') settings.quality = 'high';
 // v2 : la résolution adaptative (qui rendait l'image floue) n'est plus activée par défaut
 if ((settings.v || 1) < 2) { settings.adaptiveRes = false; settings.v = 2; }
 // cases « effets » : valeurs du préréglage de qualité tant que le joueur ne les a pas changées
 export function applyPreset() {
+  if (settings.quality === 'custom') return; // personnalisé : on garde les cases du joueur
   for (const k of EFFECT_KEYS) settings[`fx_${k}`] = QUALITY_PRESETS[settings.quality].effects[k];
 }
+// passe en « Personnalisé » en gardant tout ce qui est affiché (cases et réglages de la qualité actuelle)
+export function toCustom() {
+  if (settings.quality === 'custom') return;
+  const q = QUALITY_PRESETS[settings.quality] || QUALITY_PRESETS.medium;
+  settings.c_pixelRatio = q.pixelRatio; settings.c_shadowMap = String(q.shadowMap); settings.c_msaa = String(q.msaa); settings.c_detail = settings.quality;
+  settings.quality = 'custom';
+}
+// les effets du post-traitement (lignes « · ») en dépendent : on l'active avec eux
+const POST_SUB = ['fx_bloom', 'fx_ao', 'fx_godrays', 'fx_chroma', 'fx_raindrops'];
 // nouvel effet ajouté depuis la dernière visite : valeur de la qualité choisie, sans toucher aux autres réglages
-for (const k of ['raindrops']) if (typeof settings[`fx_${k}`] !== 'boolean' && EFFECT_KEYS.some((x) => x !== k && typeof settings[`fx_${x}`] === 'boolean')) settings[`fx_${k}`] = QUALITY_PRESETS[settings.quality].effects[k];
+for (const k of ['raindrops']) if (typeof settings[`fx_${k}`] !== 'boolean' && EFFECT_KEYS.some((x) => x !== k && typeof settings[`fx_${x}`] === 'boolean')) settings[`fx_${k}`] = (QUALITY_PRESETS[settings.quality] || QUALITY_PRESETS.medium).effects[k];
 if (EFFECT_KEYS.some((k) => typeof settings[`fx_${k}`] !== 'boolean')) applyPreset();
 if (settings.fuel === false) settings.fuelMode = 'off'; // ancien réglage
 delete settings.fuel;
@@ -71,6 +86,7 @@ export const saveSettings = () => { try { localStorage.setItem(KEY, JSON.stringi
 export function buildSettingsForm(container, onChange) {
   container.innerHTML = '';
   for (const s of SCHEMA) {
+    if (s.custom && settings.quality !== 'custom') continue;
     if (s.section) {
       const h = document.createElement('h3');
       h.textContent = t(s.section);
@@ -88,7 +104,8 @@ export function buildSettingsForm(container, onChange) {
       for (const [v, txt] of s.options) input.add(new Option(t(txt), v));
       input.value = settings[s.key];
       input.onchange = () => {
-        settings[s.key] = input.value;
+        if (s.key === 'quality' && input.value === 'custom') toCustom(); // part de la qualité actuelle
+        else settings[s.key] = input.value;
         if (s.key === 'quality') { applyPreset(); buildSettingsForm(container, onChange); }
         saveSettings();
         onChange(s.key);
@@ -97,7 +114,21 @@ export function buildSettingsForm(container, onChange) {
       input = document.createElement('input');
       input.type = 'checkbox';
       input.checked = settings[s.key];
-      input.onchange = () => { settings[s.key] = input.checked; saveSettings(); onChange(s.key); };
+      input.onchange = () => {
+        settings[s.key] = input.checked;
+        if (s.preset) {
+          // cocher un effet sur un préréglage : on passe en « Personnalisé » (sinon le préréglage reprendrait le dessus)
+          const wasPreset = settings.quality !== 'custom';
+          toCustom();
+          if (input.checked && POST_SUB.includes(s.key)) settings.fx_post = true;
+          if (!input.checked && s.key === 'fx_post') for (const k of POST_SUB) settings[k] = false;
+          saveSettings();
+          buildSettingsForm(container, onChange);
+          onChange(wasPreset ? undefined : s.key);
+          return;
+        }
+        saveSettings(); onChange(s.key);
+      };
     } else {
       const wrap = document.createElement('span');
       wrap.className = 'range';

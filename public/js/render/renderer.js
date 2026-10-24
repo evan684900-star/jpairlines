@@ -83,7 +83,7 @@ export class GameRenderer {
     const cfg = renderConfig(settings);
     const prev = this.cfg;
     this.cfg = cfg;
-    if (!key || key === 'quality' || key === 'adaptiveRes') { this.resScale = 1; this.warmup = 8; this.setPixelRatio(); }
+    if (!key || key === 'quality' || key === 'adaptiveRes' || key === 'c_pixelRatio') { this.resScale = 1; this.warmup = 8; this.setPixelRatio(); }
     if (!key || key === 'viewDist') {
       this.viewDist = settings.viewDist * 1000;
       this.camera.far = this.viewDist * 1.6;

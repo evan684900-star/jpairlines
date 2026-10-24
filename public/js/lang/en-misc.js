@@ -437,4 +437,15 @@ export default {
   "Essuie-glaces en marche": "Wipers on",
   "Essuie-glaces arrêtés": "Wipers off",
   "· Gouttes de pluie sur le pare-brise": "· Raindrops on the windshield",
+  // qualité personnalisée
+  "Personnalisé (je choisis tout)": "Custom (I choose everything)",
+  "Résolution de l'image": "Image resolution",
+  "Finesse des ombres": "Shadow detail",
+  "Basse": "Low",
+  "Moyenne": "Medium",
+  "Haute": "High",
+  "Anticrénelage": "Anti-aliasing",
+  "Rapide (SMAA)": "Fast (SMAA)",
+  "Fin (MSAA ×4)": "Fine (MSAA ×4)",
+  "Détail du décor (nuages, eau, forêts)": "Scenery detail (clouds, water, forests)",
 };
