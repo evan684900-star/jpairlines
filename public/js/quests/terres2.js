@@ -53,11 +53,11 @@ export default [
   {
     id: 'terres2-boreal-spirale', title: 'Les aurores de Boréalis', category: 'tourisme', airport: 'boreal', requires: R_BOREAL,
     desc: 'Un photographe veut voir Boréalis d\'en haut, comme sous les aurores. Monte en spirale au-dessus de la ville. '
-      + 'Il fait très froid là-haut : allume le chauffage (touches 1 2 3).',
+      + 'Ensuite, grimpe au-dessus de 1 700 m pour la photo finale.',
     reward: 1400,
     steps: [
       ...stage('Spirale au-dessus de Boréalis', terrainFollow(ringsSpiral(BOREALIS.x, BOREALIS.z, 1500, 6, 500, 1300), 250, 0.3)),
-      ...stage('Grimper dans le froid', { type: 'altitude', min: 1700, text: 'Monte au-dessus de 1 700 m (chauffage conseillé !)' }),
+      ...stage('Grimper dans le froid', { type: 'altitude', min: 1700, text: 'Monte au-dessus de 1 700 m' }),
       ...stage('Se poser à Boréal International', land('boreal')),
     ],
   },
@@ -144,7 +144,7 @@ export default [
   {
     id: 'terres2-taiga-fjord', title: 'La traversée du Grand Nord', category: 'exploration', airport: 'taiga', requires: R_BOREAL,
     desc: 'Relie les deux bouts du Grand Nord : de Taïga à Fjord-aux-Ours, plus de 100 km dans le froid. Fais le '
-      + 'plein, garde le chauffage allumé et passe par Boréal.',
+      + 'plein et passe par Boréal.',
     reward: 3200, minRank: 2,
     steps: [
       ...stage('Escale à Boréal', touch('boreal')),
@@ -168,7 +168,7 @@ export default [
   {
     id: 'terres2-fjord-sommets', title: 'Les trois sommets', category: 'exploration', airport: 'fjord', requires: R_BOREAL,
     desc: 'Les cartographes ont besoin de photos des trois plus hauts sommets autour du fjord. Survole-les tous, '
-      + 'puis reviens. Là-haut, le givre guette.',
+      + 'puis reviens.',
     reward: 1800,
     steps: [
       ...stage('Premier sommet', reach(SOMMETS_FJORD[0], 600, 'premier sommet', { spawn: 'flag' })),
@@ -419,8 +419,8 @@ export default [
   // ===================== Grands voyages =====================
   {
     id: 'terres2-pole-nord', title: 'Au pôle Nord', category: 'defi', airport: 'boreal', requires: R_BOREAL, minRank: 2,
-    desc: 'Va toucher le bout du monde, tout au nord, au-dessus de la mer gelée. Il fait −40 °C : chauffage à '
-      + 'fond (touche 3), et surveille le carburant !',
+    desc: 'Va toucher le bout du monde, tout au nord, au-dessus de la mer gelée. C\'est loin : fais le plein et '
+      + 'surveille le carburant !',
     reward: 2600,
     steps: [
       ...stage('Cap au nord', reach(mid(BOREAL, POLE), 1500, 'le Grand Nord')),

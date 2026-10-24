@@ -122,7 +122,7 @@ Tout est généré par le code (aucune image ni modèle à télécharger) avec *
   volets, hélice, feux avec halos. Caméras **poursuite, cockpit, orbite libre, spectateur** (`C`) avec transitions fluides.
 - **Effets** : fumée et flamme au démarrage, échappement, poussière au roulage, fumée de pneus au toucher, crash,
   tourbillons de condensation en bout d'aile, tremblements de caméra.
-- **Météo** (visuelle ; seuls la pluie et les nuages comptent pour le givrage par grand froid) : grand beau, nuageux, couvert, pluie, orage avec éclairs et tonnerre, brouillard ;
+- **Météo** (visuelle, ne change pas le vol) : grand beau, nuageux, couvert, pluie, orage avec éclairs et tonnerre, brouillard ;
   en mode « changeante », elle change toutes les 20 min et elle est la même pour tous les joueurs.
 - **HUD « glass cockpit »** : horizon artificiel, bandes de vitesse et d'altitude, variomètre, cap, moteur et carburant ;
   polices B612 (celles des cockpits Airbus), icônes Lucide.
@@ -244,17 +244,7 @@ Deuxième série (`quests/terres2.js`, 36 quêtes) : quatre à six missions par 
 de la jungle, rallye Savane-Orient, radeau à la dérive, île au trésor, labyrinthe de la mangrove, phare du bout du
 monde…) et de grands voyages : pôle Nord, Grand Sud, du Grand Nord à l'Orient et le tour du monde (rang 3).
 
-**Froid** : la température de l'air (affichée dans la pastille météo) dépend du climat, de l'altitude (−8 °C par km)
-et de la nuit. Sous −3 °C, l'avion **givre**, d'autant plus vite qu'il fait froid, qu'on vole haut et dans les nuages
-ou la neige : le givre alourdit l'avion, fait perdre de la portance et décrocher plus tôt (alerte ❄ GIVRAGE, givre
-sur les bords du pare-brise en vue cockpit). Il fond dans l'air plus chaud et on dégivre à l'arrêt sur un aéroport.
-Le pilote se refroidit aussi (moins avec le moteur qui chauffe la cabine, presque pas en jet) : au-delà d'un seuil,
-ses mains tremblent sur le manche (alerte PILOTE GELÉ) jusqu'à ce qu'il se pose pour se réchauffer.
-
-**Chauffage** (touches **1**, **2**, **3** = puissance, la même touche une deuxième fois l'éteint, **0** = arrêt ; en
-AZERTY, **& é " à** sans Maj marchent aussi ; modifiables dans les paramètres) : chaque cran réchauffe la cabine
-d'environ 12 °C et réduit le givre d'un quart (au cran 3, plus de pilote gelé et quatre fois moins de givre, vitre
-dégagée). Son seul inconvénient : il brûle du carburant (8 % du débit plein gaz par cran, même moteur coupé).
+La température de l'air (selon le climat, l'altitude et la nuit) est affichée dans la pastille météo.
 
 ### Hangar : caisses et raretés
 

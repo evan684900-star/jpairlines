@@ -26,11 +26,9 @@ import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
 import { Intro } from './intro.js';
 import { WindshieldRain } from './render/windshield.js';
-import { ART } from './render/config.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL, SMOKE_MODES, SUITS, smokeColorAt, RARITIES, rarityOf, rarityRank, isCrateOnly, CRATES, rollCrate, DUPLICATE_REFUND, CRATE_ITEMS } from './livery.js';
 import { stickerThumb } from './stickers.js';
-const CLOUD_BASE = ART.cloudBase, CLOUD_TOP = ART.cloudTop;
 
 const $ = (id) => document.getElementById(id);
 // rang au classement : « 1er sur 12 » / « #1 of 12 »
@@ -238,8 +236,6 @@ function onAction(is) {
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
   if (is('wipers')) plane.toggleWipers();
-  for (const n of [1, 2, 3]) if (is(`heat${n}`)) plane.setHeat(plane.heat === n ? 0 : n);
-  if (is('heatOff')) plane.setHeat(0);
   if (is('smoke')) {
     if (!isOwned('smoke')) { toast(t('💨 Achète le fumigène au hangar (onglet Fumigène)')); return; }
     plane.smokeOn = !plane.smokeOn;
@@ -1523,7 +1519,6 @@ function updateHUD(dt) {
   setSys('sys-brake', plane.brake ? 'warn' : null);
   setSys('sys-park', plane.parkingBrake ? 'bad' : null);
   setSys('sys-lights', plane.lights ? 'on' : null);
-  $('heat-val').textContent = plane.heat ? '🔥'.repeat(plane.heat) : '—';
 
   // alarmes
   const w = [];
@@ -1537,9 +1532,7 @@ function updateHUD(dt) {
     if (plane.ias > plane.S.vne) w.push([t('SURVITESSE'), '']);
     if (Math.abs(plane.gLoad) > 4) w.push([`${plane.gLoad.toFixed(1)} G`, 'amber']);
     if (agl < 60 && plane.velocity.y < -8) w.push([t('TERRAIN'), '']);
-    if (plane.ice > 0.15) w.push([`❄ ${t('GIVRAGE')} ${Math.round(plane.ice * 100)} %`, plane.ice > 0.5 ? '' : 'amber']);
   }
-  if (plane.chill > 0.5 && !plane.crashed) w.push([t('PILOTE GELÉ'), 'amber']);
   if (plane.flapPos > 0.2 && plane.ias > plane.S.vFlaps) w.push([t('VITESSE VOLETS'), 'amber']);
   if (FUEL_SCALE[settings.fuelMode] > 0 && plane.fuel < plane.S.fuelCapacity * 0.15) w.push([t('CARBURANT'), plane.fuel < plane.S.fuelCapacity * 0.05 ? '' : 'amber']);
   const key = w.map((x) => x[0]).join();
@@ -1553,7 +1546,7 @@ function updateWeatherChip() {
   const w = gfx.weather;
   const night = gfx.atmo.night > 0.6;
   const ic = w.target === 'rain' || w.target === 'storm' ? 'cloud-rain' : night ? 'moon' : w.target === 'fog' ? 'wind' : 'sun';
-  const temp = Math.round(plane.airTemp ?? 15);
+  const temp = Math.round(airTemp(plane.pos.x, plane.pos.y, plane.pos.z));
   $('weather-chip').innerHTML = `${icon(ic, 15)}<b>${t(w.name)} · ${String(Math.floor(gfx.atmo.hour)).padStart(2, '0')} h ${String(Math.floor((gfx.atmo.hour % 1) * 60)).padStart(2, '0')} · ${temp < 0 ? '−' + -temp : temp} °C</b>`;
 }
 
@@ -1566,23 +1559,17 @@ function updatePlace() {
 let last = performance.now();
 let mapTimer = 0, labelTimer = 0, placeTimer = 0;
 
-// température de l'air (°C) : climat (froid au nord, chaleur adoucie au-delà de 25 °C au sud), altitude (−8 °C par km) et nuit
+// température de l'air (°C), affichée dans la pastille météo : climat (froid au nord, chaleur adoucie au-delà de 25 °C
+// au sud), altitude (−8 °C par km) et nuit
 function airTemp(x, y, z) {
   const c = climate(x, z).temp * 40 - 8;
   return (c > 25 ? 25 + (c - 25) * 0.3 : c) - Math.max(0, y) * 0.008 - gfx.atmo.night * 4;
-}
-// humidité qui fait givrer : précipitations, et traversée de la couche de nuages
-function airWet(y) {
-  const w = gfx.weatherState;
-  if (!w) return 0;
-  const inCloud = y > CLOUD_BASE && y < CLOUD_TOP ? Math.max(w.stratus, w.cover - 0.3) : 0;
-  return Math.min(1, w.rain + inCloud);
 }
 
 function simulate(dt) {
   const input = readInput();
   plane.trim = THREE.MathUtils.clamp(plane.trim + input.trim * dt * 0.25, -0.5, 0.5);
-  plane.update(dt, input, { difficulty: settings.difficulty, fuelScale: FUEL_SCALE[settings.fuelMode] ?? 4, sensitivity: settings.sensitivity, turbulence: gfx.weatherState?.gust ?? 0, windDir: gfx.weather?.windDir ?? 0, airTemp: airTemp(plane.pos.x, plane.pos.y, plane.pos.z), wet: airWet(plane.pos.y) });
+  plane.update(dt, input, { difficulty: settings.difficulty, fuelScale: FUEL_SCALE[settings.fuelMode] ?? 4, sensitivity: settings.sensitivity, turbulence: gfx.weatherState?.gust ?? 0, windDir: gfx.weather?.windDir ?? 0 });
   if (input.refuel && canRefuel()) doRefuel(dt);
   // limite de la carte : on renvoie l'avion vers le centre
   const lim = HALF * 0.97;
@@ -1594,7 +1581,7 @@ function simulate(dt) {
   }
 }
 
-let fpsTimer = 0, inCockpit = false, frozenFrames = 0, lastFrost = 0;
+let fpsTimer = 0, inCockpit = false, frozenFrames = 0;
 
 // vibrations ressenties : moteur et roulage au sol, alarme de décrochage (tremblement), survitesse, turbulence
 function shakeAmount() {
@@ -1675,8 +1662,6 @@ function frame(now) {
       rain: Math.min(1, gfx.weatherState?.rain ?? 0), air: THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1),
       on: plane.wipers && !plane.crashed, enabled: gfx.cfg.post && gfx.cfg.raindrops !== false,
     });
-    const frost = inCockpit && !plane.crashed ? Math.min(1, plane.ice * 1.4) * (1 - plane.heat / 3) : 0; // le chauffage dégage la vitre
-    if (Math.abs(frost - lastFrost) > 0.01) { lastFrost = frost; $('frost').style.opacity = frost.toFixed(2); }
     updatePrompt();
     tutorial.update(realDt);
     inCockpit = rig.update(realDt, plane, planeMesh, { motion: gfx.cfg.motionFx, shake: shakeAmount() });

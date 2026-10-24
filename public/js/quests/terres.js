@@ -1,5 +1,4 @@
 // Quêtes des nouvelles terres (au-delà du monde d'origine) : routes pour y aller, puis missions sur place.
-// Au nord, il fait froid : givrage et pilote qui se refroidit (voir plane.js / main.js, « froid »).
 import {
   A, city, stage, land, touch, reach, drop, ring, ringsAround, terrainFollow, findPeak, findFlat, findCoast,
 } from './kit.js';
@@ -41,8 +40,8 @@ export default [
   },
   {
     id: 'terres-route-boreal', title: 'Cap au Grand Nord', category: 'exploration', airport: 'nord',
-    desc: 'Les terres glacées du nord n\'attendent que toi. Attention au froid : surveille le givrage et ne traîne pas '
-      + 'trop haut. Pose-toi à Boréal International.',
+    desc: 'Les terres glacées du nord n\'attendent que toi. Survole la mer gelée en suivant la route balisée et '
+      + 'pose-toi à Boréal International.',
     reward: 1600, minRank: 1,
     steps: [
       ...stage('Décoller de Cap Nord', touch('nord')),
@@ -72,11 +71,11 @@ export default [
     ],
   },
 
-  // ===================== Grand Nord (froid !) =====================
+  // ===================== Grand Nord =====================
   {
     id: 'terres-taiga-vivres', title: 'Vivres pour la taïga', category: 'livraison', airport: 'boreal', requires: 'terres-route-boreal',
     desc: 'Un camp de bûcherons est coupé du monde par la neige. Largue-leur des vivres, pose-toi à Taïga pour '
-      + 'prendre leur courrier, puis rentre à Boréal. Le froid givre l\'avion : ne reste pas longtemps en altitude.',
+      + 'prendre leur courrier, puis rentre à Boréal.',
     reward: 1800,
     steps: [
       ...stage('Larguer les vivres', drop(CAMP_TAIGA, 160, 'camp de bûcherons', { maxAgl: 180, spawn: 'tent', text: 'Largue les vivres (X) sur le camp de bûcherons, à moins de 180 m du sol' })),

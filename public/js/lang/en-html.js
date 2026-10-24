@@ -97,5 +97,4 @@ export default {
   // onglet Pilote
   // caisses et raretés
   "🎁 Caisses": "🎁 Crates",
-  "CHAUFFAGE": "HEATER",
 };
