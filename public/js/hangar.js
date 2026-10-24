@@ -2,7 +2,7 @@
 // tournant, caméra orbitale à la souris / au doigt. La personnalisation est appliquée en direct.
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { createPlaneMesh, animatePlaneMesh, disposePlaneMesh } from './planeModel.js';
+import { createPlaneMesh, animatePlaneMesh, disposePlaneMesh, standingPilot } from './planeModel.js';
 import { aircraftById } from './aircraft.js';
 
 // ----- textures procédurales -----
@@ -278,6 +278,20 @@ export class Hangar {
   }
 
   // place un avion (type + livrée) au centre du plateau
+  // aperçu de la tenue : le pilote debout devant l'aile gauche (null = caché)
+  showPilot(suit) {
+    if (this.pilotPreview) { this.pilotPreview.removeFromParent(); this.pilotPreview = null; }
+    if (!suit || !this.plane) return;
+    const m = standingPilot(suit);
+    if (!m) return;
+    // au bout de l'aile gauche, sur le bord du plateau (repère du plateau, qui tourne avec l'avion)
+    const box = new THREE.Box3().setFromObject(this.plane.clone().rotateY(0)); // plateau à l'arrêt : boîte dans son repère
+    const tip = Math.min(6.2, Math.max(3.5, -box.min.x + 0.8));
+    m.position.set(-tip, 0.19, -0.4);
+    m.rotation.y = -0.9;
+    this.turntable.add(m);
+    this.pilotPreview = m;
+  }
   setPlane(type, livery, keepView = false) {
     if (this.plane) {
       this.turntable.remove(this.plane);

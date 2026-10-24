@@ -953,17 +953,26 @@ function poseSeated(root) {
   root.updateMatrixWorld(true);
   return B.Hips.getWorldPosition(new THREE.Vector3());
 }
-// copie du pilote assis, teinte selon sa tenue ; hips : point où poser les hanches (repère de l'avion)
-function seatedPilot(hips, suit) {
-  const m = cloneSkinned(PILOT.root);
+// teinte des matériaux selon la tenue (chemise, casquette, pantalon, cravate)
+function tintSuit(m, suit) {
   const tint = SUIT_TINTS[suit] || SUIT_TINTS.commandant;
   m.traverse((o) => {
     if (!o.isMesh) return;
     o.frustumCulled = false;
     o.castShadow = true;
-    o.userData.shared = true; // géométrie commune à tous les avions : ne pas la libérer
+    o.userData.shared = true;
     if (tint[o.material.name] && tint[o.material.name] !== '#ffffff') { o.material = o.material.clone(); o.material.color.multiply(new THREE.Color(tint[o.material.name])); }
   });
+  return m;
+}
+// pilote debout dans sa tenue (aperçu du hangar), ou null si le modèle n'est pas chargé
+export function standingPilot(suit) {
+  if (!PILOT) return null;
+  return tintSuit(cloneSkinned(PILOT.standing), suit);
+}
+// copie du pilote assis, teinte selon sa tenue ; hips : point où poser les hanches (repère de l'avion)
+function seatedPilot(hips, suit) {
+  const m = tintSuit(cloneSkinned(PILOT.root), suit); // géométrie commune à tous les avions : jamais libérée
   m.rotation.y = Math.PI; // le modèle regarde vers +z, l'avion vers -z
   m.position.copy(hips).sub(PILOT.hips.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
   return m;
@@ -972,8 +981,9 @@ function seatedPilot(hips, suit) {
 export async function loadPlaneModels(base = 'models/') {
   const loader = new GLTFLoader();
   const pilotJob = loader.loadAsync(`${base}pilote.glb`).then((g) => {
+    const standing = cloneSkinned(g.scene); // copie debout (aperçu de la tenue au hangar)
     const hips = poseSeated(g.scene);
-    PILOT = { root: g.scene, hips };
+    PILOT = { root: g.scene, hips, standing };
   }).catch((e) => console.warn('Pilote 3D indisponible, pilote simplifié utilisé', e));
   await Promise.all(Object.entries(GLB_FILES).map(async ([id, f]) => {
     try {

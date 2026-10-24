@@ -1417,6 +1417,8 @@ function renderHangarUI() {
   if ($('hg-zone-clear')) $('hg-zone-clear').onclick = () => { const z = { ...view.zones }; delete z[hg.zone]; setLivery({ zones: z }); };
   // autocollants
   hangar.view.autoSpin = hg.tab !== 'stickers' && hangar.view.autoSpin;
+  // onglet Pilote : le pilote debout à côté de l'avion, dans la tenue choisie (ou essayée)
+  hangar.showPilot(hg.tab === 'pilote' ? view.suit : null);
   for (const b of body.querySelectorAll('[data-st]')) {
     b.onclick = () => {
       const k = b.dataset.st;
