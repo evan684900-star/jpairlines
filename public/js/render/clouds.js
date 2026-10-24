@@ -8,7 +8,8 @@ import { U } from './shared.js';
 import { ART } from './config.js';
 import { HEIGHT_GLSL } from './heightmap.js';
 
-const L = WORLD.size * 1.2; // les nuages couvrent un peu plus que le monde et bouclent
+// les nuages forment un motif de 96 km qui se répète (même densité de nuages quelle que soit la taille du monde)
+const L = 96000;
 const wrap = (v) => ((((v + L / 2) % L) + L) % L) - L / 2;
 
 // Lumière des nuages, partagée par toutes les couches

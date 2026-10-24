@@ -522,7 +522,7 @@ $('abandon').onclick = () => { quests.abandon(); quests.renderJournal(); };
 $('board-close').onclick = () => quests.closeBoard();
 
 // ================= Cartes =================
-const MAP_RES = 512;
+const MAP_RES = 768; // carte de base : ~260 m par pixel sur 200 km (les tuiles détaillées prennent le relais en zoomant)
 const mapImg = document.createElement('canvas');
 const _mc = new THREE.Color();
 // couleur d'un point de la carte (relief ombré depuis le nord-ouest, eau plus sombre en profondeur, courbes de niveau
@@ -560,7 +560,7 @@ function buildMapImage() {
 // Cartes détaillées : en zoomant, des tuiles plus fines sont calculées à la demande (quelques-unes par image)
 // et gardées en mémoire. Niveaux : 20 km, 5 km, 1,25 km et 312 m de côté, 128 pixels chacun (156 → 2,4 m par pixel).
 const TILE_PX = 128;
-const TILE_SIZES = [20000, 5000, 1250, 312.5];
+const TILE_SIZES = [20000, 5000, 1250, 312.5]; // (la carte de base suffit au-delà de 20 km de côté)
 const tiles = new Map(); // 'niveau/tx/tz' → canvas
 const tileQueue = new Map(); // clé → { lv, tx, tz }
 let tileJob = 0, tileFocus = [0, 0];

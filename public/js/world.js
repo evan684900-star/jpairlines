@@ -3,11 +3,13 @@
 
 export const WORLD = {
   seed: 1337,
-  size: 80000, // 80 km x 80 km
+  size: 200000, // 200 km x 200 km : le monde d'origine (80 km, au centre) entouré de nouvelles terres
   cell: 25, // résolution max du terrain (m), utilisée aussi pour les collisions
   chunk: 2000, // taille d'un morceau de terrain
 };
 export const HALF = WORLD.size / 2;
+// monde d'origine (80 km) : tout ce qui y était reste exactement à sa place (relief, aéroports, villes, quêtes)
+export const CORE = 80000, CORE_HALF = CORE / 2;
 const S = WORLD.seed;
 
 function hash(ix, iz, s) {
@@ -54,8 +56,8 @@ export function rng(seed) {
 // ---------- Climat ----------
 // temp : 0 = polaire (nord, -Z) → 1 = tropical (sud, +Z) ; dry : > 0.6 = désert
 export function climate(x, z) {
-  const temp = 0.5 + (z / WORLD.size) * 1.1 + (fbm(x / 15000, z / 15000, 3, S + 40) - 0.5) * 0.4;
-  const dry = fbm(x / 20000, z / 20000, 3, S + 50) + ((z - x) / WORLD.size) * 0.55;
+  const temp = 0.5 + (z / CORE) * 1.1 + (fbm(x / 15000, z / 15000, 3, S + 40) - 0.5) * 0.4;
+  const dry = fbm(x / 20000, z / 20000, 3, S + 50) + ((z - x) / CORE) * 0.55;
   return { temp, dry };
 }
 export const snowLine = (temp) => 250 + Math.max(0, temp) * 2200;
@@ -64,7 +66,30 @@ export const snowLine = (temp) => 250 + Math.max(0, temp) * 2200;
 export const VOLCANO = { x: 25000, z: 14000, r: 6500, h: 2300 };
 
 export function rawHeight(x, z) {
-  const d = Math.hypot(x, z) / HALF;
+  // au-delà du monde d'origine : nouvelles terres, fondues avec l'océan qui l'entourait
+  const q = Math.max(Math.abs(x), Math.abs(z));
+  const env = smoothstep(CORE_HALF + 1000, CORE_HALF + 12000, q);
+  const core = env < 1 ? coreHeight(x, z) : 0;
+  return env > 0 ? core + (outerHeight(x, z, q) - core) * env : core;
+}
+
+// Nouvelles terres : grands continents et archipels, chaînes de montagnes, puis l'océan au bord du monde
+function outerHeight(x, z, q) {
+  const cont = fbm(x / 34000, z / 34000, 4, S + 301);
+  const isl = fbm(x / 7000, z / 7000, 4, S + 302);
+  const edge = smoothstep(HALF - 9000, HALF - 2000, q); // l'océan revient au bord du monde
+  const landVal = 0.17 + (cont - 0.5) * 1.15 + (isl - 0.5) * 0.5 - edge * 0.6;
+  const land = smoothstep(0.14, 0.18, landVal);
+  const inland = smoothstep(0.17, 0.36, landVal);
+  const hills = (fbm(x / 4000, z / 4000, 5, S + 303) - 0.35) * 340 + 20 + inland * 170;
+  const ridge = 1 - Math.abs(fbm(x / 3000, z / 3000, 5, S + 304) * 2 - 1);
+  const mtn = smoothstep(0.5, 0.68, fbm(x / 16000, z / 16000, 3, S + 305)) * inland;
+  const depth = 40 + 500 * smoothstep(0.14, -0.08, landVal);
+  return land * hills - (1 - land) * depth + mtn * ridge * ridge * 2900;
+}
+
+function coreHeight(x, z) {
+  const d = Math.hypot(x, z) / CORE_HALF;
   const cont = fbm(x / 22000, z / 22000, 4, S + 1);
   const isl = fbm(x / 6000, z / 6000, 4, S + 2);
   const landVal = (1 - d * 1.15) * 0.62 + (cont - 0.5) * 0.7 + (isl - 0.5) * 0.45;
@@ -109,6 +134,15 @@ const AIRPORT_SPECS = [
   { id: 'lac', name: 'Lac Miroir', type: 'strip', near: [2000, -12000], search: 6000 },
   { id: 'falaises', name: 'Les Falaises', type: 'strip', near: [-28000, 2000], search: 8000 },
   { id: 'palmes', name: 'Archipel des Palmes', type: 'strip', near: [-6000, 30000], search: 9000 },
+  // nouvelles terres (au-delà du monde d'origine)
+  { id: 'boreal', name: 'Boréal International', type: 'international', near: [0, -70000], search: 16000, outer: true },
+  { id: 'taiga', name: 'Taïga', type: 'strip', near: [-55000, -62000], search: 14000, outer: true },
+  { id: 'fjord', name: 'Fjord-aux-Ours', type: 'regional', near: [58000, -60000], search: 14000, outer: true },
+  { id: 'orient', name: 'Porte d\'Orient', type: 'international', near: [72000, 0], search: 16000, outer: true },
+  { id: 'savane', name: 'Savane Dorée', type: 'regional', near: [60000, 58000], search: 14000, outer: true },
+  { id: 'tropiques', name: 'Grand Lagon', type: 'regional', near: [0, 72000], search: 16000, outer: true },
+  { id: 'mangrove', name: 'Mangrove', type: 'strip', near: [-58000, 60000], search: 14000, outer: true },
+  { id: 'ponant', name: 'Ponant', type: 'international', near: [-72000, 0], search: 16000, outer: true },
 ];
 
 // Coordonnées locales à la piste (u = travers, v = longueur)
@@ -126,11 +160,12 @@ export function runwayPoint(x, z, heading, u, v) {
 function findAirportSite(spec, placed) {
   const T = AIRPORT_TYPES[spec.type];
   let best = null;
-  const R = spec.search, STEP = 500;
+  const R = spec.search, STEP = spec.outer ? 1250 : 500; // nouvelles terres : recherche plus large, donc plus espacée
   for (let dx = -R; dx <= R; dx += STEP) {
     for (let dz = -R; dz <= R; dz += STEP) {
       const x = spec.near[0] + dx, z = spec.near[1] + dz;
-      if (Math.abs(x) > HALF - 3000 || Math.abs(z) > HALF - 3000) continue;
+      const lim = (spec.outer ? HALF : CORE_HALF) - 3000;
+      if (Math.abs(x) > lim || Math.abs(z) > lim) continue;
       if (placed.some((p) => Math.hypot(p.x - x, p.z - z) < 6000)) continue;
       const hc = rawHeight(x, z);
       if (hc < 6 || (spec.minElev && hc < spec.minElev) || (spec.maxElev && hc > spec.maxElev)) continue;
@@ -207,12 +242,12 @@ export function onRunway(x, z) {
 }
 
 // ---------- Recherches de lieux ----------
-function search(x, z, R, step, test, score) {
+function search(x, z, R, step, test, score, lim = CORE_HALF - 1000) {
   let best = null;
   for (let dx = -R; dx <= R; dx += step) {
     for (let dz = -R; dz <= R; dz += step) {
       const px = x + dx, pz = z + dz;
-      if (Math.abs(px) > HALF - 1000 || Math.abs(pz) > HALF - 1000) continue;
+      if (Math.abs(px) > lim || Math.abs(pz) > lim) continue;
       const h = terrainHeight(px, pz);
       if (!test(px, pz, h)) continue;
       const sc = score ? score(px, pz, h) : -Math.hypot(dx, dz);
@@ -230,7 +265,7 @@ export const findFlat = (x, z, R, minH = 10) => search(x, z, R, 250, (px, pz, h)
 
 // Point culminant de toute la carte (hors volcan)
 const SUMMIT = (() => {
-  const coarse = search(0, 0, HALF - 2000, 1000, () => true, (px, pz, h) => (Math.hypot(px - VOLCANO.x, pz - VOLCANO.z) < 8000 ? -1 : h));
+  const coarse = search(0, 0, CORE_HALF - 2000, 1000, () => true, (px, pz, h) => (Math.hypot(px - VOLCANO.x, pz - VOLCANO.z) < 8000 ? -1 : h));
   return findPeak(coarse.x, coarse.z, 800);
 })();
 
@@ -269,6 +304,10 @@ export const CITIES = [
   { name: 'Port-Levant', ...pick(airportById('levant'), -1600, 1200), radius: 1200, n: 450, tall: 70 },
   { name: 'Alpha-Ville', ...pick(airportById('alpha'), 1300, -500), radius: 700, n: 160, tall: 25 },
   { name: 'Cap Nord', ...pick(airportById('nord'), -1200, 600), radius: 700, n: 150, tall: 25 },
+  // nouvelles terres
+  ...[['Boréalis', 'boreal', 1500, 110], ['Orientia', 'orient', 1500, 100], ['Ponant-la-Grande', 'ponant', 1400, 90], ['Lagon-City', 'tropiques', 900, 45]]
+    .filter(([, id]) => airportById(id))
+    .map(([name, id, radius, tall]) => ({ name, ...pick(airportById(id), radius + 600, 0), radius, n: Math.round(radius * 0.45), tall })),
 ];
 
 // ---------- Trafic : bateaux, montgolfières, éoliennes ----------
@@ -292,7 +331,9 @@ export const TOWNS = [
   ['Givre-le-Bourg', 'givre'], ['Hameau des Glaces', 'glacier'], ['Ksar des Dunes', 'dunes'], ['Village de Corail', 'corail'],
   ['Cendreville', 'volcan'], ['Verte-sur-Prés', 'verte'], ['Miroir-les-Bains', 'lac'], ['Falaise-Haute', 'falaises'], ['Port-Palmes', 'palmes'],
   ['Saint-Aubin', null, [5000, 6000]], ['Les Granges', null, [-9000, 2000]], ['Montrouge', null, [16000, -14000]], ['Beaulieu', null, [-2000, 12000]],
-].map(([name, airport, at], i) => {
+  // nouvelles terres
+  ['Taïga-les-Pins', 'taiga'], ['Ours-sur-Fjord', 'fjord'], ['Savane-Dorée', 'savane'], ['Palétuviers', 'mangrove'],
+].filter(([, airport]) => !airport || airportById(airport)).map(([name, airport, at], i) => {
   const near = airport ? pick(airportById(airport), 950, 350) : { x: at[0], z: at[1] };
   const p = findFlat(near.x, near.z, 1800, 6);
   return { name, x: p.x, z: p.z, radius: 380 + (i % 3) * 60, n: 55 + (i % 4) * 12, angle: (i * 0.7) % Math.PI };
@@ -302,7 +343,7 @@ export const SHIPS = (() => {
   const r = rng(555);
   const out = [];
   for (let i = 0; i < 22; i++) {
-    const s = shipRoute(r, (r() - 0.5) * WORLD.size * 0.9, (r() - 0.5) * WORLD.size * 0.9);
+    const s = shipRoute(r, (r() - 0.5) * CORE * 0.9, (r() - 0.5) * CORE * 0.9);
     if (s) out.push({ ...s, kind: r() < 0.45 ? 'cargo' : 'sail' });
   }
   return out;

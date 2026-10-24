@@ -228,6 +228,14 @@ qui tourne vite avec réducteur ; Faucon : 6 cylindres de voltige, le plus fort 
 désaccordés (battement des bimoteurs, en stéréo) ; Albatros : moteur en étoile à 9 cylindres ; Éclair : turbine
 (fan, compresseur, souffle). Plus sourd dans le cockpit et au loin.
 
+### Monde de 200 km
+
+Le monde fait 200 × 200 km. Les 80 km d'origine sont au centre, strictement identiques (relief, aéroports, villes,
+quêtes) ; autour, de nouvelles terres : un grand continent froid au nord (Boréal International, Taïga, Fjord-aux-Ours),
+des terres à l'est (Porte d'Orient, Savane Dorée), au sud (Grand Lagon), au sud-ouest (Mangrove) et à l'ouest
+(Ponant), avec quatre villes (Boréalis, Orientia, Ponant-la-Grande, Lagon-City) et des villages. Le climat continue :
+plus froid au nord, tropical au sud. Le bord du monde redevient océan.
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les

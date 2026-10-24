@@ -5,7 +5,7 @@ import { WORLD, terrainHeight } from '../world.js';
 
 export const HEIGHT_RANGE = [-400, 3600]; // m, encodés sur 16 bits (R = octet fort, G = octet faible)
 
-export function buildWorldHeightTexture(res = 256) {
+export function buildWorldHeightTexture(res = 512) { // 200 km : ~390 m par pixel
   const data = new Uint8Array(res * res * 4);
   const [h0, h1] = HEIGHT_RANGE;
   for (let y = 0; y < res; y++) {
