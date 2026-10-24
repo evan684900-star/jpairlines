@@ -93,6 +93,16 @@ const persist = () => {
   account?.pushSave(save); // copie en ligne si l'on est connecté
 };
 
+// carburant de chaque avion, gardé quand on quitte le jeu (litres, par type d'avion)
+if (!save.fuel || typeof save.fuel !== 'object') save.fuel = {};
+function storeFuel() {
+  if (!plane.crashed) (save.fuel ||= {})[plane.type] = Math.round(plane.fuel * 10) / 10;
+}
+function restoreFuel() {
+  const f = save.fuel?.[plane.type];
+  if (Number.isFinite(f)) plane.fuel = Math.min(plane.S.fuelCapacity, Math.max(0, f));
+}
+
 // personnalisation de chaque avion (hangar)
 if (!save.liveries || typeof save.liveries !== 'object') save.liveries = {};
 const liveryOf = (id) => cleanLivery((save.liveries || {})[id]);
@@ -989,7 +999,9 @@ function setAircraft(id) {
   const def = aircraftById(id);
   if (!unlockedAircraft(save).includes(def)) return;
   const here = atAirportStopped() ? plane.landedAt : null;
+  storeFuel(); // l'avion rangé au hangar garde son carburant
   plane.setType(def.id);
+  restoreFuel();
   rebuildPlaneMesh();
   save.aircraft = def.id;
   persist();
@@ -1557,7 +1569,7 @@ function updatePlace() {
 
 // ================= Boucle =================
 let last = performance.now();
-let mapTimer = 0, labelTimer = 0, placeTimer = 0;
+let mapTimer = 0, labelTimer = 0, placeTimer = 0, fuelSaveTimer = 10;
 
 // température de l'air (°C), affichée dans la pastille météo : climat (froid au nord, chaleur adoucie au-delà de 25 °C
 // au sud), altitude (−8 °C par km) et nuit
@@ -1614,7 +1626,7 @@ function frame(now) {
   // hangar : le monde est déchargé, on n'affiche que la scène du hangar
   if (hg.active) {
     hangar.update(realDt);
-    renderer.toneMappingExposure = 1;
+    renderer.toneMappingExposure = 0.9; // hangar : un peu moins lumineux que le plein jour
     hangar.render();
     return;
   }
@@ -1676,6 +1688,8 @@ function frame(now) {
     }
     placeTimer -= realDt;
     if (placeTimer <= 0) { placeTimer = 1; updatePlace(); updateWeatherChip(); checkMarkerReached(); }
+    fuelSaveTimer -= realDt;
+    if (fuelSaveTimer <= 0) { fuelSaveTimer = 10; storeFuel(); persist(); }
 
     sound?.update(realDt, plane, inCockpit ? 'cockpit' : 'outside', camera.position.distanceTo(plane.pos), gfx.weatherState, paused);
   } else {
@@ -1800,7 +1814,9 @@ account.restore().then((user) => {
   adoptAccount(user);
   if (back?.token) toast(t('Connecté avec Google : bienvenue, {name} !', { name: user.name }));
 });
-addEventListener('pagehide', () => account.flush());
+// en quittant (ou en changeant d'onglet), le carburant est enregistré
+addEventListener('pagehide', () => { if (started) { storeFuel(); persist(); } account.flush(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && started) { storeFuel(); persist(); } });
 
 // ================= Démarrage =================
 $('pilot-name').value = save.name;
@@ -1811,6 +1827,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   await tick();
   const a = airportById(save.lastAirport) || AIRPORTS[0];
   plane.placeOnRunway(a);
+  restoreFuel(); // carburant laissé à la dernière partie
   terrain.buildAround(a.x, a.z, 4);
   status(t('Aéroports, villes et monuments…'), 45);
   await tick();
@@ -1860,6 +1877,7 @@ $('start').onclick = () => {
   requestAnimationFrame(() => setTimeout(() => {
     initAudio();
     respawn();
+    restoreFuel(); // même un réservoir vide reste vide (réapparaître le remplirait)
     started = true;
     connect();
     const welcome = () => {

@@ -203,7 +203,7 @@ export class Hangar {
     for (const s of [-1, 1]) for (let z = -D / 2 + 3; z < D / 2; z += 6) box(0.5, H, 0.5, steel, s * (W / 2 - 0.3), H / 2, z, S);
 
     // éclairage : lampes industrielles suspendues + lumière du jour par les portes
-    S.add(new THREE.HemisphereLight(0xdfe8f5, 0x3a3630, 0.55));
+    S.add(new THREE.HemisphereLight(0xdfe8f5, 0x3a3630, 0.4));
     const lampMat = new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.4, metalness: 0.7 });
     const glowMat = new THREE.MeshBasicMaterial({ color: 0xfff1d0 });
     for (const [x, z] of [[-9, -6], [9, -6], [-9, 6], [9, 6]]) {
@@ -214,18 +214,18 @@ export class Hangar {
       bulb.position.set(x, H - 2.6, z);
       S.add(bulb);
       box(0.04, 2, 0.04, steel, x, H - 1.2, z, S);
-      const l = new THREE.PointLight(0xffe9c4, 60, 26, 1.6);
+      const l = new THREE.PointLight(0xffe9c4, 40, 26, 1.6);
       l.position.set(x, H - 2.9, z);
       S.add(l);
     }
-    const key = new THREE.SpotLight(0xfff4e0, 900, 60, 0.42, 0.6, 1.4);
+    const key = new THREE.SpotLight(0xfff4e0, 560, 60, 0.42, 0.6, 1.4);
     key.position.set(6, H - 1, 9);
     key.target.position.set(0, 0, 0);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     key.shadow.bias = -0.0004;
     S.add(key, key.target);
-    const day = new THREE.DirectionalLight(0xcfe2ff, 1.2);
+    const day = new THREE.DirectionalLight(0xcfe2ff, 0.8);
     day.position.set(-4, 10, 40);
     S.add(day);
 
