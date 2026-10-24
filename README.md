@@ -1,6 +1,6 @@
 # ✈ JP Airlines
 
-Simulateur de vol 3D dans le navigateur, avec **une seule grande carte partagée** par tous les joueurs (monde de 80 × 80 km) et des **quêtes** réparties sur toute la carte.
+Simulateur de vol 3D dans le navigateur, avec **une seule grande carte partagée** par tous les joueurs (monde de 200 × 200 km) et des **quêtes** réparties sur toute la carte.
 
 ## Lancer le jeu en local
 
