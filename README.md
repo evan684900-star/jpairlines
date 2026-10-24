@@ -239,6 +239,10 @@ plus froid au nord, tropical au sud. Le bord du monde redevient océan.
 **Quêtes des nouvelles terres** (`quests/terres.js`) : quatre routes balisées pour y aller (Port-Levant → Porte
 d'Orient, Cap Nord → Boréal, Les Falaises → Ponant, l'archipel → Grand Lagon), puis six missions sur place
 (vivres pour la taïga, sauvetage au-dessus du fjord, tournée d'Orientia, safari, récif du lagon, facteur de la mangrove).
+Deuxième série (`quests/terres2.js`, 36 quêtes) : quatre à six missions par aéroport des nouvelles terres
+(spirale au-dessus de Boréalis, station sur la banquise, feu de forêt dans la taïga, trois sommets du fjord, temples
+de la jungle, rallye Savane-Orient, radeau à la dérive, île au trésor, labyrinthe de la mangrove, phare du bout du
+monde…) et de grands voyages : pôle Nord, Grand Sud, du Grand Nord à l'Orient et le tour du monde (rang 3).
 
 **Froid** : la température de l'air (affichée dans la pastille météo) dépend du climat, de l'altitude (−8 °C par km)
 et de la nuit. Sous −3 °C, l'avion **givre**, d'autant plus vite qu'il fait froid, qu'on vole haut et dans les nuages
