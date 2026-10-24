@@ -238,6 +238,8 @@ function onAction(is) {
   if (is('parking')) plane.toggleParking();
   if (is('lights')) plane.toggleLights();
   if (is('wipers')) plane.toggleWipers();
+  for (const n of [1, 2, 3]) if (is(`heat${n}`)) plane.setHeat(plane.heat === n ? 0 : n);
+  if (is('heatOff')) plane.setHeat(0);
   if (is('smoke')) {
     if (!isOwned('smoke')) { toast(t('💨 Achète le fumigène au hangar (onglet Fumigène)')); return; }
     plane.smokeOn = !plane.smokeOn;
@@ -1504,6 +1506,7 @@ function updateHUD(dt) {
   setSys('sys-brake', plane.brake ? 'warn' : null);
   setSys('sys-park', plane.parkingBrake ? 'bad' : null);
   setSys('sys-lights', plane.lights ? 'on' : null);
+  $('heat-val').textContent = plane.heat ? '🔥'.repeat(plane.heat) : '—';
 
   // alarmes
   const w = [];
@@ -1655,7 +1658,7 @@ function frame(now) {
       rain: Math.min(1, gfx.weatherState?.rain ?? 0), air: THREE.MathUtils.clamp((plane.ias - 8) / 55, 0, 1),
       on: plane.wipers && !plane.crashed, enabled: gfx.cfg.post && gfx.cfg.raindrops !== false,
     });
-    const frost = inCockpit && !plane.crashed ? Math.min(1, plane.ice * 1.4) : 0;
+    const frost = inCockpit && !plane.crashed ? Math.min(1, plane.ice * 1.4) * (1 - plane.heat / 3) : 0; // le chauffage dégage la vitre
     if (Math.abs(frost - lastFrost) > 0.01) { lastFrost = frost; $('frost').style.opacity = frost.toFixed(2); }
     updatePrompt();
     tutorial.update(realDt);

@@ -247,6 +247,11 @@ sur les bords du pare-brise en vue cockpit). Il fond dans l'air plus chaud et on
 Le pilote se refroidit aussi (moins avec le moteur qui chauffe la cabine, presque pas en jet) : au-delà d'un seuil,
 ses mains tremblent sur le manche (alerte PILOTE GELÉ) jusqu'à ce qu'il se pose pour se réchauffer.
 
+**Chauffage** (touches **1**, **2**, **3** = puissance, la même touche une deuxième fois l'éteint, **0** = arrêt ; en
+AZERTY, **& é " à** sans Maj marchent aussi ; modifiables dans les paramètres) : chaque cran réchauffe la cabine
+d'environ 12 °C et réduit le givre d'un quart (au cran 3, plus de pilote gelé et quatre fois moins de givre, vitre
+dégagée). Son seul inconvénient : il brûle du carburant (8 % du débit plein gaz par cran, même moteur coupé).
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les

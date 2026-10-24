@@ -27,6 +27,11 @@ export const ACTIONS = [
   { id: 'lights', label: 'Feux de navigation', def: ['l'] },
   { id: 'wipers', label: 'Essuie-glaces', def: ['i'] },
   { id: 'smoke', label: 'Fumigène de voltige', def: ['n'] },
+  // chauffage : 1, 2, 3 = puissance (la même touche une 2e fois l'éteint), 0 = arrêt ; & é " à = rangée du haut en AZERTY
+  { id: 'heat1', label: 'Chauffage : puissance 1', def: ['1', '&'] },
+  { id: 'heat2', label: 'Chauffage : puissance 2', def: ['2', 'é'] },
+  { id: 'heat3', label: 'Chauffage : puissance 3', def: ['3', '"'] },
+  { id: 'heatOff', label: 'Couper le chauffage', def: ['0', 'à'] },
   { id: 'refuel', label: 'Faire le plein (maintenir)', def: ['k'] },
   { group: 'Jeu' },
   { id: 'board', label: 'Tableau des missions', def: ['enter'] },

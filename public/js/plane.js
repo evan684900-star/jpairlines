@@ -81,6 +81,7 @@ export class Plane {
     this.brake = false;
     this.lights = false;
     this.wipers = false;
+    this.heat = 0; // chauffage : 0 (arrêt) à 3
     this.trim = 0;
     this.onGround = true;
     this.onWater = false;
@@ -163,6 +164,13 @@ export class Plane {
   toggleParking() {
     this.parkingBrake = !this.parkingBrake;
     this.emit(this.parkingBrake ? 'Frein de parking serré' : 'Frein de parking desserré');
+  }
+  // chauffage de la cabine, du pare-brise et des bords d'attaque : réchauffe le pilote et limite le givre,
+  // mais il brûle du carburant (même moteur coupé)
+  setHeat(n) {
+    if (n > 0 && this.fuel <= 0) { this.emit('Plus de carburant : chauffage impossible'); return; }
+    this.heat = n;
+    this.emit(['Chauffage coupé', 'Chauffage : puissance 1', 'Chauffage : puissance 2', 'Chauffage : puissance 3'][n]);
   }
   toggleWipers() {
     this.wipers = !this.wipers;
@@ -252,6 +260,11 @@ export class Plane {
     }
     this.throttle = clamp(this.throttle + input.throttle * dt * 0.6, 0, 1);
     const fuelScale = opts.fuelScale ?? 1;
+    // chauffage : chaque cran brûle 8 % du débit plein gaz en plus (moteur en marche ou non)
+    if (this.heat && fuelScale > 0) {
+      this.fuel = Math.max(0, this.fuel - ((S.fuelFlowMax * 0.08 * this.heat) / 3600) * fuelScale * dt);
+      if (this.fuel <= 0) { this.heat = 0; this.emit('Plus de carburant : chauffage coupé'); }
+    }
     if (this.engineOn && fuelScale > 0) {
       const lph = S.fuelFlowIdle + (S.fuelFlowMax - S.fuelFlowIdle) * this.throttle;
       this.fuel = Math.max(0, this.fuel - (lph / 3600) * fuelScale * dt);
@@ -291,12 +304,16 @@ export class Plane {
       const alt = smooth(clamp(this.pos.y / 1800, 0, 1));
       iceTarget = clamp((-3 - temp) / 27, 0, 1) * (0.35 + 0.65 * clamp(wet, 0, 1)) * (0.4 + 0.6 * alt) * (jet ? 0.3 : 1) * (diff.damage ? 1 : 0.6);
     }
+    iceTarget *= 1 - this.heat * 0.25; // chauffage : chaque cran réduit le givre d'un quart
     if (parked) this.ice = Math.max(0, this.ice - dt * 0.12);
     else if (temp > 1) this.ice = Math.max(0, this.ice - dt * 0.004 * Math.min(10, temp));
     else if (this.ice < iceTarget) this.ice = Math.min(iceTarget, this.ice + dt * 0.012 * (0.4 + clamp(wet, 0, 1)));
     else this.ice = Math.max(iceTarget, this.ice - dt * 0.006);
-    const chillTarget = temp < 0 ? clamp(-temp / 30, 0, 1) * (jet ? 0.15 : this.engineOn ? 0.75 : 1) : 0;
+    // chauffage : chaque cran réchauffe la cabine d'environ 12 °C
+    const cabin = temp + this.heat * 12;
+    const chillTarget = cabin < 0 ? clamp(-cabin / 30, 0, 1) * (jet ? 0.15 : this.engineOn ? 0.75 : 1) : 0;
     if (parked) this.chill = Math.max(0, this.chill - dt * 0.05);
+    else if (this.heat && this.chill > chillTarget) this.chill = Math.max(chillTarget, this.chill - dt * 0.01 * (1 + this.heat));
     else if (this.chill < chillTarget) this.chill = Math.min(chillTarget, this.chill + dt * 0.004);
     else this.chill = Math.max(chillTarget, this.chill - dt * 0.01);
     if (prevIce < 0.25 && this.ice >= 0.25) this.emit('Givrage ! L\'avion s\'alourdit : descends dans l\'air plus chaud ou pose-toi pour dégivrer.');

@@ -500,4 +500,11 @@ export default {
   "Givrage ! L'avion s'alourdit : descends dans l'air plus chaud ou pose-toi pour dégivrer.": "¡Engelamiento! El avión pesa más: desciende a aire más cálido o aterriza para deshelarlo.",
   "Avion dégivré": "Avión deshelado",
   "Le pilote grelotte ! Pose-toi sur un aéroport pour te réchauffer.": "¡El piloto tirita! Aterriza en un aeropuerto para entrar en calor.",
+  "Chauffage : puissance 1": "Calefacción: potencia 1",
+  "Chauffage : puissance 2": "Calefacción: potencia 2",
+  "Chauffage : puissance 3": "Calefacción: potencia 3",
+  "Chauffage coupé": "Calefacción apagada",
+  "Plus de carburant : chauffage impossible": "Sin combustible: calefacción imposible",
+  "Plus de carburant : chauffage coupé": "Sin combustible: calefacción apagada",
+  "Couper le chauffage": "Apagar la calefacción",
 };
