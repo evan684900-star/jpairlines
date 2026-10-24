@@ -88,6 +88,58 @@ const DRAW = {
     x.save(); x.rotate(-0.4); x.lineWidth = 22; x.strokeStyle = k; x.beginPath(); x.ellipse(0, 0, 122, 34, 0, 0, Math.PI * 2); x.stroke();
     x.lineWidth = 12; x.strokeStyle = '#f2c21b'; x.stroke(); x.restore();
   },
+  avion: (x, c, k) => fillStroke(x, poly([[0, -120], [14, -80], [14, -25], [118, 15], [118, 35], [14, 15], [10, 80], [42, 100], [42, 114], [0, 104], [-42, 114], [-42, 100], [-10, 80], [-14, 15], [-118, 35], [-118, 15], [-14, -25], [-14, -80]]), c, k, 9),
+  helice: (x, c, k) => {
+    const p = new Path2D();
+    for (const a of [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3]) {
+      const ca = Math.cos(a), sa = Math.sin(a), pt = (u, v) => [u * ca - v * sa, u * sa + v * ca];
+      const [x0, y0] = pt(0, -14), [x1, y1] = pt(28, -60), [x2, y2] = pt(18, -118), [x3, y3] = pt(-16, -110), [x4, y4] = pt(-20, -40);
+      p.moveTo(x0, y0); p.bezierCurveTo(x1, y1, x2, y2, x2, y2); p.bezierCurveTo(x3, y3, x3, y3, x4, y4); p.closePath();
+    }
+    fillStroke(x, p, c, k, 8);
+    x.fillStyle = k; x.fill(circle(0, 0, 22)); x.fillStyle = c; x.fill(circle(0, 0, 12));
+  },
+  boussole: (x, c, k) => {
+    fillStroke(x, circle(0, 0, 112), '#f4f4f0', k, 8);
+    fillStroke(x, star(4, 108, 22, -Math.PI / 2), c, k, 6);
+    fillStroke(x, star(4, 62, 14, -Math.PI / 4), k, k, 2);
+    x.fillStyle = k; x.font = 'bold 34px Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('N', 0, -88);
+  },
+  globe: (x, c, k) => {
+    fillStroke(x, circle(0, 0, 110), c, k, 8);
+    x.strokeStyle = k; x.lineWidth = 7;
+    x.beginPath(); x.ellipse(0, 0, 46, 108, 0, 0, Math.PI * 2); x.stroke();
+    x.beginPath(); x.moveTo(-108, 0); x.lineTo(108, 0); x.moveTo(-94, -55); x.lineTo(94, -55); x.moveTo(-94, 55); x.lineTo(94, 55); x.moveTo(0, -110); x.lineTo(0, 110); x.stroke();
+  },
+  nuage: (x, c, k) => { const p = new Path2D(); for (const [cx, cy, r] of [[-55, 25, 45], [-10, -15, 60], [50, 10, 50], [80, 40, 32], [0, 45, 45]]) { p.moveTo(cx + r, cy); p.arc(cx, cy, r, 0, Math.PI * 2); } fillStroke(x, p, c, k, 10); },
+  arcenciel: (x, c, k) => {
+    const cols = ['#e8392e', '#ff8a1a', '#f2c21b', '#3fae4a', '#2a8fd8', '#6b3fa0'];
+    x.lineWidth = 30; x.strokeStyle = k; x.beginPath(); x.arc(0, 70, 104, Math.PI, 0); x.stroke(); x.beginPath(); x.arc(0, 70, 26, Math.PI, 0); x.stroke();
+    cols.forEach((col, i) => { x.lineWidth = 15; x.strokeStyle = col; x.beginPath(); x.arc(0, 70, 96 - i * 13, Math.PI, 0); x.stroke(); });
+    fillStroke(x, circle(-100, 80, 26), c, k, 6); fillStroke(x, circle(100, 80, 26), c, k, 6);
+  },
+  pique: (x, c, k) => { const p = new Path2D(); p.moveTo(0, -115); p.bezierCurveTo(-60, -40, -120, 0, -80, 50); p.bezierCurveTo(-50, 80, -15, 60, -8, 40); p.lineTo(-30, 112); p.lineTo(30, 112); p.lineTo(8, 40); p.bezierCurveTo(15, 60, 50, 80, 80, 50); p.bezierCurveTo(120, 0, 60, -40, 0, -115); fillStroke(x, p, c, k); },
+  flocon: (x, c, k) => {
+    x.lineCap = 'round';
+    for (const [w, col] of [[24, k], [12, c]]) {
+      x.lineWidth = w; x.strokeStyle = col; x.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        x.moveTo(0, 0); x.lineTo(ca * 108, sa * 108);
+        for (const d of [50, 80]) { const bx = ca * d, by = sa * d; x.moveTo(bx, by); x.lineTo(bx + Math.cos(a + 0.7) * 30, by + Math.sin(a + 0.7) * 30); x.moveTo(bx, by); x.lineTo(bx + Math.cos(a - 0.7) * 30, by + Math.sin(a - 0.7) * 30); }
+      }
+      x.stroke();
+    }
+  },
+  goutte: (x, c, k) => { const p = new Path2D(); p.moveTo(0, -118); p.bezierCurveTo(40, -50, 85, -5, 85, 35); p.arc(0, 35, 85, 0, Math.PI); p.bezierCurveTo(-85, -5, -40, -50, 0, -118); fillStroke(x, p, c, k); x.fillStyle = 'rgba(255,255,255,0.55)'; x.beginPath(); x.ellipse(-30, 30, 14, 26, 0.3, 0, Math.PI * 2); x.fill(); },
+  bouclier: (x, c, k) => { const p = new Path2D(); p.moveTo(0, -115); p.lineTo(100, -80); p.bezierCurveTo(100, 20, 60, 85, 0, 118); p.bezierCurveTo(-60, 85, -100, 20, -100, -80); p.closePath(); fillStroke(x, p, c, k); x.fillStyle = k; x.fill(poly([[-12, -90], [12, -90], [12, 95], [-12, 95]])); x.fill(poly([[-80, -20], [80, -20], [80, 4], [-80, 4]])); },
+  galons: (x, c, k) => { for (const y of [-70, -10, 50]) fillStroke(x, poly([[-115, y - 10], [0, y + 40], [115, y - 10], [115, y + 14], [0, y + 64], [-115, y + 14]]), c, k, 8); },
+  yinyang: (x, c, k) => {
+    fillStroke(x, circle(0, 0, 112), '#f4f4f0', k, 8);
+    const p = new Path2D(); p.arc(0, 0, 112, -Math.PI / 2, Math.PI / 2); p.arc(0, 56, 56, Math.PI / 2, -Math.PI / 2, true); p.arc(0, -56, 56, Math.PI / 2, -Math.PI / 2); p.closePath();
+    x.fillStyle = c; x.fill(p);
+    x.fillStyle = c; x.fill(circle(0, -56, 16)); x.fillStyle = '#f4f4f0'; x.fill(circle(0, 56, 16));
+  },
   texte: (x, c, k, text = 'JP') => {
     const s = text || 'JP';
     let size = 140;

@@ -228,6 +228,20 @@ qui tourne vite avec réducteur ; Faucon : 6 cylindres de voltige, le plus fort 
 désaccordés (battement des bimoteurs, en stéréo) ; Albatros : moteur en étoile à 9 cylindres ; Éclair : turbine
 (fan, compresseur, souffle). Plus sourd dans le cockpit et au loin.
 
+### Hangar : caisses et raretés
+
+Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les
+listes). Les nouveautés ne s'achètent pas : elles se gagnent dans les **caisses** (onglet 🎁 Caisses) :
+standard (1 500 ₣), de pilote (4 000 ₣) et de l'As (9 000 ₣), chacune avec ses chances par rareté. L'ouverture fait
+défiler une bande d'éléments qui ralentit jusqu'au gain ; un doublon rembourse une partie de la caisse (20 % pour un
+commun, jusqu'à 100 % pour un exotique). Les éléments gagnés servent sur tous les avions.
+
+Nouveautés (57, dans les caisses) : 14 motifs (bandes du Débarquement, rayons de soleil façon voltige, filet de ligne
+aérienne, rétro années 50, chasseur 1944, zèbre, léopard, nid d'abeille, écossais, éclaboussures, ciel étoilé, pixels,
+fibre de carbone, grande diagonale), 6 décors d'ailes, 6 finitions (caméléon, aluminium brossé, miroir, velours, givré,
+perle), 9 emblèmes, 12 autocollants, 3 effets de fumigène (deux couleurs, arc-en-ciel, bleu-blanc-rouge, visibles par
+les autres joueurs), la couleur de l'immatriculation et 6 tenues pour le pilote de la cinématique (onglet Pilote).
+
 ### Qualité « Personnalisé »
 
 Paramètres → Graphismes → Qualité → « Personnalisé » : on choisit soi-même chaque effet, la résolution de l'image, la

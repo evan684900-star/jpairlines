@@ -94,4 +94,7 @@ export default {
   "🎮 Manette Xbox ou PlayStation : clique sur « + 🎮 » puis appuie sur le bouton voulu. Maintenir Vue (Xbox) ou Create (PlayStation) donne une deuxième série de boutons. Le stick gauche pilote, les gâchettes règlent les gaz et le stick droit tourne la caméra.": "🎮 Xbox or PlayStation controller: click “+ 🎮”, then press the button you want. Holding View (Xbox) or Create (PlayStation) gives a second set of buttons. The left stick flies, the triggers set the throttle and the right stick turns the camera.",
   "Molette : zoom · Glisser : déplacer · Clic : poser / retirer un repère 📍 ·": "Wheel: zoom · Drag: pan · Click: place / remove a marker 📍 ·",
   "Effacer les repères": "Clear markers",
+  // onglet Pilote
+  // caisses et raretés
+  "🎁 Caisses": "🎁 Crates",
 };

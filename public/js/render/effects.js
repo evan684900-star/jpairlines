@@ -2,6 +2,8 @@
 // fumée et flamme moteur, poussière au roulage, fumée de pneus au toucher, crash,
 // tourbillons de condensation en bout d'aile, pluie autour de la caméra, éclairs d'orage.
 import * as THREE from 'three';
+import { smokeColorAt } from '../livery.js';
+const _sc = new THREE.Color();
 import { TEX } from './textures.js';
 import { groundHeight, onRunway } from '../world.js';
 
@@ -284,7 +286,9 @@ export class Effects {
           this.world(mesh, u.exhaust, _v);
           _v.addScaledVector(plane.velocity, -Math.random() * dt);
           _w.set((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, 0).addScaledVector(plane.velocity, 0.15);
-          this.smoke.emit(_v, _w, { life: 9, size: 1.1, grow: 5, color: plane.smokeColor || new THREE.Color(1, 1, 1), alpha: 0.75, drag: 1.2, rise: 0.15 });
+          // couleur du fumigène : une couleur, deux en alternance, arc-en-ciel… (livery.js)
+          const col = plane.smokeLivery ? _sc.set(smokeColorAt(plane.smokeLivery, performance.now() / 1000)) : plane.smokeColor || _sc.set(0xffffff);
+          this.smoke.emit(_v, _w, { life: 9, size: 1.1, grow: 5, color: col.clone(), alpha: 0.75, drag: 1.2, rise: 0.15 });
         }
       }
       // poussière au roulage (beaucoup plus sur l'herbe et la terre) et souffle de l'hélice

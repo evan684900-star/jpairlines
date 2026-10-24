@@ -5,7 +5,9 @@ import { cleanLivery } from './livery.js';
 import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { stickerTexture } from './stickers.js';
+import { stickerTexture, drawSticker } from './stickers.js';
+// couleur claire (immatriculation en couleur sur fond clair : contour sombre pour rester lisible)
+const inkLight = (h) => { const n = parseInt(h.slice(1), 16); return ((n >> 16) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11) > 150; };
 
 // Relie des anneaux de points (même nombre de points) en une surface lisse
 // glassOf(i, j, p) (optionnel) : sommets de vitre ; la géométrie a alors 2 groupes (0 = carrosserie, 1 = vitres)
@@ -163,7 +165,13 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     satin: { roughness: 0.55, metalness: 0.05, clearcoat: 0.35, clearcoatRoughness: 0.45 },
     candy: { roughness: 0.18, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.02, sheen: 0.4, sheenRoughness: 0.3 },
     vieilli: { roughness: 0.9, metalness: 0.1, clearcoat: 0, clearcoatRoughness: 1 },
-  }[LV.finish];
+    irise: { roughness: 0.2, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.03, iridescence: 1, iridescenceIOR: 1.8, iridescenceThicknessRange: [250, 900] },
+    brosse: { roughness: 0.38, metalness: 1, clearcoat: 0, clearcoatRoughness: 1, anisotropy: 0.8 },
+    miroir: { roughness: 0.02, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.01 },
+    velours: { roughness: 0.95, metalness: 0, clearcoat: 0, clearcoatRoughness: 1, sheen: 1, sheenRoughness: 0.5, sheenColor: 0xffffff },
+    givre: { roughness: 0.6, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.55 },
+    perle: { roughness: 0.42, metalness: 0.12, clearcoat: 0.7, clearcoatRoughness: 0.3, sheen: 0.6, sheenRoughness: 0.4, iridescence: 0.35, iridescenceIOR: 1.3 },
+  }[LV.finish] || { roughness: 0.34, metalness: 0.04, clearcoat: 0.9, clearcoatRoughness: 0.1 };
   // zones peintes à part (par-dessus le motif)
   const ZC = Object.fromEntries(Object.entries(LV.zones).map(([k, v]) => [k, new THREE.Color(hex(v))]));
   const zoneMat = (k, fallback) => (ZC[k] ? new THREE.MeshPhysicalMaterial({ color: ZC[k], ...FINISH }) : fallback);
@@ -209,6 +217,7 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
     const post = gl.posts.some((pz) => Math.abs(z - pz) < 0.04) && ny > gl.sides[0].ny0 + 0.04;
     return (windshield || side) && !post;
   } : null;
+  const _wc = new THREE.Color(), _wc2 = new THREE.Color();
   // bruit doux (camouflage, tigre) : valeurs pseudo-aléatoires interpolées
   const hash = (a, b) => { const v = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return v - Math.floor(v); };
   const noise = (x, y) => {
@@ -254,6 +263,56 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
       case 'camo': { const n = noise(z * 0.9, ang * 1.6) + 0.5 * noise(z * 2.2 + 7, ang * 3.4); c.copy(n < 0.55 ? BODY : n < 0.85 ? ACC : n < 1.05 ? ACC2 : BLACK); break; }
       case 'digital': { const qz = Math.floor(z / 0.18) * 0.18, qa = Math.floor(ang / 0.28) * 0.28; const n = noise(qz * 1.1, qa * 1.6) + 0.5 * noise(qz * 2.6 + 3, qa * 3); c.copy(n < 0.55 ? BODY : n < 0.85 ? ACC : n < 1.05 ? ACC2 : BLACK); break; }
       case 'arcenciel': c.setHSL((u * 0.85 + 0.02) % 1, 0.78, 0.55); break;
+      // bandes du Débarquement (juin 1944) : 5 bandes blanc/noir autour de l'arrière du fuselage
+      case 'invasion': { const k = Math.floor((u - 0.62) / 0.045); if (u > 0.62 && k < 5) c.copy(k % 2 ? BLACK : WHITE); break; }
+      // rayons de soleil partant du nez (avions de voltige)
+      case 'soleil': { const r = Math.hypot(u * 4, ny * 0.9); if (r < 2.6 && Math.floor((Math.atan2(ny, u * 4) + Math.PI) / (Math.PI / 9)) % 2) c.copy(r < 2.45 ? ACC : ACC2); break; }
+      // filet de compagnie : deux lignes fines le long des hublots, la queue relevée
+      case 'cheatline': { const y0 = 0.05 + Math.max(0, u - 0.75) * 1.6; if (Math.abs(ny - y0) < 0.075) c.copy(ACC); else if (Math.abs(ny - y0 + 0.13) < 0.04) c.copy(ACC2); break; }
+      // rétro : grande virgule qui plonge vers le ventre
+      case 'retro': { const y0 = 0.15 - 0.55 * Math.sin(Math.min(1, u * 1.25) * Math.PI * 0.5); if (ny < y0 && ny > y0 - 0.22) c.copy(ACC); else if (ny <= y0 - 0.22 && ny > y0 - 0.3) c.copy(ACC2); break; }
+      // chasseur 1944 : dessus vert olive, dessous gris, nez jaune, bandes du Débarquement
+      case 'warbird': {
+        const olive = _wc.setRGB(0.24, 0.26, 0.14), grey = _wc2.setRGB(0.56, 0.58, 0.6);
+        c.copy(ny > -0.15 + 0.06 * Math.sin(u * 20) ? olive : grey);
+        if (u < 0.1) c.copy(ACC);
+        const k = Math.floor((u - 0.68) / 0.04); if (u > 0.68 && k < 5) c.copy(k % 2 ? BLACK : WHITE);
+        break;
+      }
+      case 'zebre': if (Math.sin(u * 60 + Math.sin(ny * 5 + u * 9) * 2.2 + noise(z * 2, ang) * 2) > 0.35) c.copy(BLACK); break;
+      case 'leopard': {
+        const n = noise(z * 3.2, ang * 3.2);
+        if (n > 0.72) c.copy(BLACK); else if (n > 0.58) c.copy(ACC);
+        break;
+      }
+      case 'hexa': { // nid d'abeille : bords des hexagones en couleur secondaire
+        const gx = z / 0.32, gy = (ang * 0.45) / 0.28 + (Math.floor(gx) % 2) * 0.5;
+        const fx = Math.abs(gx - Math.round(gx)), fy = Math.abs(gy - Math.round(gy));
+        if (Math.max(fx * 1.15 + fy * 0.6, fy * 1.2) > 0.52) c.copy(ACC);
+        break;
+      }
+      case 'ecossais': { // tartan : bandes croisées qui se mélangent
+        const a = (Math.floor(z / 0.18) % 4 === 0), b = (Math.floor((ang + Math.PI) / 0.35) % 4 === 0);
+        if (a && b) c.copy(BLACK); else if (a || b) c.lerpColors(BODY, ACC, 0.75);
+        if (Math.floor(z / 0.06) % 7 === 3 || Math.floor((ang + Math.PI) / 0.12) % 9 === 4) c.lerp(ACC2, 0.6);
+        break;
+      }
+      case 'eclabous': { const n = noise(z * 1.4 + 11, ang * 2.1) + 0.45 * noise(z * 4, ang * 5); if (n > 1.0) c.copy(ACC); else if (n > 0.9) c.copy(ACC2); break; }
+      case 'etoiles': { // ciel de nuit : fond secondaire, petites étoiles blanches
+        c.copy(ACC2);
+        const gz = Math.floor(z / 0.22), ga = Math.floor((ang + Math.PI) / 0.18);
+        if (hash(gz, ga) > 0.86) c.copy(WHITE);
+        else if (ny > 0.55) c.lerp(ACC, 0.4);
+        break;
+      }
+      case 'pixel': { const h = hash(Math.floor(z / 0.25), Math.floor((ang + Math.PI) / 0.4)); c.copy(h < 0.4 ? BODY : h < 0.7 ? ACC : h < 0.9 ? ACC2 : WHITE); break; }
+      case 'carbone': { // tissage du carbone (fond sombre, reflets du tressage)
+        const w = (Math.floor(z / 0.14) + Math.floor((ang + Math.PI) / 0.22)) % 2; // assez gros pour la grille de sommets
+        c.setRGB(0.05, 0.055, 0.06).lerp(_wc.setRGB(0.16, 0.17, 0.19), w ? 0.9 : 0.2);
+        if (u > 0.4 && Math.abs(ny + 0.05) < 0.06) c.copy(ACC);
+        break;
+      }
+      case 'diagonale': { const d = ny + (u - 0.5) * 2.2; if (Math.abs(d) < 0.25) c.copy(ACC); else if (Math.abs(d) < 0.33) c.copy(ACC2); break; }
       default: break;
     }
     // zones : dos, ventre, nez et capot
@@ -327,6 +386,12 @@ export function createPlaneMesh(type = 'cub', opts = {}) {
       case 'bandes': { const k = Math.floor((s - W.half * 0.3) / 0.28); c.copy(s > W.half * 0.3 && k < 5 ? (k % 2 ? BLACK : WHITE) : BODY); break; }
       case 'chevron': { const v = (p.z - W.le) - s * 0.35; c.copy(v > 0.1 && v < 0.45 && s > W.half * 0.2 ? ACC : v > 0.45 && v < 0.6 && s > W.half * 0.2 ? ACC2 : BODY); break; }
       case 'bord': { const c0 = chordAt(p.x), t = (p.z - leAt(p.x)) / c0; c.copy(t < 0.12 ? ACC : t < 0.16 ? ACC2 : BODY); break; }
+      case 'invasion': { const t = (p.z - leAt(p.x)) / chordAt(p.x), k = Math.floor((s - W.half * 0.22) / 0.3); c.copy(s > W.half * 0.22 && k < 5 && t > -0.1 ? (k % 2 ? BLACK : WHITE) : BODY); break; }
+      case 'soleil': { const a = Math.atan2(p.z - W.le - 0.6, s); c.copy(s > 0.3 && Math.floor((a + Math.PI) / (Math.PI / 10)) % 2 ? ACC : BODY); break; }
+      case 'etoiles': { c.copy(ACC2); if (hash(Math.floor(s / 0.3), Math.floor(p.z / 0.3)) > 0.84) c.copy(WHITE); break; }
+      case 'degrade': c.lerpColors(BODY, ACC, Math.min(1, s / W.half)); break;
+      case 'fuite': { const t = (p.z - leAt(p.x)) / chordAt(p.x); c.copy(t > 0.86 ? ACC : t > 0.82 ? ACC2 : BODY); break; }
+      case 'flammes': { const t = (p.z - leAt(p.x)) / chordAt(p.x), edge = 0.35 + 0.12 * Math.sin(s * 5) + 0.06 * Math.sin(s * 13); c.copy(t < edge - 0.1 ? ACC2 : t < edge ? ACC : BODY); break; }
       default: c.copy(!glb && s > W.accentFrom ? ACC : BODY);
     }
     if (ZC.tips && s > W.half * 0.75) c.copy(ZC.tips);
@@ -1199,18 +1264,22 @@ const decalCache = new Map();
 function decalTexture(kind, value, LV, BODY) {
   const lum = BODY.r * 0.3 + BODY.g * 0.59 + BODY.b * 0.11;
   const ink = lum > 0.5 ? '#16181c' : '#f4f4f0';
-  const key = `${kind}|${value}|${LV.emblemColor}|${LV.number}|${ink}`;
+  const key = `${kind}|${value}|${LV.emblemColor}|${LV.number}|${ink}|${LV.regColor}`;
   if (decalCache.has(key)) return decalCache.get(key);
   const c = document.createElement('canvas');
   c.width = kind === 'reg' ? 512 : 256;
   c.height = kind === 'reg' ? 128 : 256;
   const x = c.getContext('2d');
   if (kind === 'reg') {
-    x.fillStyle = ink;
+    x.fillStyle = LV.regColor || ink;
+    if (LV.regColor) { x.lineWidth = 7; x.lineJoin = 'round'; x.strokeStyle = inkLight(LV.regColor) ? '#16181c' : '#f4f4f0'; } // contour lisible
     x.font = 'bold 92px "Arial Narrow", Arial, sans-serif';
     x.textAlign = 'center';
     x.textBaseline = 'middle';
+    if (LV.regColor) x.strokeText(value, 256, 68, 500);
     x.fillText(value, 256, 68, 500);
+  } else if (!['etoile', 'eclair', 'coeur', 'cocarde', 'numero', 'couronne', 'aile'].includes(value)) {
+    drawSticker(c, value, LV.emblemColor); // emblèmes qui reprennent un dessin d'autocollant
   } else {
     const col = LV.emblemColor;
     x.translate(128, 128);

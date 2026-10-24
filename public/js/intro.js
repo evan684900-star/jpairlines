@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { t as tr } from './i18n.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { SUIT_TINTS } from './livery.js';
 
 const clamp01 = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x);
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -193,6 +194,19 @@ class PilotSkin {
       this.setWorld(b, _qb.multiply(_qc));
     }
   }
+  // tenue choisie au hangar : teinte des matériaux (chemise, casquette, pantalon, cravate)
+  setSuit(key) {
+    const tint = SUIT_TINTS[key] || SUIT_TINTS.commandant;
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material)) {
+        m.userData.base ??= m.color.clone();
+        const c = tint[m.name];
+        m.color.copy(m.userData.base);
+        if (c) m.color.multiply(new THREE.Color(c));
+      }
+    });
+  }
   // position de la main gauche du modèle (la sacoche y est accrochée)
   leftHand(out) { return this.bones.LeftHand.getWorldPosition(out); }
   // amène la main droite du modèle sur un point (poignée) : bras à deux segments, le coude garde son côté actuel
@@ -314,9 +328,10 @@ export class Intro {
     return { local, eye, mat: hit?.object.material, surfaceAt, inv, parts };
   }
 
-  start(plane, mesh, onDone) {
+  start(plane, mesh, onDone, suit) {
     this.stop();
     this.mountSkin(); // modèle chargé pendant une cinématique précédente
+    this.skin?.setSuit(suit);
     this.onDone = onDone;
     this.plane = plane;
     this.mesh = mesh;

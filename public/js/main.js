@@ -27,7 +27,7 @@ import { Tutorial } from './tutorial.js';
 import { Intro } from './intro.js';
 import { WindshieldRain } from './render/windshield.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
-import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL } from './livery.js';
+import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL, SMOKE_MODES, SUITS, smokeColorAt, RARITIES, rarityOf, rarityRank, isCrateOnly, CRATES, rollCrate, DUPLICATE_REFUND, CRATE_ITEMS } from './livery.js';
 import { stickerThumb } from './stickers.js';
 
 const $ = (id) => document.getElementById(id);
@@ -104,6 +104,7 @@ await loadPlaneModels();
 const plane = new Plane(save.aircraft);
 let planeMesh = createPlaneMesh(plane.type, { landingLight: true, livery: liveryOf(plane.type) });
 plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);
+plane.smokeLivery = liveryOf(plane.type);
 scene.add(planeMesh);
 
 // ================= Quêtes =================
@@ -964,6 +965,7 @@ function rebuildPlaneMesh() {
   attachPanel();
   warmPlane();
   plane.smokeColor = new THREE.Color(liveryOf(plane.type).smoke);
+  plane.smokeLivery = liveryOf(plane.type);
   sendLivery();
 }
 function setAircraft(id) {
@@ -1145,8 +1147,9 @@ const isOwned = (key) => priceOf(key) === 0 || (save.owned || []).includes(key);
 function missingFor(patch) {
   const out = [];
   for (const [k, v] of Object.entries(patch)) {
-    if (['body', 'accent', 'stripe', 'tips', 'emblemColor', 'smoke'].includes(k) && v) out.push(SWATCHES.includes(v) || v === '#ffffff' ? `color:${v}` : 'custom-color');
-    if (k === 'pattern' || k === 'wings' || k === 'finish' || k === 'emblem') out.push(`${k}:${v}`);
+    if (['body', 'accent', 'stripe', 'tips', 'emblemColor', 'smoke', 'smoke2', 'regColor'].includes(k) && v) out.push(SWATCHES.includes(v) || v === '#ffffff' ? `color:${v}` : 'custom-color');
+    if (k === 'regColor' && v) out.push('regColor');
+    if (['pattern', 'wings', 'finish', 'emblem', 'smokeMode', 'suit'].includes(k)) out.push(`${k}:${v}`);
     if (k === 'sharkTeeth' && v) out.push('teeth');
     if (k === 'reg' && v) out.push('reg');
     if (k === 'zones') {
@@ -1173,14 +1176,14 @@ function setLivery(patch) {
 function choose(patch, label) {
   const missing = missingFor(patch);
   if (!missing.length) return setLivery(patch);
-  hg.pending = { patch, keys: missing, label, price: missing.reduce((n, k) => n + priceOf(k), 0) };
+  hg.pending = { patch, keys: missing, label, price: missing.reduce((n, k) => n + priceOf(k), 0), crate: missing.some(isCrateOnly) };
   clearTimeout(hg.timer);
   hg.timer = setTimeout(() => hangar.setPlane(hg.type, cleanLivery({ ...liveryOf(hg.type), ...patch }), true), 60);
   renderHangarUI();
 }
 function buyPending() {
   const p = hg.pending;
-  if (!p || save.money < p.price) return;
+  if (!p || p.crate || save.money < p.price) return; // les éléments des caisses ne s'achètent pas
   save.money -= p.price;
   save.owned = [...new Set([...(save.owned || []), ...p.keys])];
   const bought = p.keys.find((k) => k.startsWith('sticker:'));
@@ -1193,6 +1196,88 @@ function cancelPending() {
   hg.pending = null;
   hangar.setPlane(hg.type, liveryOf(hg.type), true);
   renderHangarUI();
+}
+
+// ----- Caisses : tirage, puis animation (bande d'éléments qui défile et ralentit jusqu'au gain) -----
+const CAT = {
+  pattern: ['🎨', PATTERNS], wings: ['✈️', WINGS], finish: ['✨', FINISHES], emblem: ['🛡', EMBLEMS], sticker: ['🏷', STICKERS],
+  smokeMode: ['💨', SMOKE_MODES], suit: ['🧑‍✈️', SUITS],
+};
+function itemInfo(key) {
+  if (key === 'regColor') return { icon: '🔤', name: t('Couleur de l\'immatriculation'), cat: t('Décos') };
+  const [c, v] = key.split(':');
+  const [icon, list] = CAT[c];
+  const name = t((list.find(([k]) => k === v) || [, v])[1]);
+  const img = c === 'sticker' || c === 'emblem' ? stickerThumb(v, '#f2c21b') : null;
+  const cats = { pattern: 'Motif du fuselage', wings: 'Ailes', finish: 'Finition de la peinture', emblem: 'Emblème sur la dérive', sticker: 'Autocollants', smokeMode: 'Effet du fumigène', suit: 'Tenue du pilote' };
+  return { icon, name, img, cat: t(cats[c]) };
+}
+function cardHTML(key) {
+  const i = itemInfo(key), r = rarityOf(key);
+  return `<div class="crate-item r-${r}">${i.img ? `<img src="${i.img}" alt="">` : `<span class="ci-icon">${i.icon}</span>`}<span class="ci-name">${i.name}</span></div>`;
+}
+function openCrate(crate) {
+  if (!crate || save.money < crate.price || hg.busy) return;
+  if ($('crate-open') && !$('crate-open').classList.contains('hidden')) return; // une caisse à la fois
+  save.money -= crate.price;
+  const owned = save.owned || [];
+  const win = rollCrate(crate, owned);
+  let refund = 0;
+  if (win.duplicate) { refund = Math.round(crate.price * DUPLICATE_REFUND[win.rarity] / 10) * 10; save.money += refund; }
+  else save.owned = [...new Set([...owned, win.key])];
+  persist(); // le gain est enregistré tout de suite (même si on ferme pendant l'animation)
+  // bande : éléments au hasard selon les chances de la caisse, le gain en position 34
+  const N = 42, W_IDX = 34;
+  const strip = Array.from({ length: N }, (_, i) => (i === W_IDX ? win.key : rollCrate(crate, []).key));
+  let el = $('crate-open');
+  if (!el) { el = document.createElement('div'); el.id = 'crate-open'; $('hangar3d').append(el); }
+  el.innerHTML = `<div class="co-panel glass"><h3>${t(crate.name)}</h3><div class="co-window"><div class="co-strip">${strip.map(cardHTML).join('')}</div><div class="co-marker"></div></div>`
+    + `<div class="co-result hidden"></div><button class="co-skip secondary">${t('Passer')}</button></div>`;
+  el.classList.remove('hidden');
+  const stripEl = el.querySelector('.co-strip'), card = stripEl.children[0];
+  const cw = card.getBoundingClientRect().width + 8, winW = el.querySelector('.co-window').clientWidth;
+  const target = W_IDX * cw + cw / 2 - winW / 2 + (Math.random() - 0.5) * cw * 0.6;
+  stripEl.style.transform = 'translateX(0px)';
+  let done = false, lastIdx = -1, raf = 0;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    cancelAnimationFrame(raf);
+    stripEl.style.transition = 'none';
+    stripEl.style.transform = `translateX(${-(W_IDX * cw + cw / 2 - winW / 2)}px)`;
+    const i = itemInfo(win.key), rn = RARITIES.find(([k]) => k === win.rarity);
+    const res = el.querySelector('.co-result');
+    res.innerHTML = `<div class="co-win r-${win.rarity}">${cardHTML(win.key)}<div><span class="co-rar r-${win.rarity}">${t(rn[1])}</span><b>${i.name}</b><small>${i.cat}</small>`
+      + (win.duplicate ? `<small>${t('Doublon : +{n} rendus', { n: PRICE_LABEL(refund) })}</small>` : `<small>${t('Nouveau ! Débloqué sur tous tes avions')}</small>`) + `</div></div>`
+      + `<div class="co-btns">${win.duplicate || win.key === 'regColor' ? '' : `<button class="co-try">${t('Essayer sur l\'avion')}</button>`}<button class="co-close secondary">${t('Fermer')}</button></div>`;
+    res.classList.remove('hidden');
+    el.querySelector('.co-skip').classList.add('hidden');
+    el.querySelector('.co-window').classList.add(`glow-${win.rarity}`);
+    beep(win.rarity === 'exotique' || win.rarity === 'legendaire' ? 1320 : 880, 0.35, 0.2);
+    if (['legendaire', 'exotique'].includes(win.rarity)) setTimeout(() => beep(1760, 0.4, 0.18), 180);
+    const close = () => { el.classList.add('hidden'); renderHangarUI(); };
+    res.querySelector('.co-close').onclick = close;
+    res.querySelector('.co-try')?.addEventListener('click', () => {
+      close();
+      const [c, v] = win.key.split(':');
+      if (c === 'sticker') { hg.tab = 'stickers'; hg.placing = v; renderHangarUI(); } else { hg.tab = c === 'suit' ? 'pilote' : c === 'smokeMode' ? 'fumee' : c === 'emblem' ? 'deco' : 'motifs'; setLivery({ [c]: v }); }
+    });
+  };
+  el.querySelector('.co-skip').onclick = finish;
+  requestAnimationFrame(() => {
+    stripEl.style.transition = 'transform 5.6s cubic-bezier(0.08, 0.62, 0.1, 1)';
+    stripEl.style.transform = `translateX(${-target}px)`;
+    // tic à chaque élément qui passe sous le repère
+    const tick = () => {
+      const m = new DOMMatrixReadOnly(getComputedStyle(stripEl).transform);
+      const idx = Math.floor((-m.m41 + winW / 2) / cw);
+      if (idx !== lastIdx) { lastIdx = idx; beep(520 + (idx % 3) * 40, 0.025, 0.06); }
+      if (!done) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+  });
+  stripEl.addEventListener('transitionend', finish, { once: true });
+  $('hg-money').textContent = `💰 ${PRICE_LABEL(save.money)}`;
 }
 
 function renderHangarUI() {
@@ -1209,7 +1294,13 @@ function renderHangarUI() {
   for (const b of document.querySelectorAll('[data-hg]')) b.classList.toggle('active', b.dataset.hg === hg.tab);
   const body = $('hg-body');
   const buy = $('hg-buy');
-  if (hg.pending) {
+  if (hg.pending?.crate) {
+    // aperçu d'un élément des caisses : on peut l'essayer, pas l'acheter
+    buy.innerHTML = `<div><b>${hg.pending.label}</b> — 🎁 ${t('À gagner dans les caisses')}</div><button id="hg-buy-crate">${t('Voir les caisses')}</button><button id="hg-buy-no" class="secondary">${t('Annuler')}</button>`;
+    buy.classList.remove('hidden');
+    $('hg-buy-crate').onclick = () => { cancelPending(); hg.tab = 'caisses'; renderHangarUI(); };
+    $('hg-buy-no').onclick = cancelPending;
+  } else if (hg.pending) {
     const p = hg.pending, ok = save.money >= p.price;
     buy.innerHTML = `<div><b>${p.label}</b> — ${PRICE_LABEL(p.price)}${ok ? '' : `<br><small>${t('Il te manque {price}', { price: PRICE_LABEL(p.price - save.money) })}</small>`}</div>`
       + `<button id="hg-buy-ok" ${ok ? '' : 'disabled'}>${t('Acheter')}</button><button id="hg-buy-no" class="secondary">${t('Annuler')}</button>`;
@@ -1222,14 +1313,18 @@ function renderHangarUI() {
     return;
   }
   const hexOf = (n) => `#${n.toString(16).padStart(6, '0')}`;
-  const tag = (key) => (isOwned(key) ? '' : `<em class="price">${PRICE_LABEL(priceOf(key))}</em>`);
+  const tag = (key) => (isOwned(key) ? '' : isCrateOnly(key) ? `<em class="price crate" title="${t('Seulement dans les caisses')}">🎁</em>` : `<em class="price">${PRICE_LABEL(priceOf(key))}</em>`);
+  const rar = (key) => { const r = RARITIES.find(([k]) => k === rarityOf(key)); return `r-${r[0]}" title="${t(r[1])}`; };
+  // tri par rareté (commun → exotique), l'ordre d'origine départage
+  const byRarity = (list, prefix) => list.map((it, i) => [it, i]).sort((a, b) => rarityRank(`${prefix}${a[0][0]}`) - rarityRank(`${prefix}${b[0][0]}`) || a[1] - b[1]).map(([it]) => it);
   const colorRow = (key, label, orig) => `<h4>${label}</h4><div class="hg-sw" data-color="${key}">`
-    + (['body', 'accent', 'stripe'].includes(key) ? `<button class="orig${view[key] ? '' : ' on'}" data-v="">${t('D\'origine')}</button>` : '')
+    + (['body', 'accent', 'stripe', 'regColor'].includes(key) ? `<button class="orig${view[key] ? '' : ' on'}" data-v="">${t(key === 'regColor' ? 'Automatique' : 'D\'origine')}</button>` : '')
     + SWATCHES.map((c) => `<button style="background:${c}" class="${view[key] === c ? 'on' : ''}${isOwned(`color:${c}`) ? '' : ' lock'}" data-v="${c}" title="${isOwned(`color:${c}`) ? c : `${c} · ${PRICE_LABEL(priceOf(`color:${c}`))}`}"></button>`).join('')
     + (isOwned('custom-color') ? `<input type="color" value="${view[key] || orig}" title="${t('Couleur sur mesure')}">` : `<button class="orig custom" title="${t('Débloque toutes les couleurs')}">${t('🎨 Sur mesure')} ${tag('custom-color')}</button>`)
     + '</div>';
-  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${list.map(([k, n]) => `<button class="${view[key] === k ? 'on' : ''}" data-v="${k}" data-n="${t(n)}">${t(n)}${tag(`${key}:${k}`)}</button>`).join('')}</div>`;
-  let html = `<p class="sub shop-note">${t('Chaque élément s\'achète une fois et sert ensuite sur tous tes avions. Clique pour l\'essayer.')}</p>`;
+  const chips = (key, list, label) => `<h4>${label}</h4><div class="hg-chips" data-chip="${key}">${byRarity(list, `${key}:`).map(([k, n]) => `<button class="${view[key] === k ? 'on' : ''} ${rar(`${key}:${k}`)}" data-v="${k}" data-n="${t(n)}">${t(n)}${tag(`${key}:${k}`)}</button>`).join('')}</div>`;
+  const legend = `<div class="hg-legend">${RARITIES.map(([k, n]) => `<span class="r-${k}">${t(n)}</span>`).join('')}</div>`;
+  let html = `<p class="sub shop-note">${t('Chaque élément s\'achète une fois et sert ensuite sur tous tes avions. Clique pour l\'essayer.')} ${t('Les éléments 🎁 se gagnent dans les caisses.')}</p>` + legend;
   if (hg.tab === 'couleurs') {
     html += colorRow('body', t('Couleur principale'), hexOf(def.color)) + colorRow('accent', t('Couleur secondaire'), hexOf(def.accent))
       + colorRow('stripe', t('Couleur des filets'), hexOf(def.acc2 ?? 0x1d3f7a)) + colorRow('tips', t('Bouts d\'hélice'), L.tips);
@@ -1244,7 +1339,7 @@ function renderHangarUI() {
     const list = view.stickers;
     html += `<p class="sub">${t('Choisis un autocollant puis clique sur l\'avion pour le coller où tu veux. Achat une fois, collage illimité ({max} par avion).', { max: MAX_STICKERS })}</p>`
       + (hg.placing ? `<div class="hg-place"><b>${t('🖱 Clique sur l\'avion pour coller : {name}', { name: t(STICKERS.find(([k]) => k === hg.placing)[1]) })}</b><button id="hg-place-done" class="secondary">${t('Terminé')}</button></div>` : '')
-      + `<div class="hg-stickers">${STICKERS.map(([k, n]) => `<button class="${hg.placing === k ? 'on' : ''}" data-st="${k}" title="${t(n)}"><img src="${stickerThumb(k, hg.stickerColor, k === 'texte' ? (hg.stickerText || 'JP') : '')}" alt=""><span>${t(n)}</span>${tag(`sticker:${k}`)}</button>`).join('')}</div>`
+      + `<div class="hg-stickers">${byRarity(STICKERS, 'sticker:').map(([k, n]) => `<button class="${hg.placing === k ? 'on' : ''} ${rar(`sticker:${k}`)}" data-st="${k}"><img src="${stickerThumb(k, hg.stickerColor, k === 'texte' ? (hg.stickerText || 'JP') : '')}" alt=""><span>${t(n)}</span>${tag(`sticker:${k}`)}</button>`).join('')}</div>`
       + `<h4>${t('Texte (autocollant « Texte personnalisé »)')}</h4><input type="text" id="hg-st-text" maxlength="12" value="${hg.stickerText || ''}" placeholder="JP AIRLINES">`
       + colorRow('stickerColor', t('Couleur des prochains autocollants'), hg.stickerColor)
       + `<h4>${t('Taille et symétrie des prochains')}</h4><div class="hg-row"><input type="range" id="hg-st-size" min="0.15" max="3" step="0.05" value="${hg.stickerSize || 0.6}"><label><input type="checkbox" id="hg-st-mirror" ${hg.stickerMirror ? 'checked' : ''}> ${t('Des deux côtés')}</label></div>`
@@ -1259,11 +1354,26 @@ function renderHangarUI() {
       + `<h4>${t('Nez')}</h4><div class="hg-chips"><button id="hg-teeth" class="${view.sharkTeeth ? 'on' : ''}">${t('🦈 Dents de requin')}${tag('teeth')}</button></div>`;
   } else if (hg.tab === 'deco') {
     html += `<h4>${t('Immatriculation (7 caractères max)')} ${tag('reg')}</h4><input type="text" id="hg-reg" maxlength="7" placeholder="F-JP${def.id.slice(0, 2).toUpperCase()}" value="${view.reg}">`
+      + colorRow('regColor', `${t('Couleur de l\'immatriculation')} ${tag('regColor')}`, view.regColor || '#16181c')
       + chips('emblem', EMBLEMS, t('Emblème sur la dérive')) + colorRow('emblemColor', t('Couleur de l\'emblème'), L.emblemColor)
       + (view.emblem === 'numero' ? `<h4>${t('Numéro de course')}</h4><input type="number" id="hg-num" min="0" max="99" value="${view.number}">` : '');
+  } else if (hg.tab === 'caisses') {
+    const owned = save.owned || [];
+    const got = CRATE_ITEMS.filter((k) => owned.includes(k)).length;
+    html += `<p class="sub">${t('Les nouveautés du hangar ne s\'achètent pas : ouvre une caisse pour gagner un élément au hasard. Un doublon te rembourse une partie de la caisse.')}</p>`
+      + `<p class="sub"><b>${t('Collection : {n} / {total}', { n: got, total: CRATE_ITEMS.length })}</b></p>`
+      + CRATES.map((c) => `<div class="crate-card crate-${c.id}"><div class="crate-box">🎁</div><div class="crate-info"><b>${t(c.name)}</b>`
+        + `<div class="crate-odds">${RARITIES.filter(([r]) => c.odds[r]).map(([r, n]) => `<span class="r-${r}">${t(n)} ${(c.odds[r] * 100).toLocaleString(LANG, { maximumFractionDigits: 1 })} %</span>`).join('')}</div></div>`
+        + `<button data-crate="${c.id}" ${save.money >= c.price ? '' : 'disabled'}>${t('Ouvrir')} · ${PRICE_LABEL(c.price)}</button></div>`).join('');
+  } else if (hg.tab === 'pilote') {
+    html += `<p class="sub">${t('La tenue du pilote qui rejoint l\'avion dans la cinématique de début de partie.')}</p>`
+      + chips('suit', SUITS, t('Tenue du pilote'));
   } else {
     html += isOwned('smoke')
-      ? colorRow('smoke', t('Couleur du fumigène'), L.smoke) + `<p class="sub">${t('En vol, appuie sur {key} pour allumer ou couper le fumigène et dessiner dans le ciel.', { key: kbd('smoke') })}</p>`
+      ? chips('smokeMode', SMOKE_MODES, t('Effet du fumigène'))
+        + colorRow('smoke', t('Couleur du fumigène'), L.smoke)
+        + (view.smokeMode === 'bicolore' ? colorRow('smoke2', t('Deuxième couleur'), L.smoke2) : '')
+        + `<p class="sub">${t('En vol, appuie sur {key} pour allumer ou couper le fumigène et dessiner dans le ciel.', { key: kbd('smoke') })}</p>`
       : `<h4>${t('Fumigène de voltige')}</h4><p class="sub">${t('Dessine dans le ciel avec une traînée de fumée colorée (touche {key} en vol).', { key: kbd('smoke') })}</p>
          <div class="hg-chips"><button id="hg-smoke">${t('💨 Installer le fumigène')}${tag('smoke')}</button></div>`;
   }
@@ -1298,6 +1408,7 @@ function renderHangarUI() {
     inp.onchange = () => renderHangarUI();
   }
   for (const row of body.querySelectorAll('[data-chip]')) for (const b of row.querySelectorAll('button')) b.onclick = () => choose({ [row.dataset.chip]: b.dataset.v }, b.dataset.n);
+  for (const b of body.querySelectorAll('[data-crate]')) b.onclick = () => openCrate(CRATES.find((c) => c.id === b.dataset.crate));
   if ($('hg-teeth')) $('hg-teeth').onclick = () => choose({ sharkTeeth: !view.sharkTeeth }, t('Dents de requin'));
   if ($('hg-reg')) $('hg-reg').onchange = () => choose({ reg: $('hg-reg').value }, t('Immatriculation personnalisée'));
   if ($('hg-num')) $('hg-num').onchange = () => choose({ number: Math.round(Number($('hg-num').value)) || 0 }, t('Numéro de course'));
@@ -1309,7 +1420,7 @@ function renderHangarUI() {
   for (const b of body.querySelectorAll('[data-st]')) {
     b.onclick = () => {
       const k = b.dataset.st;
-      if (!isOwned(`sticker:${k}`)) { hg.pending = { patch: {}, keys: [`sticker:${k}`], label: t(STICKERS.find(([x]) => x === k)[1]), price: priceOf(`sticker:${k}`) }; hg.placing = null; }
+      if (!isOwned(`sticker:${k}`)) { hg.pending = { patch: {}, keys: [`sticker:${k}`], label: t(STICKERS.find(([x]) => x === k)[1]), price: priceOf(`sticker:${k}`), crate: isCrateOnly(`sticker:${k}`) }; hg.placing = null; }
       else hg.placing = hg.placing === k ? null : k;
       renderHangarUI();
     };
@@ -1565,11 +1676,14 @@ function frame(now) {
     // fumigène des autres pilotes, dans la couleur de leur peinture
     if (r.smoke && realDt > 0) {
       r.smokeAcc = (r.smokeAcc || 0) + realDt * 45;
-      const col = (r.smokeCol ||= new THREE.Color(net.liveries.get(r.id)?.smoke || '#ffffff'));
+      const lv = net.liveries.get(r.id);
+      r.smokeLv ||= lv ? cleanLivery(lv) : null; // remis à zéro quand le joueur change de peinture (removeRemote)
+      const col = (r.smokeCol ||= new THREE.Color());
+      col.set(r.smokeLv ? smokeColorAt(r.smokeLv, wallT) : '#ffffff'); // mêmes effets (alternance, arc-en-ciel) que chez son pilote
       while (r.smokeAcc > 1) {
         r.smokeAcc--;
         const at = r.mesh.localToWorld(r.mesh.userData.exhaust.clone());
-        gfx.effects.smoke.emit(at, new THREE.Vector3((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), { life: 9, size: 1.1, grow: 5, color: col, alpha: 0.75, drag: 1.2, rise: 0.15 });
+        gfx.effects.smoke.emit(at, new THREE.Vector3((Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 0.6), { life: 9, size: 1.1, grow: 5, color: col.clone(), alpha: 0.75, drag: 1.2, rise: 0.15 });
       }
     }
   }
@@ -1731,7 +1845,7 @@ $('start').onclick = () => {
     $('hud').classList.add('cine-hide');
     planeMesh.position.copy(plane.pos);
     planeMesh.quaternion.copy(plane.quat);
-    intro.start(plane, planeMesh, () => { $('hud').classList.remove('cine-hide'); welcome(); });
+    intro.start(plane, planeMesh, () => { $('hud').classList.remove('cine-hide'); welcome(); }, liveryOf(plane.type).suit);
   }, 0));
 };
 const intro = new Intro({ scene, camera, rig, ground: (x, z) => Math.max(0, groundHeight(x, z)) });
