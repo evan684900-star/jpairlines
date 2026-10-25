@@ -97,6 +97,25 @@ export class SoundEngine {
       this.engCfg = '';
     }).catch(() => { /* garde le moteur de secours */ });
 
+    // ----- vraie hélice enregistrée (sounds/helice.wav, CC-BY 3.0, voir sounds/CREDITS.txt) -----
+    // mélangée au moteur synthétisé : la boucle est jouée plus ou moins vite pour suivre le régime
+    // (enregistrée vers 85 Hz d'allumage) ; un bimoteur a deux sources légèrement désaccordées
+    this.propRec = null;
+    fetch('sounds/helice.wav').then((r) => r.arrayBuffer()).then((b) => ctx.decodeAudioData(b)).then((buf) => {
+      this.propRecFilter = ctx.createBiquadFilter();
+      this.propRecFilter.type = 'lowpass'; this.propRecFilter.frequency.value = 5000; this.propRecFilter.Q.value = 0.5;
+      this.propRecFilter.connect(this.bus.engine);
+      this.propRec = [0, 1].map((i) => {
+        const src = ctx.createBufferSource();
+        src.buffer = buf; src.loop = true;
+        const g = ctx.createGain(); g.gain.value = 0;
+        const pan = ctx.createStereoPanner(); pan.pan.value = 0;
+        src.connect(g).connect(pan).connect(this.propRecFilter);
+        src.start(0, (i * 0.37 + Math.random()) % 1 * buf.duration);
+        return { src, g, pan };
+      });
+    }).catch(() => { /* garde le moteur synthétisé seul */ });
+
     // ----- démarreur -----
     this.starter = ctx.createOscillator();
     this.starter.type = 'sawtooth';
@@ -198,6 +217,18 @@ export class SoundEngine {
       const lv = jet ? (running || s.rpm > 0.05 ? 0.5 + s.rpm * 0.9 : 0) : (running ? 0.9 + s.throttle * 0.5 : s.rpm * 0.6);
       set(P.get('level'), on ? lv * (snd.loud ?? 1) * atten * 0.55 : 0, 0.06);
       set(this.engMuffle.frequency, inside ? 1500 + s.throttle * 900 : Math.max(900, 7000 / (1 + Math.max(0, dist - 20) / 60)), 0.1);
+    }
+    if (this.propRec) {
+      const twin = snd.kind === 'twin';
+      const rate = Math.min(1.8, Math.max(0.4, rpmHz / 85)); // pas trop ralentie au ralenti (le son deviendrait boueux)
+      // niveau : suit le moteur (moteur arrêté : l'hélice qui tourne encore « en moulinet » s'entend à peine)
+      const rl = !jet && on ? (running ? 0.3 + s.throttle * 0.35 : s.rpm * 0.15) * (snd.loud ?? 1) * atten * (twin ? 0.7 : 1) : 0;
+      this.propRec.forEach((r, i) => {
+        set(r.src.playbackRate, rate * (i ? 1.013 : 1), 0.06);
+        set(r.g.gain, i && !twin ? 0 : rl, 0.08);
+        set(r.pan.pan, twin ? (i ? 0.45 : -0.45) : 0, 0.2);
+      });
+      set(this.propRecFilter.frequency, inside ? 1400 + s.throttle * 800 : Math.max(800, 6000 / (1 + Math.max(0, dist - 20) / 60)), 0.1);
     }
     for (const { o, mul } of this.engOsc) set(o.frequency, rpmHz * mul, 0.05);
     for (const { o, mul } of this.engOsc2) set(o.frequency, rpmHz * mul * 1.018, 0.05);

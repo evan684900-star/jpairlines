@@ -1,0 +1,3 @@
+helice.wav : « Airplane Prop Loop », son d’hélice de jakobthiesen, mis en boucle par AntumDeluge
+https://opengameart.org/content/airplane-prop-loop — licence CC-BY 3.0 (https://creativecommons.org/licenses/by/3.0/)
+Modifications : mono 22 kHz, fondu enchaîné pour une boucle sans coupure.

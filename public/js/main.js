@@ -1909,4 +1909,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, mapView, drawBigMap, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };

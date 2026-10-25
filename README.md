@@ -257,6 +257,11 @@ d'un aéroport ne forment qu'un seul objet, affiché seulement à moins de 6 km 
 Textures photo (ambientCG, licence CC0, `public/textures/`, réduites en 512 px) : béton des parkings, grain du
 bitume des pistes (relief et brillance sous les marquages) et tôle ondulée des hangars.
 
+Son : en plus du moteur synthétisé, une vraie hélice enregistrée (« Airplane Prop Loop » de jakobthiesen, mis en
+boucle par AntumDeluge, licence CC-BY 3.0, https://opengameart.org/content/airplane-prop-loop, voir
+`public/sounds/CREDITS.txt`) est jouée plus ou moins vite pour suivre le régime de chaque avion à hélice (deux
+sources désaccordées, gauche et droite, pour le bimoteur).
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les
