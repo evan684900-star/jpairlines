@@ -254,6 +254,9 @@ camionnette, caisses, voitures sur le parking de la tour, et pour les grands aé
 tracteurs près des avions de ligne. Un véhicule de service fait le tour du parking. Tous les véhicules immobiles
 d'un aéroport ne forment qu'un seul objet, affiché seulement à moins de 6 km (`airportLife.js`).
 
+Textures photo (ambientCG, licence CC0, `public/textures/`, réduites en 512 px) : béton des parkings, grain du
+bitume des pistes (relief et brillance sous les marquages) et tôle ondulée des hangars.
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les

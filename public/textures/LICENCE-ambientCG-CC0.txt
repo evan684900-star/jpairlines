@@ -1,0 +1,5 @@
+Textures ambientCG (https://ambientcg.com), licence CC0 1.0 (domaine public) :
+- bitume-* : Asphalt031
+- beton-* : Concrete034
+- tole-* : CorrugatedSteel005
+Réduites en 512 px.

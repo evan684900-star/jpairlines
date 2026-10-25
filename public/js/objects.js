@@ -50,6 +50,33 @@ export function updateLabels(cam) {
 }
 
 // ---------- Aéroports ----------
+// textures photo (ambientCG, licence CC0, public/textures/) : béton des parkings, grain du bitume des pistes, tôle des
+// hangars. Chargées une seule fois et répétées : chaque géométrie met ses coordonnées de texture à l'échelle (1 motif
+// tous les quelques mètres), ce qui permet de partager la même texture partout.
+const PHOTO = new Map();
+// channel 1 : texture lue sur le second jeu de coordonnées (chargée à part : une copie d'une texture pas encore
+// chargée ne serait jamais envoyée à la carte graphique)
+function photo(name, channel = 0) {
+  const key = `${name}#${channel}`;
+  if (!PHOTO.has(key)) {
+    const t = new THREE.TextureLoader().load(`textures/${name}.jpg`);
+    t.channel = channel;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    if (name.endsWith('couleur')) t.colorSpace = THREE.SRGBColorSpace;
+    PHOTO.set(key, t);
+  }
+  return PHOTO.get(key);
+}
+const photoMaps = (kind) => ({ map: photo(`${kind}-couleur`), normalMap: photo(`${kind}-normal`), roughnessMap: photo(`${kind}-rugosite`) });
+// coordonnées de texture multipliées (sx, sy motifs sur la face), dans uv ou dans un second jeu (uv1)
+function tileUV(geo, sx, sy, attr = 'uv') {
+  const uv = geo.attributes.uv.clone();
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * sx, uv.getY(i) * sy);
+  geo.setAttribute(attr, uv);
+  return geo;
+}
+
 function runwayTexture(a) {
   const W = 128, H = 2048;
   const cv = document.createElement('canvas');
@@ -169,36 +196,58 @@ function bakeStatic(g, keep = new Set()) {
   for (const x of drop) x.parent?.remove(x);
 }
 
+// matériaux communs à tous les aéroports (créés au premier aéroport : les textures se chargent en arrière-plan)
+let APRON_MAT, HANGAR_MAT, ROOF_MAT, RW_NORMAL, RW_ROUGH;
+function airportMaterials() {
+  if (APRON_MAT) return;
+  APRON_MAT = lambert(0x8e8c88, { ...photoMaps('beton'), roughness: 1, normalScale: new THREE.Vector2(0.45, 0.45), polygonOffset: true, polygonOffsetFactor: -2 });
+  HANGAR_MAT = lambert(0xd2d8de, { ...photoMaps('tole'), metalness: 0.5, roughness: 0.9 });
+  ROOF_MAT = lambert(0x9aa3ac, { ...photoMaps('tole'), metalness: 0.55, roughness: 0.85 });
+  // grain de bitume des pistes : textures à part, lues sur le second jeu de coordonnées (uv1)
+  RW_NORMAL = photo('bitume-normal', 1);
+  RW_ROUGH = photo('bitume-rugosite', 1);
+}
+
 function buildAirport(scene, a, r, anim) {
+  airportMaterials();
   const g = new THREE.Group();
   g.position.set(a.x, a.elev, a.z);
   g.rotation.y = a.heading; // axe local X = travers (u), axe local Z = piste (v)
   const grass = a.surface === 'grass';
   const rwMat = lambert(0xffffff, { map: runwayTexture(a), roughness: grass ? 0.95 : 0.85, polygonOffset: true, polygonOffsetFactor: -4 });
-  const rw = new THREE.Mesh(new THREE.PlaneGeometry(a.width, a.length).rotateX(-Math.PI / 2), rwMat);
+  const rwGeo = new THREE.PlaneGeometry(a.width, a.length).rotateX(-Math.PI / 2);
+  if (!grass) {
+    // grain du bitume (relief et brillance) par-dessus les marquages : second jeu de coordonnées, un motif tous les 6 m
+    tileUV(rwGeo, a.width / 6, a.length / 6, 'uv1');
+    rwMat.normalMap = RW_NORMAL;
+    rwMat.roughnessMap = RW_ROUGH;
+    rwMat.normalScale.set(0.7, 0.7);
+  }
+  const rw = new THREE.Mesh(rwGeo, rwMat);
   rw.position.y = 0.2;
   g.add(rw);
 
   // parking / taxiway
-  const apronMat = lambert(grass ? 0x6d7f4a : 0x6c6e70, { roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+  const apronMat = grass ? lambert(0x6d7f4a, { roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 }) : APRON_MAT;
   const apronLen = Math.min(a.length * 0.6, 900);
-  const apron = new THREE.Mesh(new THREE.PlaneGeometry(110, apronLen).rotateX(-Math.PI / 2), apronMat);
+  const apronGeo = (w, l) => tileUV(new THREE.PlaneGeometry(w, l).rotateX(-Math.PI / 2), w / 10, l / 10); // béton : 1 motif tous les 10 m
+  const apron = new THREE.Mesh(apronGeo(110, apronLen), apronMat);
   apron.position.set(a.width / 2 + 70, 0.15, 0);
   g.add(apron);
   for (const v of [-apronLen / 2 + 30, apronLen / 2 - 30]) {
-    const tw = new THREE.Mesh(new THREE.PlaneGeometry(30, 20).rotateX(-Math.PI / 2), apronMat);
+    const tw = new THREE.Mesh(apronGeo(30, 20), apronMat);
     tw.position.set(a.width / 2 + 10, 0.16, v);
     g.add(tw);
   }
 
   const bx = a.width / 2 + 160;
-  const hangarMat = lambert(0xa7afb6, { metalness: 0.55, roughness: 0.45 }), roofMat = lambert(0x7d8790, { metalness: 0.6, roughness: 0.4 });
+  const hangarMat = HANGAR_MAT, roofMat = ROOF_MAT;
   const white = lambert(0xe6e6e2, { roughness: 0.6 }), glass = lambert(0x24323f, { metalness: 0.7, roughness: 0.08 });
   const nH = a.type === 'international' ? 4 : a.type === 'regional' ? 3 : 1;
   for (let i = 0; i < nH; i++) {
-    const h = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 34), hangarMat);
+    const h = new THREE.Mesh(tileUV(new THREE.BoxGeometry(40, 14, 34), 8, 3), hangarMat);
     h.position.set(bx, 7, -apronLen / 2 + 60 + i * 55);
-    const rf = new THREE.Mesh(new THREE.CylinderGeometry(17, 17, 40, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), roofMat);
+    const rf = new THREE.Mesh(tileUV(new THREE.CylinderGeometry(17, 17, 40, 12, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2), 6, 8), roofMat);
     rf.scale.set(1, 0.35, 1);
     rf.position.set(bx, 14, -apronLen / 2 + 60 + i * 55);
     g.add(h, rf);
