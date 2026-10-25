@@ -246,6 +246,14 @@ monde…) et de grands voyages : pôle Nord, Grand Sud, du Grand Nord à l'Orien
 
 La température de l'air (selon le climat, l'altitude et la nuit) est affichée dans la pastille météo.
 
+### Vie au sol des aéroports
+
+Chaque aéroport a ses véhicules (modèles 3D « Car Kit » de Kenney, licence CC0, dans `public/models/vehicules/`) :
+camion-citerne près de la pompe, camion de pompiers et ambulance, tracteur de piste et plots près des avions garés,
+camionnette, caisses, voitures sur le parking de la tour, et pour les grands aéroports des camions de service et des
+tracteurs près des avions de ligne. Un véhicule de service fait le tour du parking. Tous les véhicules immobiles
+d'un aéroport ne forment qu'un seul objet, affiché seulement à moins de 6 km (`airportLife.js`).
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les

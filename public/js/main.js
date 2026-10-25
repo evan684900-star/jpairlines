@@ -26,6 +26,7 @@ import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
 import { Intro } from './intro.js';
 import { WindshieldRain } from './render/windshield.js';
+import { AirportLife } from './airportLife.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL, SMOKE_MODES, SUITS, smokeColorAt, RARITIES, rarityOf, rarityRank, isCrateOnly, CRATES, rollCrate, DUPLICATE_REFUND, CRATE_ITEMS } from './livery.js';
 import { stickerThumb } from './stickers.js';
@@ -62,6 +63,7 @@ const wsRain = new WindshieldRain(renderer); // pluie et essuie-glaces sur le pa
 gfx.attachTerrain(terrain);
 const decor = new Decor(scene);
 let world = null;
+let airportLife = null; // véhicules au sol des aéroports (chargés en arrière-plan)
 
 function applySettings(key) {
   gfx.applySettings(settings, key);
@@ -1704,6 +1706,7 @@ function frame(now) {
   labelTimer -= realDt;
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
+  airportLife?.update(realDt, camera.position);
   gfx.update(realDt, wallT, settings, started ? plane.pos : camera.position);
   if (started) handleFxEvents(gfx.updateEffects(paused ? 0 : realDt, plane, planeMesh));
 
@@ -1832,6 +1835,8 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   status(t('Aéroports, villes et monuments…'), 45);
   await tick();
   world = buildWorldObjects(scene);
+  const life = new AirportLife(scene, AIRPORTS);
+  life.load().then(() => { airportLife = life; }).catch((e) => console.warn('Véhicules des aéroports indisponibles', e));
   status(t('Arbres, maisons et rochers…'), 55);
   await tick();
   try {
