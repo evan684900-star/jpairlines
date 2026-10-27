@@ -1908,6 +1908,7 @@ const tutorial = new Tutorial({
   plane,
   agl: () => plane.pos.y - Math.max(0, groundHeight(plane.pos.x, plane.pos.z)) - plane.S.gear,
   isPaused: () => paused || hg.active || overlayOpen(),
+  camMode: () => rig.modeName,
   onDone: () => { save.tutorialDone = true; persist(); },
 });
 // revoir le tutoriel depuis l'aide
