@@ -231,7 +231,7 @@ addEventListener('blur', () => keys.clear());
 function onAction(is) {
   if (is('map')) {
     const nowHidden = $('bigmap').classList.toggle('hidden');
-    if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); }
+    if (!nowHidden) { mapView.cx = plane.pos.x; mapView.cz = plane.pos.z; drawBigMap(); tutorial.sawMap = true; } // le jeu est figé carte ouverte : on prévient le tutoriel
   }
   if (is('journal') && quests) { quests.renderJournal(); $('journal').classList.toggle('hidden'); }
   if (is('help')) $('help').classList.toggle('hidden');

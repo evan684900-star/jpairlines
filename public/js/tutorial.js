@@ -118,7 +118,6 @@ export class Tutorial {
   }
   update(dt) {
     if (!this.active) return;
-    if (!$('bigmap')?.classList.contains('hidden')) this.sawMap = true; // la grande carte a été ouverte
     const paused = this.ctx.isPaused();
     if (paused !== this.wasPaused) { this.wasPaused = paused; this.setHidden(paused); }
     if (paused) return;
