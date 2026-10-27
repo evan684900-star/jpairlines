@@ -262,6 +262,13 @@ boucle par AntumDeluge, licence CC-BY 3.0, https://opengameart.org/content/airpl
 `public/sounds/CREDITS.txt`) est jouée plus ou moins vite pour suivre le régime de chaque avion à hélice (deux
 sources désaccordées, gauche et droite, pour le bimoteur).
 
+### Vie des villes
+
+Les immeubles des villes sont posés sur le point le plus bas de leur emprise (plus d'immeuble enfoncé dans une
+pente), un seul par îlot. Quand on s'approche d'une ville, ses rues apparaissent (asphalte qui suit le relief, autour
+des îlots) et des voitures y circulent (`cityLife.js`) : chacune fait le tour d'un pâté de maisons, sur la voie de
+droite. La ville est préparée par petits morceaux (quelques millisecondes par image) pour ne pas saccader.
+
 ### Hangar : caisses et raretés
 
 Chaque élément du hangar a une rareté : **Commun, Rare, Épique, Légendaire, Exotique** (couleur et tri dans les

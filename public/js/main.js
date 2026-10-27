@@ -27,6 +27,7 @@ import { Tutorial } from './tutorial.js';
 import { Intro } from './intro.js';
 import { WindshieldRain } from './render/windshield.js';
 import { AirportLife } from './airportLife.js';
+import { CityLife } from './cityLife.js';
 import { t, LANG, LANGS, setLang, translateDom } from './i18n.js';
 import { cleanLivery, PATTERNS, FINISHES, WINGS, EMBLEMS, SWATCHES, ZONES, STICKERS, MAX_STICKERS, cleanStickerText, priceOf, PRICE_LABEL, SMOKE_MODES, SUITS, smokeColorAt, RARITIES, rarityOf, rarityRank, isCrateOnly, CRATES, rollCrate, DUPLICATE_REFUND, CRATE_ITEMS } from './livery.js';
 import { stickerThumb } from './stickers.js';
@@ -64,6 +65,7 @@ gfx.attachTerrain(terrain);
 const decor = new Decor(scene);
 let world = null;
 let airportLife = null; // véhicules au sol des aéroports (chargés en arrière-plan)
+let cityLife = null; // voitures qui circulent dans les villes
 
 function applySettings(key) {
   gfx.applySettings(settings, key);
@@ -1707,6 +1709,7 @@ function frame(now) {
   if (labelTimer <= 0) { labelTimer = 0.5; updateLabels(camera.position); }
   world.update(realDt, wallT);
   airportLife?.update(realDt, camera.position);
+  cityLife?.update(realDt, camera.position);
   gfx.update(realDt, wallT, settings, started ? plane.pos : camera.position);
   if (started) handleFxEvents(gfx.updateEffects(paused ? 0 : realDt, plane, planeMesh));
 
@@ -1837,6 +1840,8 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
   world = buildWorldObjects(scene);
   const life = new AirportLife(scene, AIRPORTS);
   life.load().then(() => { airportLife = life; }).catch((e) => console.warn('Véhicules des aéroports indisponibles', e));
+  const traffic = new CityLife(scene);
+  traffic.load().then(() => { cityLife = traffic; }).catch((e) => console.warn('Circulation des villes indisponible', e));
   status(t('Arbres, maisons et rochers…'), 55);
   await tick();
   try {
@@ -1909,4 +1914,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, get airportLife() { return airportLife; }, get cityLife() { return cityLife; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };

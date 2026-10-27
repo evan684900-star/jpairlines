@@ -366,9 +366,10 @@ export function createCityMaterial() {
               // mur-rideau : verre teinté, meneaux tous les 1,5 m, nez de dalle à chaque étage
               float mul = step(fract(u / 1.5), 0.05) * fine;
               float slab = step(fy, 0.35) * mid;
-              vec3 glass = mix(vec3(0.05, 0.09, 0.12), vec3(0.1, 0.16, 0.2), seed) * mix(0.85, 1.15, r);
+              vec3 glass = mix(vec3(0.09, 0.13, 0.16), vec3(0.17, 0.23, 0.28), seed) * mix(0.85, 1.15, r);
               base = mix(glass, vec3(0.42, 0.44, 0.46), max(mul, slab));
-              jpGlass = 1.0 - max(mul, slab); jpRough = mix(0.35, 0.05, jpGlass); jpMetal = 0.5 * jpGlass;
+              // reflet modéré : un verre trop métallique renvoyait le bas du ciel (sombre) et noircissait le bas des tours
+              jpGlass = 1.0 - max(mul, slab); jpRough = mix(0.35, 0.14, jpGlass); jpMetal = 0.22 * jpGlass;
             } else if (style < 1.5) {
               // béton, bandeaux de fenêtres horizontaux
               float band = step(1.0, fy) * step(fy, 2.7);

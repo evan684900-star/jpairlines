@@ -2,44 +2,11 @@
 // models/vehicules/). Tous les véhicules immobiles d'un aéroport sont fusionnés en un seul objet (une seule texture
 // commune), affiché seulement quand on est assez près ; un véhicule de service fait le tour du parking.
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { groundHeight } from './world.js';
+import { loadVehicles } from './vehicles.js';
 
-// longueur réelle de chaque véhicule (m) : le modèle est mis à cette échelle
-const MODELS = {
-  firetruck: 9, truck: 8, van: 5.2, delivery: 6.5, tractor: 3.6, sedan: 4.6, suv: 4.8, taxi: 4.6, ambulance: 6.4, cone: 0.7, box: 1.1,
-};
 const SHOW_DIST = 6000; // m : au-delà, les véhicules sont cachés (trop petits pour être vus)
-
-async function loadModels(base) {
-  const loader = new GLTFLoader();
-  const out = {};
-  let material = null;
-  await Promise.all(Object.entries(MODELS).map(async ([name, len]) => {
-    const gltf = await loader.loadAsync(`${base}${name}.glb`);
-    gltf.scene.updateMatrixWorld(true);
-    const parts = [];
-    gltf.scene.traverse((o) => {
-      if (!o.isMesh) return;
-      material ??= o.material;
-      const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
-      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
-      parts.push(g.index ? g.toNonIndexed() : g);
-    });
-    const geo = mergeGeometries(parts);
-    geo.computeBoundingBox();
-    const b = geo.boundingBox, size = b.getSize(new THREE.Vector3());
-    // posé au sol, centré, mis à l'échelle de sa longueur réelle (le plus grand côté horizontal)
-    const s = len / Math.max(size.x, size.z);
-    geo.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2).scale(s, s, s);
-    // le modèle regarde vers +z : on garde ce sens (yaw 0 = vers +z local de l'aéroport)
-    if (size.x > size.z) geo.rotateY(Math.PI / 2);
-    out[name] = geo;
-  }));
-  const mat = new THREE.MeshStandardMaterial({ map: material.map, roughness: 0.55, metalness: 0.1 });
-  return { geo: out, mat };
-}
 
 // positions dans le repère de l'aéroport (u = travers côté hangars, v = le long de la piste), yaw en radians
 function layout(a) {
@@ -67,8 +34,8 @@ export class AirportLife {
     this.airports = airports;
     this.sites = [];
   }
-  async load(base = 'models/vehicules/') {
-    const { geo, mat } = await loadModels(base);
+  async load() {
+    const { geo, mat } = await loadVehicles();
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
     const Y = new THREE.Vector3(0, 1, 0);
     const lotMat = new THREE.MeshStandardMaterial({ color: 0x5f6164, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });

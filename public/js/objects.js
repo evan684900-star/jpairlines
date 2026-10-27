@@ -329,6 +329,8 @@ function buildAirport(scene, a, r, anim) {
 }
 
 // ---------- Villes ----------
+// plan des rues de chaque ville (îlots occupés), pour les voitures qui y circulent (cityLife.js)
+export const CITY_GRIDS = [];
 function buildCities(scene) {
   const total = CITIES.reduce((s, c) => s + c.n, 0);
   const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
@@ -352,24 +354,40 @@ function buildCities(scene) {
   for (const c of CITIES) {
     const grid = 60;
     const angle = r() * Math.PI;
+    const cells = new Set(); // une seule construction par îlot (avant : deux tirages au même endroit se chevauchaient)
+    CITY_GRIDS.push({ c, angle, grid, cells });
+    const toWorld = (u, v) => [c.x + u * Math.cos(angle) - v * Math.sin(angle), c.z + u * Math.sin(angle) + v * Math.cos(angle)];
     for (let i = 0; i < c.n * 3 && n < total; i++) {
-      // rues en damier
+      // rues en damier : les îlots sont centrés sur les nœuds de la grille, les rues passent entre eux
       const gx = Math.round(((r() - 0.5) * 2 * c.radius) / grid) * grid, gz = Math.round(((r() - 0.5) * 2 * c.radius) / grid) * grid;
-      const x = c.x + gx * Math.cos(angle) - gz * Math.sin(angle);
-      const z = c.z + gx * Math.sin(angle) + gz * Math.cos(angle);
+      const [x, z] = toWorld(gx, gz);
       const d = Math.hypot(gx, gz) / c.radius;
       if (d > 1 || r() > 1.1 - d) continue;
       const h = terrainHeight(x, z);
       if (h < 3) continue;
+      const key = `${gx},${gz}`;
+      if (cells.has(key)) continue;
       const tall = 8 + r() * c.tall * Math.pow(Math.max(0.05, 1 - d), 2) * (r() < 0.08 ? 2.2 : 1);
-      const w = 20 + r() * 25, dpt = 20 + r() * 25, gy = groundHeight(x, z) - 3;
-      m.compose(p.set(x, gy, z), q.setFromAxisAngle(up, -angle), s.set(w, tall + 3, dpt));
+      const w = 20 + r() * 25, dpt = 20 + r() * 25;
+      // posé sur le point le plus bas de son emprise (plus d'immeuble enfoncé côté amont) ; sur une pente trop forte,
+      // pas d'immeuble
+      let lo = Infinity, hi = -Infinity;
+      for (const [a2, b2] of [[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5], [0, -0.5], [0, 0.5], [-0.5, 0], [0.5, 0]]) {
+        const [cx, cz] = toWorld(gx + a2 * w, gz + b2 * dpt);
+        const gh = groundHeight(cx, cz);
+        lo = Math.min(lo, gh); hi = Math.max(hi, gh);
+      }
+      if (hi - lo > 14) continue;
+      cells.add(key);
+      const gy = lo - 0.6, extra = hi - lo; // la hauteur visible côté amont reste celle voulue
+      m.compose(p.set(x, gy, z), q.setFromAxisAngle(up, -angle), s.set(w, tall + 0.6 + extra, dpt));
       mesh.setMatrixAt(n, m);
-      parapets.setMatrixAt(n, pm.compose(pp.set(x, gy + tall + 3, z), q, ps.set(w, 1.1, dpt)));
+      const top = gy + tall + 0.6 + extra;
+      parapets.setMatrixAt(n, pm.compose(pp.set(x, top, z), q, ps.set(w, 1.1, dpt)));
       for (let k = 0, na = 1 + Math.floor(r() * 3); k < na && nAc < total * 3; k++) {
         const ox = (r() - 0.5) * w * 0.6, oz = (r() - 0.5) * dpt * 0.6;
         const ax = x + ox * Math.cos(angle) + oz * Math.sin(angle), az = z - ox * Math.sin(angle) + oz * Math.cos(angle);
-        acs.setMatrixAt(nAc++, pm.compose(pp.set(ax, gy + tall + 3, az), q, ps.set(2 + r() * 3, 1.2 + r() * 1.5, 1.5 + r() * 2)));
+        acs.setMatrixAt(nAc++, pm.compose(pp.set(ax, top, az), q, ps.set(2 + r() * 3, 1.2 + r() * 1.5, 1.5 + r() * 2)));
       }
       mesh.setColorAt(n, col.setHex(palette[Math.floor(r() * palette.length)]));
       n++;
