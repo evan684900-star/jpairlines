@@ -802,7 +802,8 @@ const mp = new Net({
     if (!cls) beep(990, 0.05, 0.06);
   },
   status: (on) => {
-    if (on) return;
+    if (on) { net.wasOn = true; return; }
+    if (!net.wasOn) return; // pas encore connecté : on garde « Solo » (pas « hors ligne ») pendant la connexion
     for (const id of [...remotes.keys()]) removeRemote(id);
     net.known = null; net.placed = false;
     $('online').textContent = t('Solo (hors ligne)');
@@ -1903,4 +1904,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, get airportLife() { return airportLife; }, get cityLife() { return cityLife; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, get airportLife() { return airportLife; }, get mp() { return mp; }, get cityLife() { return cityLife; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };

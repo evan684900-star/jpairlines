@@ -13,42 +13,32 @@ npm start          # http://localhost:3000
 
 ## Héberger
 
-### Option 1 — tout sur ton serveur (le plus simple)
-`npm install && npm start` sur le VPS. Le serveur sert le jeu **et** le multijoueur. 1 CPU / 4 Go suffit largement : il ne fait que relayer les positions (10 fois/s), toute la 3D tourne chez les joueurs.
+Le jeu est un site statique (dossier `public`), hébergé sur **Vercel** : `vercel.json` est déjà configuré
+(build = copie de three.js, dossier publié = `public`). Tout ce qui est en ligne passe par **Firebase** (gratuit, offre
+Spark), y compris depuis les réseaux qui bloquent les serveurs inconnus (écoles) : les adresses de Google passent
+presque partout. Aucun serveur à faire tourner.
 
-### Option 2 — jeu sur Vercel + multijoueur sur ton serveur
-Vercel héberge très bien les fichiers du jeu, mais **ne peut pas garder un serveur WebSocket ouvert** (fonctions serverless). Il faut donc :
+### Firebase (comptes, sauvegardes, classements, multijoueur, chat, statistiques)
 
-1. Importer le dépôt dans Vercel : `vercel.json` est déjà configuré (build = copie de three.js, dossier publié = `public`).
-2. Lancer `npm start` sur ton VPS (derrière un nom de domaine en **HTTPS**, par ex. avec Caddy, car une page Vercel en `https` ne peut se connecter qu'en `wss://`).
-3. Mettre l'adresse dans `public/js/config.js` :
-   ```js
-   export const MULTIPLAYER_URL = 'wss://jeu.mondomaine.fr/ws';
-   ```
+- Projet `jp-airlines-5fef4`, configuration dans `public/js/config.js` (ces clés ne sont pas secrètes). Le SDK est chargé
+  à la demande depuis `gstatic.com` (`public/js/firebase.js`) ; si Firebase est injoignable, le jeu reste jouable en solo.
+- **Authentication** : fournisseurs *E-mail/Mot de passe*, *Google* et *Anonyme* activés ; `jpairlines.vercel.app`
+  dans les domaines autorisés. Un joueur sans compte est un invité anonyme (multijoueur et chat).
+- **Realtime Database** (Belgique) : `users/<uid>` (nom + sauvegarde), `times/<quête>/<uid>` (classements),
+  `players/<uid>` (position, 5 fois par seconde, effacée à la déconnexion), `liveries/<uid>`, `chat/`, `stats/`.
+  Les règles de sécurité sont dans **`database.rules.json`** : à recoller dans la console (Realtime Database → Règles →
+  Publier) après chaque modification. Elles limitent chaque joueur à ses propres données, n'acceptent qu'un temps
+  meilleur au classement, imposent 1,5 s entre deux messages de chat et 140 caractères au plus.
+- Le chat est filtré dans le jeu (`public/js/chatFilter.js`) à l'envoi **et** à l'affichage. Les messages de plus d'un
+  jour sont effacés.
+- La page `stats.html` lit les compteurs du jour (connexions, quêtes réussies, messages) et les joueurs en ligne.
+- Quota gratuit de la Realtime Database : 10 Go transférés par mois, 100 connexions simultanées.
+- Pas encore de réinitialisation du mot de passe par e-mail (Firebase sait le faire : à ajouter).
 
-Sans serveur multijoueur, le jeu fonctionne quand même en solo.
+### Ancien serveur Node (facultatif)
 
-### Comptes joueurs (e-mail + mot de passe, ou Google)
-
-Le menu propose un compte **facultatif** : on peut toujours jouer sans. Connecté, la progression (argent, quêtes,
-aéroports, avions débloqués) est sauvegardée sur le serveur et retrouvée sur n'importe quel appareil ; à la connexion,
-elle est fusionnée avec celle du navigateur (aucune quête réussie n'est perdue).
-
-- Les comptes sont gérés par le serveur Node (`accounts.js`), dans `data/accounts.json` (non versionné, à sauvegarder).
-  Mots de passe hachés avec scrypt, jetons de session aléatoires (60 jours), tentatives limitées par adresse IP.
-- L'API est sur le même serveur que le multijoueur (`https://…/api/…`). Si un proxy (Caddy, Nginx) est devant Node,
-  il doit transmettre `/api/` en plus de `/ws` (le plus simple : tout transmettre, `reverse_proxy localhost:3000`).
-- **Connexion Google** : créer un « ID client OAuth » de type *Application Web* dans la
-  [console Google Cloud](https://console.cloud.google.com/apis/credentials), ajouter l'adresse du jeu
-  (ex. `https://jpairlines.vercel.app`, et `http://localhost:3000` pour les tests) dans « Origines JavaScript autorisées »,
-  ajouter l'adresse `https://ton-serveur/api/google-redirect` dans « URI de redirection autorisés »
-  (la connexion se fait par redirection, sans fenêtre surgissante bloquée par les navigateurs),
-  puis lancer le serveur avec `GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com npm start`
-  (et `GAME_URL=https://ton-jeu/` si le jeu n'est pas sur https://jpairlines.vercel.app). Le bouton Google apparaît
-  alors tout seul dans le menu ; sans cette variable, seule la connexion par e-mail est proposée.
-- Variables facultatives : `DATA_DIR` (dossier des comptes), `ALLOWED_ORIGINS` (liste d'adresses autorisées à appeler l'API,
-  séparées par des virgules ; vide = toutes, sans risque car l'API n'utilise pas de cookies).
-- Pas encore de réinitialisation du mot de passe par e-mail (il faudrait un service d'envoi de mails).
+`server.js` / `accounts.js` (multijoueur WebSocket et comptes sur un VPS) restent dans le dépôt mais ne sont plus
+utilisés par le jeu.
 
 ## Commandes
 
