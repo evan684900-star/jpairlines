@@ -207,4 +207,7 @@ export default {
   "🛬 Pour atterrir : aligne-toi sur une piste, réduis les gaz ({down}), sors les volets, descends doucement et freine au sol ({brake}). En cas de souci, {respawn} te ramène au dernier aéroport.": "🛬 To land: line up with a runway, cut the throttle ({down}), lower the flaps, descend gently and brake on the ground ({brake}). If something goes wrong, {respawn} takes you back to the last airport.",
   "💰 Pose-toi près d'une balise jaune et appuie sur {board} pour choisir une mission. Les quêtes rapportent des ₣ et débloquent des avions ; dépense-les au hangar (peintures, tenues, caisses). {journal} ouvre ton journal.": "💰 Land near a yellow beacon and press {board} to pick a mission. Quests earn ₣ and unlock planes; spend them in the hangar (paint, outfits, crates). {journal} opens your log.",
   "Ces boutons ouvrent la caméra, la carte, le journal, le chat ({chat}, pour parler aux autres pilotes), le hangar et les réglages. {help} affiche toutes les touches, {esc} met en pause. Bon vol !": "These buttons open the camera, map, log, chat ({chat}, to talk with other pilots), hangar and settings. {help} shows every key, {esc} pauses. Have a good flight!",
+  // comptes Firebase
+  "Continuer avec Google": "Continue with Google",
+  "Connexion impossible.": "Unable to sign in.",
 };

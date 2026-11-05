@@ -195,4 +195,7 @@ export default {
   "🛬 Pour atterrir : aligne-toi sur une piste, réduis les gaz ({down}), sors les volets, descends doucement et freine au sol ({brake}). En cas de souci, {respawn} te ramène au dernier aéroport.": "🛬 Para aterrizar: alinéate con una pista, reduce gas ({down}), baja los flaps, desciende suavemente y frena en el suelo ({brake}). Si algo sale mal, {respawn} te lleva al último aeropuerto.",
   "💰 Pose-toi près d'une balise jaune et appuie sur {board} pour choisir une mission. Les quêtes rapportent des ₣ et débloquent des avions ; dépense-les au hangar (peintures, tenues, caisses). {journal} ouvre ton journal.": "💰 Aterriza cerca de una baliza amarilla y pulsa {board} para elegir una misión. Las misiones dan ₣ y desbloquean aviones; gástalos en el hangar (pinturas, trajes, cajas). {journal} abre tu diario.",
   "Ces boutons ouvrent la caméra, la carte, le journal, le chat ({chat}, pour parler aux autres pilotes), le hangar et les réglages. {help} affiche toutes les touches, {esc} met en pause. Bon vol !": "Estos botones abren la cámara, el mapa, el diario, el chat ({chat}, para hablar con otros pilotos), el hangar y los ajustes. {help} muestra todas las teclas y {esc} pausa. ¡Buen vuelo!",
+  // comptes Firebase
+  "Continuer avec Google": "Continuar con Google",
+  "Connexion impossible.": "No se pudo iniciar sesión.",
 };

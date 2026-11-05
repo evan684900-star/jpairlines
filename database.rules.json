@@ -1,0 +1,147 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous'",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+        },
+        "save": {
+          ".validate": "newData.hasChildren() || newData.val() === null"
+        },
+        "updated": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "times": {
+      ".read": true,
+      "$quest": {
+        "$uid": {
+          ".write": "$quest.matches(/^[a-z0-9-]{1,60}$/) && auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous' && newData.exists() && (!data.exists() || newData.child('ms').val() < data.child('ms').val())",
+          ".validate": "newData.hasChildren(['name', 'ms', 'at'])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"
+          },
+          "ms": {
+            ".validate": "newData.isNumber() && newData.val() >= 20000 && newData.val() <= 7200000"
+          },
+          "at": {
+            ".validate": "newData.val() === now"
+          },
+          "$other": {
+            ".validate": false
+          }
+        },
+        ".indexOn": [
+          "ms"
+        ]
+      }
+    },
+    "players": {
+      ".read": true,
+      ".indexOn": [
+        "t"
+      ],
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || (!newData.exists() && data.child('t').val() < now - 60000))",
+        ".validate": "newData.hasChildren(['p', 'q', 'n', 't'])",
+        "n": {
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "t": {
+          ".validate": "newData.val() === now"
+        },
+        "p": {
+          ".validate": "newData.hasChildren(['0', '1', '2'])"
+        },
+        "q": {
+          ".validate": "newData.hasChildren(['0', '1', '2', '3'])"
+        },
+        "s": {
+          ".validate": "newData.isNumber()"
+        },
+        "r": {
+          ".validate": "newData.isNumber()"
+        },
+        "g": {
+          ".validate": "newData.isNumber()"
+        },
+        "f": {
+          ".validate": "newData.isNumber()"
+        },
+        "l": {
+          ".validate": "newData.isNumber()"
+        },
+        "a": {
+          ".validate": "newData.isNumber()"
+        },
+        "k": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "liveries": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "chat": {
+      ".read": "auth != null",
+      ".indexOn": [
+        "t"
+      ],
+      "$msg": {
+        ".write": "auth != null && ((!data.exists() && newData.child('u').val() === auth.uid) || (!newData.exists() && data.child('t').val() < now - 86400000))",
+        ".validate": "newData.hasChildren(['u', 'n', 'x', 't']) && newData.parent().parent().child('lastChat').child(auth.uid).val() === now",
+        "u": {
+          ".validate": "newData.isString()"
+        },
+        "n": {
+          ".validate": "newData.isString() && newData.val().length <= 16"
+        },
+        "x": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 140"
+        },
+        "t": {
+          ".validate": "newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "lastChat": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.val() === now && (!data.exists() || now - data.val() >= 1500)"
+      }
+    },
+    "stats": {
+      ".read": true,
+      "days": {
+        "$day": {
+          "$key": {
+            ".write": "auth != null",
+            ".validate": "$day.matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) && ($key === 'visits' || $key === 'quests' || $key === 'chat') && newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1"
+          }
+        }
+      },
+      "quests": {
+        "$quest": {
+          ".write": "auth != null",
+          ".validate": "$quest.matches(/^[a-z0-9-]{1,60}$/) && newData.isNumber() && newData.val() === (data.exists() ? data.val() : 0) + 1"
+        }
+      }
+    }
+  }
+}

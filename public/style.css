@@ -464,3 +464,9 @@ kbd.pad { white-space: nowrap; }
 .co-skip { margin-top: 10px; }
 .co-skip.hidden { display: none; }
 @media (prefers-reduced-motion: reduce) { .co-window.glow-exotique { animation: none; } }
+
+/* bouton « Continuer avec Google » (connexion Firebase) */
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: 300px; padding: 10px 16px;
+  border-radius: 999px; background: #fff; color: #1f1f1f; font-weight: 600; border: 1px solid #dadce0; cursor: pointer; }
+.google-btn:hover { background: #f2f2f2; }
+.google-btn:disabled { opacity: 0.6; cursor: default; }

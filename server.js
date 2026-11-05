@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { handleApi, userCount } from './accounts.js';
 import { Stats } from './stats.js';
-import { cleanChat } from './chat.js';
+import { cleanChat } from './public/js/chatFilter.js';
 import { cleanLivery } from './public/js/livery.js';
 
 const PORT = Number(process.env.PORT) || 3000;

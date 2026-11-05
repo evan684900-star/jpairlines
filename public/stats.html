@@ -29,14 +29,16 @@
 <body>
 <main>
   <h1>Statistiques de JP Airlines</h1>
-  <p class="sub">Chiffres du serveur multijoueur (joueurs connectés au jeu). Mise à jour toutes les 30 s. Les visites de la page web sont dans
+  <p class="sub">Chiffres du multijoueur (Firebase) : joueurs connectés au jeu. Mise à jour toutes les 30 s. Les visites de la page web sont dans
     <a href="https://vercel.com/dashboard" target="_blank" rel="noopener">Vercel → ton projet → Analytics</a>.</p>
   <div id="out">Chargement…</div>
 </main>
 <script type="module">
-  import { MULTIPLAYER_URL, ACCOUNT_URL } from './js/config.js';
-  const base = (ACCOUNT_URL || (MULTIPLAYER_URL ? MULTIPLAYER_URL.replace(/^ws/, 'http').replace(/\/ws\/?$/, '') : location.origin)).replace(/\/$/, '');
+  import { FIREBASE } from './js/config.js';
+  const DB = FIREBASE.databaseURL.replace(/\/$/, '');
   const fmtMin = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`);
+  // derniers jours (heure de Paris), avec des zéros pour les jours sans activité
+  const dayKey = (d) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   let titles = {};
   import('./js/quests/index.js').then((m) => { titles = Object.fromEntries(m.QUESTS.map((q) => [q.id, q.title])); titles.transport = 'Missions de transport'; load(); }).catch(() => {});
@@ -55,30 +57,39 @@
 
   async function load() {
     try {
-      const r = await fetch(`${base}/api/stats`, { cache: 'no-store' });
-      const s = await r.json();
-      const t = s.today;
+      // lecture publique de la base Firebase (statistiques et positions des joueurs)
+      const [stats, players] = await Promise.all([
+        fetch(`${DB}/stats.json`, { cache: 'no-store' }).then((r) => r.json()),
+        fetch(`${DB}/players.json`, { cache: 'no-store' }).then((r) => r.json()),
+      ]);
+      const now = Date.now();
+      const online = Object.values(players || {}).filter((p) => p && now - p.t < 30000).length;
+      const byDay = stats?.days || {};
+      const days = [];
+      for (let i = 29; i >= 0; i--) {
+        const k = dayKey(new Date(now - i * 86400000));
+        const d = byDay[k] || {};
+        days.push({ day: k, visits: d.visits || 0, quests: d.quests || 0, chat: d.chat || 0 });
+      }
+      const t = days[days.length - 1];
+      const sum = (k) => days.reduce((n, d) => n + d[k], 0);
+      const topQuests = Object.entries(stats?.quests || {}).sort((a, b) => b[1] - a[1]).slice(0, 10);
       document.getElementById('out').innerHTML = `
         <div class="cards">
-          <div class="card live"><b>${s.online}</b><span>pilote(s) en ligne maintenant</span></div>
+          <div class="card live"><b>${online}</b><span>pilote(s) en ligne maintenant</span></div>
           <div class="card"><b>${t.visits}</b><span>connexions aujourd'hui</span></div>
-          <div class="card"><b>${t.peak}</b><span>pic de joueurs aujourd'hui</span></div>
-          <div class="card"><b>${fmtMin(t.minutes)}</b><span>temps de jeu cumulé aujourd'hui</span></div>
-          <div class="card"><b>${s.accounts}</b><span>comptes créés</span></div>
-          <div class="card"><b>${s.last30.visits}</b><span>connexions (30 jours)</span></div>
-          <div class="card"><b>${s.last30.peak}</b><span>record de joueurs simultanés (30 j)</span></div>
-          <div class="card"><b>${fmtMin(s.last30.minutes)}</b><span>temps de jeu (30 jours)</span></div>
-          <div class="card"><b>${s.last30.quests}</b><span>quêtes réussies (30 jours)</span></div>
-          <div class="card"><b>${s.last30.chat}</b><span>messages de chat (30 jours)</span></div>
+          <div class="card"><b>${t.quests}</b><span>quêtes réussies aujourd'hui</span></div>
+          <div class="card"><b>${t.chat}</b><span>messages de chat aujourd'hui</span></div>
+          <div class="card"><b>${sum('visits')}</b><span>connexions (30 jours)</span></div>
+          <div class="card"><b>${sum('quests')}</b><span>quêtes réussies (30 jours)</span></div>
+          <div class="card"><b>${sum('chat')}</b><span>messages de chat (30 jours)</span></div>
         </div>
-        <h2>Connexions par jour</h2><div class="chart">${bars(s.days, 'visits', '#f5b532', 'connexions')}</div>
-        <h2>Temps de jeu par jour</h2><div class="chart">${bars(s.days, 'minutes', '#4b9be3', 'de jeu')}</div>
-        <h2>Pic de joueurs simultanés par jour</h2><div class="chart">${bars(s.days, 'peak', '#4be37a', 'joueurs')}</div>
+        <h2>Connexions par jour</h2><div class="chart">${bars(days, 'visits', '#f5b532', 'connexions')}</div>
+        <h2>Quêtes réussies par jour</h2><div class="chart">${bars(days, 'quests', '#4b9be3', 'quêtes')}</div>
         <h2>Quêtes les plus jouées</h2>
-        ${s.topQuests.length ? `<table><tr><th>Quête</th><th class="n">Réussites</th></tr>${s.topQuests.map(([id, n]) => `<tr><td>${esc(titles[id] || id)}</td><td class="n">${n}</td></tr>`).join('')}</table>` : '<p class="sub">Aucune quête terminée pour l\'instant.</p>'}
-        <p class="sub" style="margin-top:20px">Serveur démarré depuis ${s.uptimeH} h.</p>`;
+        ${topQuests.length ? `<table><tr><th>Quête</th><th class="n">Réussites</th></tr>${topQuests.map(([id, n]) => `<tr><td>${esc(titles[id] || id)}</td><td class="n">${n}</td></tr>`).join('')}</table>` : '<p class="sub">Aucune quête terminée pour l\'instant.</p>'}`;
     } catch {
-      document.getElementById('out').innerHTML = '<p class="err">Serveur injoignable : vérifie que le serveur multijoueur tourne (pm2 list).</p>';
+      document.getElementById('out').innerHTML = '<p class="err">Base Firebase injoignable.</p>';
     }
   }
   load();

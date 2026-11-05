@@ -1,5 +1,6 @@
-// Chat multijoueur : nettoyage des messages côté serveur (le client ne fait jamais confiance au texte reçu,
-// il l'affiche toujours comme du texte brut).
+// Chat multijoueur : filtre des gros mots (le texte est toujours affiché comme du texte brut, jamais comme du HTML).
+// Utilisé par le jeu à l’envoi ET à l’affichage de chaque message reçu (un message trafiqué est filtré quand même),
+// et par le serveur Node (server.js) s’il est encore utilisé.
 const MAX = 140;
 
 // mots grossiers masqués par des étoiles. À écrire en minuscules et sans accents : la recherche ignore

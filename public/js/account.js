@@ -1,94 +1,124 @@
-// Compte joueur (côté jeu) : connexion par e-mail + mot de passe ou Google, et sauvegarde de la progression
-// sur le serveur Node (accounts.js). Sans compte, tout reste dans le navigateur comme avant.
-import { MULTIPLAYER_URL, ACCOUNT_URL } from './config.js';
-import { t, LANG } from './i18n.js';
+// Compte joueur (côté jeu) : connexion par e-mail + mot de passe ou Google (Firebase Authentication), sauvegarde de
+// la progression et classements des missions chronométrées (Firebase Realtime Database). Sans compte, tout reste dans
+// le navigateur comme avant (le joueur est alors un « invité » anonyme, pour le multijoueur et le chat).
+import { firebase, authReady } from './firebase.js';
+import { t } from './i18n.js';
 
-const TOKEN_KEY = 'jpairlines-token';
-
-// adresse de l'API : même serveur que le multijoueur (wss://hôte/ws → https://hôte)
-function apiBase() {
-  if (ACCOUNT_URL) return ACCOUNT_URL.replace(/\/$/, '');
-  if (MULTIPLAYER_URL) return MULTIPLAYER_URL.replace(/^ws/, 'http').replace(/\/ws\/?$/, '');
-  return location.protocol.startsWith('http') ? location.origin : '';
-}
+// messages d'erreur de Firebase → phrases du jeu (déjà traduites)
+const ERRORS = {
+  'auth/invalid-email': 'Adresse e-mail invalide.',
+  'auth/missing-email': 'Adresse e-mail invalide.',
+  'auth/weak-password': 'Le mot de passe doit faire au moins 8 caractères.',
+  'auth/email-already-in-use': 'Un compte existe déjà avec cette adresse.',
+  'auth/invalid-credential': 'E-mail ou mot de passe incorrect.',
+  'auth/wrong-password': 'E-mail ou mot de passe incorrect.',
+  'auth/user-not-found': 'E-mail ou mot de passe incorrect.',
+  'auth/too-many-requests': 'Trop de tentatives, réessaie dans une minute.',
+  'auth/popup-closed-by-user': 'Connexion Google refusée.',
+  'auth/cancelled-popup-request': 'Connexion Google refusée.',
+  'auth/network-request-failed': 'Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).',
+};
+const fail = (e) => new Error(t(ERRORS[e?.code] || (e?.code?.startsWith?.('auth/') ? 'Connexion impossible.' : 'Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).')));
+const cleanName = (n) => String(n || '').replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, 16) || 'Pilote';
 
 export class Account {
   constructor() {
-    this.base = apiBase();
-    this.token = null;
-    try { this.token = localStorage.getItem(TOKEN_KEY); } catch { /* stockage indisponible */ }
-    this.user = null;
+    this.user = null; // { uid, name, email, google, save }
     this.pushTimer = null;
     this.onChange = () => {};
   }
 
   get loggedIn() { return !!this.user; }
 
-  async api(path, { method = 'GET', body } = {}) {
-    let r;
-    try {
-      r = await fetch(`${this.base}/api/${path}`, {
-        method,
-        headers: { 'Content-Type': 'application/json', ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}) },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-    } catch {
-      throw new Error(t('Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).'));
-    }
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      if (r.status === 401 && this.token && path !== 'login') this.forget();
-      throw new Error(data.error ? t(data.error) : t('Erreur {status}', { status: r.status }));
-    }
-    return data;
+  // données du compte enregistrées dans la base (nom et sauvegarde)
+  async load(fu) {
+    const { db, D } = await firebase();
+    const snap = await D.get(D.ref(db, `users/${fu.uid}`));
+    const data = snap.val() || {};
+    this.user = {
+      uid: fu.uid, name: data.name || fu.displayName || (fu.email || '').split('@')[0] || 'Pilote', email: fu.email || '',
+      google: fu.providerData.some((p) => p.providerId === 'google.com'), save: data.save || null,
+    };
+    this.onChange(this.user);
+    return this.user;
   }
 
-  setSession({ token, user }) {
-    this.token = token;
-    this.user = user;
-    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* stockage indisponible */ }
-    this.onChange(user);
-    return user;
-  }
-  forget() {
-    this.token = null;
-    this.user = null;
-    try { localStorage.removeItem(TOKEN_KEY); } catch { /* stockage indisponible */ }
-    this.onChange(null);
-  }
-
-  // jeton reçu au retour de Google (redirection)
-  useToken(token) {
-    this.token = token;
-    try { localStorage.setItem(TOKEN_KEY, token); } catch { /* stockage indisponible */ }
-  }
-
-  // reprise de la session enregistrée (au chargement)
+  // reprise de la session enregistrée (au chargement), y compris le retour d'une connexion Google par redirection
   async restore() {
-    if (!this.token) return null;
     try {
-      const { user } = await this.api('me');
-      this.user = user;
-      this.onChange(user);
+      const fb = await authReady();
+      const back = await fb.A.getRedirectResult(fb.auth).catch(() => null);
+      const fu = fb.auth.currentUser;
+      if (!fu || fu.isAnonymous) return null;
+      const user = await this.load(fu);
+      user.fromRedirect = !!back;
       return user;
     } catch { return null; }
   }
 
-  async config() {
-    try { return await this.api('config'); } catch { return {}; }
+  async register(email, password, name, save) {
+    if (password.length < 8) throw new Error(t('Le mot de passe doit faire au moins 8 caractères.'));
+    try {
+      const { auth, db, A, D } = await firebase();
+      const { user: fu } = await A.createUserWithEmailAndPassword(auth, email, password);
+      await D.set(D.ref(db, `users/${fu.uid}`), { name: cleanName(name), save: JSON.parse(JSON.stringify(save || {})), updated: D.serverTimestamp() });
+      return this.load(fu);
+    } catch (e) { throw fail(e); }
   }
-  register(email, password, name, save) { return this.api('register', { method: 'POST', body: { email, password, name, save } }).then((d) => this.setSession(d)); }
-  login(email, password) { return this.api('login', { method: 'POST', body: { email, password } }).then((d) => this.setSession(d)); }
-  google(credential, name, save) { return this.api('google', { method: 'POST', body: { credential, name, save } }).then((d) => this.setSession(d)); }
+  async login(email, password) {
+    try {
+      const { auth, A } = await firebase();
+      const { user: fu } = await A.signInWithEmailAndPassword(auth, email, password);
+      return this.load(fu);
+    } catch (e) { throw fail(e); }
+  }
+  // Google : fenêtre de connexion ; si le navigateur la bloque, la page part chez Google puis revient (restore)
+  async google(name) {
+    try {
+      const { auth, db, A, D } = await firebase();
+      const provider = new A.GoogleAuthProvider();
+      let fu;
+      try { ({ user: fu } = await A.signInWithPopup(auth, provider)); } catch (e) {
+        if (e?.code === 'auth/popup-blocked') { await A.signInWithRedirect(auth, provider); return null; }
+        throw e;
+      }
+      // premier passage : on crée la fiche du joueur
+      const ref = D.ref(db, `users/${fu.uid}/name`);
+      if (!(await D.get(ref)).exists()) await D.set(ref, cleanName(name || fu.displayName));
+      return this.load(fu);
+    } catch (e) { throw fail(e); }
+  }
   async logout() {
     await this.flush();
-    try { await this.api('logout', { method: 'POST' }); } catch { /* déjà déconnecté */ }
-    this.forget();
+    try { const { auth, A } = await firebase(); await A.signOut(auth); } catch { /* déjà déconnecté */ }
+    this.user = null;
+    this.onChange(null);
   }
 
-  // classements des missions chronométrées
-  submitTime(quest, ms) { return this.api('times', { method: 'POST', body: { quest, ms } }); }
-  times(quest) { return this.api(`times?quest=${encodeURIComponent(quest)}`); }
+  // ----- classements des missions chronométrées -----
+  // tous les temps d'une quête, du meilleur au moins bon (quelques dizaines de joueurs : on lit tout)
+  async board(quest) {
+    const { db, D } = await firebase();
+    const snap = await D.get(D.query(D.ref(db, `times/${quest}`), D.orderByChild('ms')));
+    const all = [];
+    snap.forEach((c) => { all.push({ uid: c.key, ...c.val() }); });
+    return all;
+  }
+  async submitTime(quest, ms) {
+    const { db, D } = await firebase();
+    const ref = D.ref(db, `times/${quest}/${this.user.uid}`);
+    const prev = (await D.get(ref)).val();
+    const best = !prev || ms < prev.ms;
+    if (best) await D.set(ref, { name: this.user.name, ms, at: D.serverTimestamp() });
+    const all = await this.board(quest);
+    const i = all.findIndex((x) => x.uid === this.user.uid);
+    return { best, ms: best ? ms : prev.ms, rank: i + 1, total: all.length };
+  }
+  async times(quest) {
+    const all = await this.board(quest);
+    const i = this.user ? all.findIndex((x) => x.uid === this.user.uid) : -1;
+    return { top: all.slice(0, 10).map((x) => ({ name: x.name, ms: x.ms })), total: all.length, me: i >= 0 ? { rank: i + 1, ms: all[i].ms } : null };
+  }
 
   // envoi de la sauvegarde (regroupé : au plus une fois toutes les 4 s)
   pushSave(save) {
@@ -103,7 +133,12 @@ export class Account {
     if (!this.user || !this.pending) return;
     const save = this.pending;
     this.pending = null;
-    try { await this.api('save', { method: 'PUT', body: { save, name: save.name } }); } catch { /* réessayé à la prochaine sauvegarde */ }
+    try {
+      const { db, D } = await firebase();
+      if (save.name) this.user.name = cleanName(save.name);
+      // JSON aller-retour : la base refuse les valeurs undefined
+      await D.set(D.ref(db, `users/${this.user.uid}`), { name: this.user.name, save: JSON.parse(JSON.stringify(save)), updated: D.serverTimestamp() });
+    } catch { /* réessayé à la prochaine sauvegarde */ }
   }
 }
 
@@ -122,28 +157,4 @@ export function mergeSaves(local, remote) {
     money: Math.max(remote.money || 0, local.money || 0),
     xp: Math.max(remote.xp || 0, local.xp || 0),
   };
-}
-
-// bouton officiel « Continuer avec Google » (script Google chargé seulement si le serveur est configuré).
-// Mode redirection : la page part chez Google puis revient connectée, sans fenêtre surgissante
-// (souvent bloquée par les navigateurs). Le retour est lu par takeRedirectToken().
-export function mountGoogleButton(el, clientId, base) {
-  if (!clientId) return false;
-  const s = document.createElement('script');
-  s.src = 'https://accounts.google.com/gsi/client';
-  s.async = true;
-  s.onload = () => {
-    window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'redirect', login_uri: `${base}/api/google-redirect` });
-    window.google.accounts.id.renderButton(el, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: LANG, width: 300 });
-  };
-  document.head.appendChild(s);
-  return true;
-}
-
-// retour de Google : #jp-token=… (connecté) ou #jp-error=… ; l'ancre est aussitôt effacée de l'adresse
-export function takeRedirectToken() {
-  const m = /[#&]jp-(token|error)=([^&]+)/.exec(location.hash);
-  if (!m) return null;
-  history.replaceState(null, '', location.pathname + location.search);
-  return m[1] === 'token' ? { token: decodeURIComponent(m[2]) } : { error: decodeURIComponent(m[2]) };
 }

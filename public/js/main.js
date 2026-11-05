@@ -8,7 +8,7 @@ import { Terrain, terrainColor } from './terrain.js';
 import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm, saveSettings, FUEL_SCALE } from './settings.js';
-import { MULTIPLAYER_URL } from './config.js';
+import { Net } from './net.js';
 import { GameRenderer } from './render/renderer.js';
 import { CameraRig } from './render/cameras.js';
 import { TreeLibrary, NearTrees } from './render/trees.js';
@@ -20,7 +20,7 @@ import { icon, hydrateIcons } from './ui/icons.js';
 import { QuestSystem, isRanked, fmtChrono } from './quests/engine.js';
 import { ACTIONS, isKey, keysFor, keyName, kbd, bindKey, unbindKey, resetKeys, layout, setLayout, detectLayout, pad, padFor, isPad, padName, bindPad, unbindPad, resetPad } from './keybinds.js';
 import { Gamepads, moveFocus, clearPadFocus } from './gamepad.js';
-import { Account, mergeSaves, mountGoogleButton, takeRedirectToken } from './account.js';
+import { Account, mergeSaves } from './account.js';
 import { Hangar } from './hangar.js';
 import { loadPlaneModels, disposePlaneMesh } from './planeModel.js';
 import { Tutorial } from './tutorial.js';
@@ -789,56 +789,34 @@ bigCanvas.addEventListener('pointermove', (e) => {
 
 // ================= Multijoueur =================
 const remotes = new Map();
-const net = { ws: null, id: null, lastSend: 0, retry: 2000, liveries: new Map() };
-// peinture de mon avion envoyée aux autres joueurs (à la connexion et à chaque changement)
-function sendLivery() {
-  if (net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'livery', l: liveryOf(plane.type) }));
-}
-const REMOTE_COLORS = [0xffc4a3, 0xb5e3a1, 0xa3c9ff, 0xf7a3d9, 0xfff19c, 0xc2a3ff];
-
-function wsUrl() {
-  if (MULTIPLAYER_URL) return MULTIPLAYER_URL;
-  if (!location.protocol.startsWith('http')) return null;
-  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
-}
-
-function connect() {
-  const url = wsUrl();
-  if (!url) return;
-  let ws;
-  try { ws = new WebSocket(url); } catch { return; }
-  net.ws = ws;
-  ws.onopen = () => { net.retry = 2000; ws.send(JSON.stringify({ t: 'hello', name: save.name })); sendLivery(); };
-  ws.onmessage = (ev) => {
-    let msg;
-    try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.t === 'welcome') {
-      net.id = msg.id;
-      net.known = null;
-      net.placed = false;
-      $('chat-lines').textContent = '';
-      for (const c of msg.chat || []) chatLine(c.name, c.text, 'old');
-      net.liveries = new Map(Object.entries(msg.liveries || {}).map(([k, v]) => [Number(k), v]));
-    }
-    if (msg.t === 'livery') {
-      net.liveries.set(msg.id, msg.l);
-      if (remotes.has(msg.id)) removeRemote(msg.id); // recréé avec sa nouvelle peinture
-    }
-    if (msg.t === 'players') syncRemotes(msg.list);
-    if (msg.t === 'chat') {
-      chatLine(msg.name, msg.text, msg.id === net.id ? 'me' : '');
-      if (msg.id !== net.id) beep(990, 0.05, 0.06);
-    }
-    if (msg.t === 'chat-info') chatLine('', t(msg.text), 'info');
-  };
-  ws.onclose = () => {
-    net.ws = null;
+// multijoueur par Firebase (net.js) : positions, peintures et chat ; net.id = identifiant Firebase du joueur
+const net = { id: null, lastSend: 0, liveries: new Map(), known: null, placed: false };
+const mp = new Net({
+  players: (list) => { net.id = mp.uid; syncRemotes(list); },
+  livery: (id, l) => {
+    net.liveries.set(id, l);
+    if (remotes.has(id)) removeRemote(id); // recréé avec sa nouvelle peinture
+  },
+  chat: (name, text, cls) => {
+    chatLine(name, text, cls);
+    if (!cls) beep(990, 0.05, 0.06);
+  },
+  status: (on) => {
+    if (on) return;
     for (const id of [...remotes.keys()]) removeRemote(id);
+    net.known = null; net.placed = false;
     $('online').textContent = t('Solo (hors ligne)');
     if (chat.open) closeChat();
-    setTimeout(connect, net.retry);
-    net.retry = Math.min(60000, net.retry * 2);
-  };
+  },
+});
+// peinture de mon avion envoyée aux autres joueurs (à la connexion et à chaque changement)
+function sendLivery() { mp.sendLivery(liveryOf(plane.type)); }
+const REMOTE_COLORS = [0xffc4a3, 0xb5e3a1, 0xa3c9ff, 0xf7a3d9, 0xfff19c, 0xc2a3ff];
+// couleur de secours d'un autre joueur, tirée de son identifiant
+const colorOf = (id) => REMOTE_COLORS[[...String(id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % REMOTE_COLORS.length];
+
+function connect() {
+  mp.start(save.name, liveryOf(plane.type));
 }
 
 function removeRemote(id) {
@@ -863,7 +841,7 @@ function syncRemotes(list) {
     const type = AIRCRAFT[p.a | 0]?.id || 'cub';
     if (r && r.type !== type) { removeRemote(p.id); r = null; } // il a changé d'avion
     if (!r) {
-      const mesh = createPlaneMesh(type, { color: REMOTE_COLORS[p.id % REMOTE_COLORS.length], livery: net.liveries.get(p.id) });
+      const mesh = createPlaneMesh(type, { color: colorOf(p.id), livery: net.liveries.get(p.id) });
       const label = makeLabel(p.name, { size: 0.026 });
       label.position.y = 6;
       label.visible = settings.showNames;
@@ -916,7 +894,7 @@ function chatLine(name, text, cls = '') {
   if (!cls.includes('old')) setTimeout(() => d.classList.add('old'), 30000);
 }
 function openChat() {
-  if (!net.ws || net.ws.readyState !== 1) { toast(t('Chat indisponible : pas de connexion au serveur multijoueur')); return; }
+  if (!mp.ready) { toast(t('Chat indisponible : pas de connexion au serveur multijoueur')); return; }
   chat.open = true;
   keys.clear(); // sinon une touche de vol enfoncée resterait « bloquée »
   $('chat').classList.add('open');
@@ -934,7 +912,8 @@ function closeChat() {
 $('chat-form').onsubmit = (e) => {
   e.preventDefault();
   const text = $('chat-input').value.trim();
-  if (text && net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'chat', text: text.slice(0, 140) }));
+  const refused = text ? mp.sendChat(text.slice(0, 140)) : '';
+  if (refused) chatLine('', t(refused), 'info');
   $('chat-input').value = '';
   closeChat();
 };
@@ -948,15 +927,15 @@ $('chat-lines').addEventListener('mousedown', (e) => { if (chat.open) e.preventD
 $('btn-chat').onclick = () => (chat.open ? closeChat() : openChat());
 
 function netTick(now) {
-  if (!net.ws || net.ws.readyState !== 1 || now - net.lastSend < 100) return;
+  if (!mp.ready || now - net.lastSend < 200) return; // 5 fois par seconde (les autres avions sont lissés)
   net.lastSend = now;
   const r2 = (v) => Math.round(v * 100) / 100;
-  net.ws.send(JSON.stringify({
-    t: 'state',
+  mp.setName(save.name);
+  mp.sendState({
     p: plane.pos.toArray().map(r2),
     q: plane.quat.toArray().map((v) => Math.round(v * 1e4) / 1e4),
     s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0, a: aircraftIndex(plane.type), k: plane.smokeOn && !plane.onGround ? 1 : 0,
-  }));
+  });
 }
 
 // ================= HUD =================
@@ -1806,19 +1785,28 @@ $('acc-form').onsubmit = async (e) => {
   $('acc-submit').disabled = false;
 };
 $('acc-logout').onclick = async () => { await account.logout(); toast(t('Déconnecté : la progression reste aussi sur cet appareil.')); };
-account.config().then((cfg) => {
-  const ok = mountGoogleButton($('acc-google'), cfg.google, account.base);
-  $('acc-or').classList.toggle('hidden', !ok);
-});
-// retour de la connexion Google (redirection)
-const back = takeRedirectToken();
-const GOOGLE_ERRORS = { 'google-refuse': 'Connexion Google refusée.', 'google-non-configure': 'Connexion Google non configurée sur le serveur.', 'trop-de-tentatives': 'Trop de tentatives, réessaie dans une minute.' };
-if (back?.token) account.useToken(back.token);
-if (back?.error) accMsg(t(GOOGLE_ERRORS[back.error] || 'Connexion Google impossible.'));
+// connexion Google (Firebase) : fenêtre de connexion, ou redirection si le navigateur bloque les fenêtres
+{
+  const g = document.createElement('button');
+  g.type = 'button';
+  g.className = 'google-btn';
+  g.innerHTML = `<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.3 5.7c4.3-4 6.9-9.9 7-17.1z"/><path fill="#FBBC05" d="M10.6 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2 1.4-4.7 2.3-8.6 2.3-6.2 0-11.5-4.1-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg><span>${t('Continuer avec Google')}</span>`;
+  g.onclick = async () => {
+    g.disabled = true;
+    accMsg('');
+    try {
+      const user = await account.google(($('pilot-name').value.trim() || save.name || t('Pilote')).slice(0, 16));
+      if (user) { adoptAccount(user); toast(t('Connecté avec Google : bienvenue, {name} !', { name: user.name })); }
+    } catch (err) { accMsg(t(err.message)); }
+    g.disabled = false;
+  };
+  $('acc-google').append(g);
+  $('acc-or').classList.remove('hidden');
+}
 account.restore().then((user) => {
   if (!user) return;
   adoptAccount(user);
-  if (back?.token) toast(t('Connecté avec Google : bienvenue, {name} !', { name: user.name }));
+  if (user.fromRedirect) toast(t('Connecté avec Google : bienvenue, {name} !', { name: user.name }));
 });
 // en quittant (ou en changeant d'onglet), le carburant est enregistré
 addEventListener('pagehide', () => { if (started) { storeFuel(); persist(); } account.flush(); });
@@ -1860,7 +1848,7 @@ const tick = () => new Promise((res) => setTimeout(res, 20));
       const a = AIRCRAFT.find((x) => x.unlock === q.id);
       if (a && !res.replay) setTimeout(() => toast(t('🔓 Nouvel avion débloqué : {name} ! Échap → Hangar pour le piloter', { name: a.name })), 3200);
       if (isRanked(q)) recordTime(q, res.time);
-      if (net.ws?.readyState === 1) net.ws.send(JSON.stringify({ t: 'quest', id: q.job ? 'transport' : q.id })); // statistiques (quêtes les plus jouées)
+      mp.questDone(q.job ? 'transport' : q.id); // statistiques (quêtes les plus jouées)
     },
     onShowTimes: (q, li) => showTimes(q, li),
   });
