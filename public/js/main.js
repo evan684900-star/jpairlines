@@ -1781,7 +1781,8 @@ $('acc-form').onsubmit = async (e) => {
     const user = accMode === 'login' ? await account.login(email, pass) : await account.register(email, pass, name, save);
     $('acc-pass').value = '';
     adoptAccount(user);
-    toast(accMode === 'login' ? t('Bon retour, {name} !', { name: user.name }) : t('Compte créé : ta progression est sauvegardée.'));
+    toast(user.imported ? t('✈️ Progression de ton ancien compte récupérée, {name} !', { name: user.name })
+      : accMode === 'login' ? t('Bon retour, {name} !', { name: user.name }) : t('Compte créé : ta progression est sauvegardée.'));
   } catch (err) { accMsg(t(err.message)); }
   $('acc-submit').disabled = false;
 };

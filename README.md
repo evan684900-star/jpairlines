@@ -34,6 +34,9 @@ presque partout. Aucun serveur à faire tourner.
 - La page `stats.html` lit les compteurs du jour (connexions, quêtes réussies, messages) et les joueurs en ligne.
 - Quota gratuit de la Realtime Database : 10 Go transférés par mois, 100 connexions simultanées.
 - Pas encore de réinitialisation du mot de passe par e-mail (Firebase sait le faire : à ajouter).
+- **Comptes de l'ancien serveur (VPS)** : se connecter (ou créer un compte) avec le même e-mail et le même mot de passe
+  récupère automatiquement la progression de l'ancien compte (`legacyLogin` dans `account.js`). Le VPS doit rester
+  allumé le temps que les joueurs passent ; les anciens comptes Google ne peuvent pas être importés ainsi.
 
 ### Ancien serveur Node (facultatif)
 

@@ -21,6 +21,22 @@ const ERRORS = {
 const fail = (e) => new Error(t(ERRORS[e?.code] || (e?.code?.startsWith?.('auth/') ? 'Connexion impossible.' : 'Serveur injoignable. Réessaie plus tard (tu peux jouer sans compte).')));
 const cleanName = (n) => String(n || '').replace(/[\p{Cc}\p{Cf}]/gu, '').trim().slice(0, 16) || 'Pilote';
 
+// Ancien serveur de comptes (VPS) : sert seulement à récupérer la progression d'un ancien compte (même e-mail et même
+// mot de passe). Injoignable (école, serveur arrêté) : on continue sans, après 6 s au plus.
+const LEGACY = globalThis.JP_LEGACY_URL || 'https://217-160-131-60.sslip.io:8443'; // (JP_LEGACY_URL : tests)
+async function legacyLogin(email, password) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
+  try {
+    const r = await fetch(`${LEGACY}/api/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }), signal: ctrl.signal,
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d?.user ? { name: d.user.name, save: d.user.save || null } : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
 export class Account {
   constructor() {
     this.user = null; // { uid, name, email, google, save }
@@ -61,16 +77,37 @@ export class Account {
     try {
       const { auth, db, A, D } = await firebase();
       const { user: fu } = await A.createUserWithEmailAndPassword(auth, email, password);
-      await D.set(D.ref(db, `users/${fu.uid}`), { name: cleanName(name), save: JSON.parse(JSON.stringify(save || {})), updated: D.serverTimestamp() });
-      return this.load(fu);
+      // ancien compte du VPS avec les mêmes identifiants : sa progression est fusionnée dans le nouveau compte
+      const old = await legacyLogin(email, password);
+      const merged = old?.save ? mergeSaves(save || {}, old.save) : save || {};
+      await D.set(D.ref(db, `users/${fu.uid}`), { name: cleanName(old?.name || name), save: JSON.parse(JSON.stringify(merged)), updated: D.serverTimestamp() });
+      const user = await this.load(fu);
+      user.imported = !!old?.save;
+      return user;
     } catch (e) { throw fail(e); }
   }
   async login(email, password) {
+    let first;
     try {
       const { auth, A } = await firebase();
       const { user: fu } = await A.signInWithEmailAndPassword(auth, email, password);
       return this.load(fu);
-    } catch (e) { throw fail(e); }
+    } catch (e) { first = e; }
+    // pas encore de compte Firebase : peut-être un compte de l'ancien serveur → il est recréé ici avec sa progression
+    if (['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password'].includes(first?.code) && password.length >= 8) {
+      const old = await legacyLogin(email, password);
+      if (old) {
+        try {
+          const { auth, db, A, D } = await firebase();
+          const { user: fu } = await A.createUserWithEmailAndPassword(auth, email, password);
+          await D.set(D.ref(db, `users/${fu.uid}`), { name: cleanName(old.name), save: JSON.parse(JSON.stringify(old.save || {})), updated: D.serverTimestamp() });
+          const user = await this.load(fu);
+          user.imported = true;
+          return user;
+        } catch { /* un compte Firebase existe déjà avec un autre mot de passe : erreur de connexion normale */ }
+      }
+    }
+    throw fail(first);
   }
   // Google : fenêtre de connexion ; si le navigateur la bloque, la page part chez Google puis revient (restore)
   async google(name) {

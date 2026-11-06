@@ -198,4 +198,5 @@ export default {
   // comptes Firebase
   "Continuer avec Google": "Continuar con Google",
   "Connexion impossible.": "No se pudo iniciar sesión.",
+  "✈️ Progression de ton ancien compte récupérée, {name} !": "✈️ ¡Progreso de tu antigua cuenta recuperado, {name}!",
 };
