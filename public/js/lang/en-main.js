@@ -211,4 +211,6 @@ export default {
   "Continuer avec Google": "Continue with Google",
   "Connexion impossible.": "Unable to sign in.",
   "✈️ Progression de ton ancien compte récupérée, {name} !": "✈️ Your old account's progress has been recovered, {name}!",
+  "E-mail ou mot de passe incorrect. (Pour récupérer un compte de l'ancien serveur, connecte-toi depuis chez toi : l'ancien serveur est injoignable d'ici.)": "Incorrect e-mail or password. (To recover an account from the old server, sign in from home: the old server can't be reached from here.)",
+  "Progression de l'ancien serveur récupérée sur cet appareil ✔. Un compte existe déjà avec cette adresse : connecte-toi avec « Continuer avec Google » ou ton nouveau mot de passe pour l'y ajouter.": "Progress from the old server recovered on this device ✔. An account already exists with this address: sign in with \"Continue with Google\" or your new password to add it.",
 };

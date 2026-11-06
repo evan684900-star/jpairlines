@@ -31,10 +31,10 @@ async function legacyLogin(email, password) {
     const r = await fetch(`${LEGACY}/api/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }), signal: ctrl.signal,
     });
-    if (!r.ok) return null;
+    if (!r.ok) return { refused: true }; // identifiants inconnus de l'ancien serveur
     const d = await r.json();
-    return d?.user ? { name: d.user.name, save: d.user.save || null } : null;
-  } catch { return null; } finally { clearTimeout(timer); }
+    return d?.user ? { name: d.user.name, save: d.user.save || null } : { refused: true };
+  } catch { return { unreachable: true }; } finally { clearTimeout(timer); }
 }
 
 export class Account {
@@ -42,6 +42,7 @@ export class Account {
     this.user = null; // { uid, name, email, google, save }
     this.pushTimer = null;
     this.onChange = () => {};
+    this.onLegacySave = () => {}; // progression d'un ancien compte récupérée sans pouvoir créer le compte Firebase
   }
 
   get loggedIn() { return !!this.user; }
@@ -78,7 +79,8 @@ export class Account {
       const { auth, db, A, D } = await firebase();
       const { user: fu } = await A.createUserWithEmailAndPassword(auth, email, password);
       // ancien compte du VPS avec les mêmes identifiants : sa progression est fusionnée dans le nouveau compte
-      const old = await legacyLogin(email, password);
+      const found = await legacyLogin(email, password);
+      const old = found?.save ? found : null;
       const merged = old?.save ? mergeSaves(save || {}, old.save) : save || {};
       await D.set(D.ref(db, `users/${fu.uid}`), { name: cleanName(old?.name || name), save: JSON.parse(JSON.stringify(merged)), updated: D.serverTimestamp() });
       const user = await this.load(fu);
@@ -96,7 +98,8 @@ export class Account {
     // pas encore de compte Firebase : peut-être un compte de l'ancien serveur → il est recréé ici avec sa progression
     if (['auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password'].includes(first?.code) && password.length >= 8) {
       const old = await legacyLogin(email, password);
-      if (old) {
+      if (old.unreachable) throw new Error(t('E-mail ou mot de passe incorrect. (Pour récupérer un compte de l\'ancien serveur, connecte-toi depuis chez toi : l\'ancien serveur est injoignable d\'ici.)'));
+      if (!old.refused) {
         try {
           const { auth, db, A, D } = await firebase();
           const { user: fu } = await A.createUserWithEmailAndPassword(auth, email, password);
@@ -104,7 +107,15 @@ export class Account {
           const user = await this.load(fu);
           user.imported = true;
           return user;
-        } catch { /* un compte Firebase existe déjà avec un autre mot de passe : erreur de connexion normale */ }
+        } catch (e) {
+          // un compte Firebase existe déjà avec cette adresse (Google ou autre mot de passe) : la progression de
+          // l'ancien serveur est gardée sur cet appareil, et fusionnée à la prochaine connexion
+          if (e?.code === 'auth/email-already-in-use') {
+            if (old.save) this.onLegacySave(old.save);
+            throw new Error(t('Progression de l\'ancien serveur récupérée sur cet appareil ✔. Un compte existe déjà avec cette adresse : connecte-toi avec « Continuer avec Google » ou ton nouveau mot de passe pour l\'y ajouter.'));
+          }
+          throw fail(e);
+        }
       }
     }
     throw fail(first);

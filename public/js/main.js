@@ -1759,6 +1759,14 @@ function adoptAccount(user) {
   if (save.aircraft !== before && plane.type !== save.aircraft) setAircraft(save.aircraft);
 }
 account.onChange = showAccount;
+// progression d'un compte de l'ancien serveur, récupérée alors qu'un compte Firebase existe déjà avec cette adresse :
+// gardée sur cet appareil (fusionnée dans le compte à la prochaine connexion, voir adoptAccount)
+account.onLegacySave = (old) => {
+  save = mergeSaves(save, old);
+  if (!airportById(save.lastAirport)) save.lastAirport = 'alpha';
+  persist();
+  quests?.reset();
+};
 const accMsg = (t, ok = false) => { $('acc-msg').textContent = t; $('acc-msg').classList.toggle('ok', ok); };
 for (const b of document.querySelectorAll('[data-acc]')) {
   b.onclick = () => {
