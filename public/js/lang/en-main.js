@@ -220,4 +220,9 @@ export default {
   "Annuler": "Cancel",
   "Supprimer": "Delete",
   "Compte supprimé. Ta progression reste sur cet appareil.": "Account deleted. Your progress stays on this device.",
+  // mot de passe oublié
+  "Mot de passe oublié ?": "Forgot your password?",
+  "Un compte existe déjà avec cette adresse : connecte-toi (avec « Continuer avec Google » si tu l'as créé ainsi), ou clique sur « Mot de passe oublié ? ».": "An account already exists with this address: sign in (with \"Continue with Google\" if you created it that way), or click \"Forgot your password?\".",
+  "Entre ton adresse e-mail ci-dessus, puis clique à nouveau sur « Mot de passe oublié ? ».": "Enter your e-mail address above, then click \"Forgot your password?\" again.",
+  "E-mail envoyé à {email} (s'il correspond à un compte) : clique sur le lien pour choisir un nouveau mot de passe. Pense à regarder dans les spams.": "E-mail sent to {email} (if it matches an account): click the link to choose a new password. Check your spam folder too.",
 };

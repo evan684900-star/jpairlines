@@ -1833,6 +1833,17 @@ $('acc-form').onsubmit = async (e) => {
   };
   $('acc-logout').addEventListener('click', close);
 }
+// mot de passe oublié : e-mail de Firebase pour en choisir un nouveau
+$('acc-forgot').onclick = async () => {
+  const email = $('acc-email').value.trim();
+  if (!email) { accMsg(t('Entre ton adresse e-mail ci-dessus, puis clique à nouveau sur « Mot de passe oublié ? ».')); $('acc-email').focus(); return; }
+  $('acc-forgot').disabled = true;
+  try {
+    await account.resetPassword(email);
+    accMsg(t('E-mail envoyé à {email} (s\'il correspond à un compte) : clique sur le lien pour choisir un nouveau mot de passe. Pense à regarder dans les spams.', { email }), true);
+  } catch (err) { accMsg(t(err.message)); }
+  $('acc-forgot').disabled = false;
+};
 $('acc-logout').onclick = async () => { await account.logout(); toast(t('Déconnecté : la progression reste aussi sur cet appareil.')); };
 // connexion Google (Firebase) : fenêtre de connexion, ou redirection si le navigateur bloque les fenêtres
 {

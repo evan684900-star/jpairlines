@@ -38,7 +38,7 @@ presque partout. Aucun serveur à faire tourner.
   toutes les 5 s à l'arrêt. Entre deux positions, l'avion des autres joueurs continue sur sa lancée (vitesse déduite
   des deux dernières positions, trajet réseau rattrapé) ; un joueur qui réapparaît ailleurs est replacé d'un coup.
   Test par simulation : `node scripts/net-motion-test.mjs`.
-- Pas encore de réinitialisation du mot de passe par e-mail (Firebase sait le faire : à ajouter).
+- **Mot de passe oublié ?** (sous le formulaire de connexion) : e-mail de Firebase pour choisir un nouveau mot de passe ; marche aussi pour un compte créé avec Google, qui peut ensuite se connecter des deux façons.
 - **Supprimer mon compte** (menu, sous le compte connecté) : confirmation par le mot de passe, ou par une fenêtre Google
   pour un compte Google ; efface la sauvegarde en ligne, les temps au classement et le compte. La progression reste
   sur l'appareil.

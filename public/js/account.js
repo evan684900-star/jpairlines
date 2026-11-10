@@ -2,14 +2,14 @@
 // la progression et classements des missions chronométrées (Firebase Realtime Database). Sans compte, tout reste dans
 // le navigateur comme avant (le joueur est alors un « invité » anonyme, pour le multijoueur et le chat).
 import { firebase, authReady } from './firebase.js';
-import { t } from './i18n.js';
+import { t, LANG } from './i18n.js';
 
 // messages d'erreur de Firebase → phrases du jeu (déjà traduites)
 const ERRORS = {
   'auth/invalid-email': 'Adresse e-mail invalide.',
   'auth/missing-email': 'Adresse e-mail invalide.',
   'auth/weak-password': 'Le mot de passe doit faire au moins 8 caractères.',
-  'auth/email-already-in-use': 'Un compte existe déjà avec cette adresse.',
+  'auth/email-already-in-use': 'Un compte existe déjà avec cette adresse : connecte-toi (avec « Continuer avec Google » si tu l\'as créé ainsi), ou clique sur « Mot de passe oublié ? ».',
   'auth/invalid-credential': 'E-mail ou mot de passe incorrect.',
   'auth/wrong-password': 'E-mail ou mot de passe incorrect.',
   'auth/user-not-found': 'E-mail ou mot de passe incorrect.',
@@ -164,6 +164,16 @@ export class Account {
     }
     this.user = null;
     this.onChange(null);
+  }
+
+  // e-mail de Firebase pour choisir un nouveau mot de passe (marche aussi pour un compte créé avec Google : il
+  // pourra ensuite se connecter des deux façons)
+  async resetPassword(email) {
+    try {
+      const { auth, A } = await firebase();
+      auth.languageCode = LANG;
+      await A.sendPasswordResetEmail(auth, email);
+    } catch (e) { throw fail(e); }
   }
 
   async logout() {

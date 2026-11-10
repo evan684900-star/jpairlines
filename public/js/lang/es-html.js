@@ -104,4 +104,9 @@ export default {
   "Annuler": "Cancelar",
   "Supprimer": "Eliminar",
   "Compte supprimé. Ta progression reste sur cet appareil.": "Cuenta eliminada. Tu progreso se queda en este dispositivo.",
+  // mot de passe oublié
+  "Mot de passe oublié ?": "¿Olvidaste tu contraseña?",
+  "Un compte existe déjà avec cette adresse : connecte-toi (avec « Continuer avec Google » si tu l'as créé ainsi), ou clique sur « Mot de passe oublié ? ».": "Ya existe una cuenta con esta dirección: inicia sesión (con «Continuar con Google» si la creaste así) o haz clic en «¿Olvidaste tu contraseña?».",
+  "Entre ton adresse e-mail ci-dessus, puis clique à nouveau sur « Mot de passe oublié ? ».": "Escribe tu correo arriba y vuelve a hacer clic en «¿Olvidaste tu contraseña?».",
+  "E-mail envoyé à {email} (s'il correspond à un compte) : clique sur le lien pour choisir un nouveau mot de passe. Pense à regarder dans les spams.": "Correo enviado a {email} (si corresponde a una cuenta): haz clic en el enlace para elegir una nueva contraseña. Revisa también el spam.",
 };
