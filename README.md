@@ -25,7 +25,7 @@ presque partout. Aucun serveur à faire tourner.
 - **Authentication** : fournisseurs *E-mail/Mot de passe*, *Google* et *Anonyme* activés ; `jpairlines.vercel.app`
   dans les domaines autorisés. Un joueur sans compte est un invité anonyme (multijoueur et chat).
 - **Realtime Database** (Belgique) : `users/<uid>` (nom + sauvegarde), `times/<quête>/<uid>` (classements),
-  `players/<uid>` (position, 5 fois par seconde, effacée à la déconnexion), `liveries/<uid>`, `chat/`, `stats/`.
+  `players/<uid>` (position, effacée à la déconnexion), `liveries/<uid>`, `chat/`, `stats/`.
   Les règles de sécurité sont dans **`database.rules.json`** : à recoller dans la console (Realtime Database → Règles →
   Publier) après chaque modification. Elles limitent chaque joueur à ses propres données, n'acceptent qu'un temps
   meilleur au classement, imposent 1,5 s entre deux messages de chat et 140 caractères au plus.
@@ -33,6 +33,11 @@ presque partout. Aucun serveur à faire tourner.
   jour sont effacés.
 - La page `stats.html` lit les compteurs du jour (connexions, quêtes réussies, messages) et les joueurs en ligne.
 - Quota gratuit de la Realtime Database : 10 Go transférés par mois, 100 connexions simultanées.
+- Pour ménager ce quota, la cadence d'envoi dépend du joueur le plus proche (`netMotion.js`) : 5 fois par seconde à
+  moins de 3 km, 2 fois à moins de 15 km, 1 fois au-delà, une fois toutes les 2 s seul, et un simple signe de vie
+  toutes les 5 s à l'arrêt. Entre deux positions, l'avion des autres joueurs continue sur sa lancée (vitesse déduite
+  des deux dernières positions, trajet réseau rattrapé) ; un joueur qui réapparaît ailleurs est replacé d'un coup.
+  Test par simulation : `node scripts/net-motion-test.mjs`.
 - Pas encore de réinitialisation du mot de passe par e-mail (Firebase sait le faire : à ajouter).
 - **Comptes de l'ancien serveur (VPS)** : se connecter (ou créer un compte) avec le même e-mail et le même mot de passe
   récupère automatiquement la progression de l'ancien compte (`legacyLogin` dans `account.js`). Le VPS doit rester

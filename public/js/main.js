@@ -9,6 +9,7 @@ import { Decor } from './decor.js';
 import { buildWorldObjects, makeLabel, updateLabels } from './objects.js';
 import { settings, buildSettingsForm, saveSettings, FUEL_SCALE } from './settings.js';
 import { Net } from './net.js';
+import { sendInterval, sameState, newMotion, sampleMotion, motionTarget } from './netMotion.js';
 import { GameRenderer } from './render/renderer.js';
 import { CameraRig } from './render/cameras.js';
 import { TreeLibrary, NearTrees } from './render/trees.js';
@@ -850,10 +851,12 @@ function syncRemotes(list) {
       mesh.position.fromArray(p.p);
       mesh.quaternion.fromArray(p.q);
       scene.add(mesh);
-      r = { mesh, label, type, name: p.name, tp: new THREE.Vector3(), tq: new THREE.Quaternion(), st: {} };
+      r = { mesh, label, type, name: p.name, tp: new THREE.Vector3().fromArray(p.p), tq: new THREE.Quaternion(), st: {}, ...newMotion(p.p) };
       remotes.set(p.id, r);
     }
-    r.tp.fromArray(p.p);
+    // nouvelle position reçue (syncRemotes est rappelée à chaque changement de n'importe quel joueur) ; un joueur
+    // qui réapparaît ailleurs est replacé d'un coup au lieu de glisser à travers la carte
+    if (p.t !== r.t && sampleMotion(r, p.p, p.q, p.s, p.t, performance.now(), (mp.now() - p.t) / 1000)) r.mesh.position.fromArray(p.p);
     r.tq.fromArray(p.q);
     r.st = { rpm: p.r ?? 0.6, gearPos: p.g ?? 1, flapPos: p.f ?? 0, lights: !!p.l };
     r.smoke = !!p.k;
@@ -927,16 +930,26 @@ $('chat-input').addEventListener('blur', () => { if (chat.open) closeChat(); });
 $('chat-lines').addEventListener('mousedown', (e) => { if (chat.open) e.preventDefault(); });
 $('btn-chat').onclick = () => (chat.open ? closeChat() : openChat());
 
+// Envoi de mon état aux autres joueurs. Pour économiser le trafic (quota Firebase), la cadence dépend du joueur le
+// plus proche : 5 fois par seconde à moins de 3 km, 2 fois à moins de 15 km, 1 fois au-delà, une fois toutes les 2 s
+// si je suis seul. Si rien n'a changé (avion à l'arrêt), un simple signe de vie toutes les 5 s.
 function netTick(now) {
-  if (!mp.ready || now - net.lastSend < 200) return; // 5 fois par seconde (les autres avions sont lissés)
-  net.lastSend = now;
+  if (!mp.ready) return;
+  let near = Infinity;
+  for (const r of remotes.values()) near = Math.min(near, r.sp.distanceTo(plane.pos));
+  if (now - net.lastSend < sendInterval(near)) return;
   const r2 = (v) => Math.round(v * 100) / 100;
-  mp.setName(save.name);
-  mp.sendState({
+  const state = {
     p: plane.pos.toArray().map(r2),
     q: plane.quat.toArray().map((v) => Math.round(v * 1e4) / 1e4),
     s: r2(plane.speed), r: r2(plane.rpm), g: r2(plane.gearPos), f: r2(plane.flapPos), l: plane.lights ? 1 : 0, a: aircraftIndex(plane.type), k: plane.smokeOn && !plane.onGround ? 1 : 0,
-  });
+  };
+  if (sameState(state, net.lastState) && save.name === net.lastName && now - net.lastSend < 5000) return;
+  net.lastState = state;
+  net.lastName = save.name;
+  net.lastSend = now;
+  mp.setName(save.name);
+  mp.sendState(state);
 }
 
 // ================= HUD =================
@@ -1696,6 +1709,8 @@ function frame(now) {
   // autres joueurs : interpolation douce
   const k = 1 - Math.exp(-realDt * 8);
   for (const r of remotes.values()) {
+    // position visée : dernière position reçue, prolongée par sa vitesse (2,5 s au plus, puis l'avion attend)
+    motionTarget(r, performance.now(), r.tp);
     r.mesh.position.lerp(r.tp, k);
     r.mesh.quaternion.slerp(r.tq, k);
     if (r.mesh.userData.cabin) r.mesh.userData.cabin.visible = camera.position.distanceTo(r.mesh.position) < 35;
@@ -1913,4 +1928,4 @@ const tutorial = new Tutorial({
 $('replay-tuto').onclick = () => { closeOverlays(); tutorial.start(); };
 
 // accès console pour le débogage : jp.plane, jp.renderer.info…
-window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, get airportLife() { return airportLife; }, get mp() { return mp; }, get cityLife() { return cityLife; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };
+window.jp = { THREE, plane, mapView, drawBigMap, get sound() { return sound; }, get airportLife() { return airportLife; }, get mp() { return mp; }, remotes, get cityLife() { return cityLife; }, renderer, settings, gfx, camera, rig, get planeMesh() { return planeMesh; }, decor, terrain, quests: () => quests, setAircraft, tutorial: () => tutorial, intro, wsRain, get inCockpit() { return inCockpit; }, mapTiles: () => ({ built: tiles.size, queued: tileQueue.size }) };

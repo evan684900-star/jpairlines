@@ -1,5 +1,6 @@
-// Multijoueur par Firebase Realtime Database : chaque pilote écrit sa position dans players/<uid> (5 fois par
-// seconde) et lit celle des autres ; peintures des avions dans liveries/<uid> ; chat dans chat/ ; statistiques de
+// Multijoueur par Firebase Realtime Database : chaque pilote écrit sa position dans players/<uid> (de 5 fois par
+// seconde près d'un autre joueur à une fois toutes les 5 s à l'arrêt, voir netTick dans main.js) et lit celle des
+// autres ; peintures des avions dans liveries/<uid> ; chat dans chat/ ; statistiques de
 // fréquentation dans stats/. Un joueur sans compte est un « invité » anonyme. Quand la connexion se coupe, Firebase
 // efface tout seul la position du joueur ; les entrées oubliées (onglet tué, plantage) sont ignorées puis nettoyées.
 import { firebase, ensureUser } from './firebase.js';
@@ -54,7 +55,7 @@ export class Net {
         if (!v || typeof v.t !== 'number') return;
         if (now - v.t > PRUNE && c.key !== this.uid) { D.remove(c.ref).catch(() => {}); return; }
         if (now - v.t > STALE) return;
-        list.push({ id: c.key, name: String(v.n || 'Pilote').slice(0, 16), p: v.p, q: v.q, r: v.r, g: v.g, f: v.f, l: v.l, a: v.a, k: v.k });
+        list.push({ id: c.key, name: String(v.n || 'Pilote').slice(0, 16), t: v.t, p: v.p, q: v.q, s: v.s, r: v.r, g: v.g, f: v.f, l: v.l, a: v.a, k: v.k });
       });
       this.h.players(list);
     });
