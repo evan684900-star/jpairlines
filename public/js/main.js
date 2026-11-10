@@ -929,6 +929,11 @@ $('chat-input').addEventListener('blur', () => { if (chat.open) closeChat(); });
 // cliquer ou tirer la barre de défilement dans l'historique ne ferme pas le chat
 $('chat-lines').addEventListener('mousedown', (e) => { if (chat.open) e.preventDefault(); });
 $('btn-chat').onclick = () => (chat.open ? closeChat() : openChat());
+// le message « Entrée : tableau des missions » s'ouvre aussi d'un clic (souris, écran tactile)
+$('prompt').addEventListener('click', () => {
+  if (!started || paused || plane.crashed || overlayOpen()) return;
+  if (quests?.canOpenBoard()) quests.openBoard();
+});
 
 // Envoi de mon état aux autres joueurs. Pour économiser le trafic (quota Firebase), la cadence dépend du joueur le
 // plus proche : 5 fois par seconde à moins de 3 km, 2 fois à moins de 15 km, 1 fois au-delà, une fois toutes les 2 s

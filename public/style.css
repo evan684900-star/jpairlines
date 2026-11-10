@@ -481,3 +481,4 @@ kbd.pad { white-space: nowrap; }
 .acc-del .danger { background: #c8261e; color: #fff; }
 .acc-forgot { display: block; margin: 6px 0 0 auto; background: none; border: none; color: var(--dim); font-size: 0.8em; text-decoration: underline; cursor: pointer; padding: 2px; }
 .acc-forgot:hover { color: #fff; }
+#prompt { pointer-events: auto; cursor: pointer; }

@@ -244,6 +244,7 @@ export class QuestSystem {
     if (typeof s.xp !== 'number') s.xp = s.money || 0;
     const day = dayKey();
     if (!s.jobs || s.jobs.day !== day) s.jobs = { day, done: [] };
+    if (!Array.isArray(s.jobs.done)) s.jobs.done = []; // liste vide effacée par la base en ligne
     return s;
   }
   rankIndex(xp = this.ensureSave().xp) {

@@ -33,7 +33,7 @@ async function legacyLogin(email, password) {
     });
     if (!r.ok) return { refused: true }; // identifiants inconnus de l'ancien serveur
     const d = await r.json();
-    return d?.user ? { name: d.user.name, save: d.user.save || null } : { refused: true };
+    return d?.user ? { name: d.user.name, save: cleanRemoteSave(d.user.save) } : { refused: true };
   } catch { return { unreachable: true }; } finally { clearTimeout(timer); }
 }
 
@@ -54,7 +54,7 @@ export class Account {
     const data = snap.val() || {};
     this.user = {
       uid: fu.uid, name: data.name || fu.displayName || (fu.email || '').split('@')[0] || 'Pilote', email: fu.email || '',
-      google: fu.providerData.some((p) => p.providerId === 'google.com'), save: data.save || null,
+      google: fu.providerData.some((p) => p.providerId === 'google.com'), save: cleanRemoteSave(data.save),
     };
     this.onChange(this.user);
     return this.user;
@@ -228,6 +228,18 @@ export class Account {
       await D.set(D.ref(db, `users/${this.user.uid}`), { name: this.user.name, save: JSON.parse(JSON.stringify(save)), updated: D.serverTimestamp() });
     } catch { /* réessayé à la prochaine sauvegarde */ }
   }
+}
+
+// Sauvegarde relue depuis la base Firebase, remise en forme : la base efface les listes et objets vides
+// (ex. missions de transport du jour, repères) et peut rendre une liste sous forme d'objet { 0: …, 2: … }.
+const asList = (v) => (Array.isArray(v) ? v.filter((x) => x != null) : v && typeof v === 'object' ? Object.values(v) : []);
+export function cleanRemoteSave(s) {
+  if (!s || typeof s !== 'object') return null;
+  for (const k of ['completed', 'visited', 'owned', 'markers']) s[k] = asList(s[k]);
+  for (const k of ['liveries', 'fuel', 'bestTimes']) if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {};
+  if (s.jobs && typeof s.jobs === 'object') s.jobs.done = asList(s.jobs.done);
+  for (const l of Object.values(s.liveries)) if (l && typeof l === 'object' && 'stickers' in l) l.stickers = asList(l.stickers);
+  return s;
 }
 
 // Fusion d'une sauvegarde locale et de celle du compte : on ne perd jamais une quête réussie ni un aéroport découvert
