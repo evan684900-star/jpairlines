@@ -97,4 +97,11 @@ export default {
   // onglet Pilote
   // caisses et raretés
   "🎁 Caisses": "🎁 Crates",
+  // suppression du compte
+  "Supprimer mon compte": "Delete my account",
+  "Supprimer définitivement ton compte, ta sauvegarde en ligne et tes temps au classement ? La progression reste sur cet appareil.": "Permanently delete your account, your online save and your leaderboard times? Your progress stays on this device.",
+  "Ton mot de passe, pour confirmer": "Your password, to confirm",
+  "Annuler": "Cancel",
+  "Supprimer": "Delete",
+  "Compte supprimé. Ta progression reste sur cet appareil.": "Account deleted. Your progress stays on this device.",
 };

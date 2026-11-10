@@ -136,6 +136,36 @@ export class Account {
       return this.load(fu);
     } catch (e) { throw fail(e); }
   }
+  // Suppression définitive du compte : fiche du joueur et temps au classement effacés, puis le compte lui-même.
+  // Firebase exige une connexion récente : on confirme avec le mot de passe (compte e-mail) ou une fenêtre Google.
+  async remove(password) {
+    if (!this.user) return;
+    clearTimeout(this.pushTimer);
+    this.pushTimer = null;
+    this.pending = null;
+    try {
+      const { auth, db, A, D } = await firebase();
+      const fu = auth.currentUser;
+      if (this.user.google) await A.reauthenticateWithPopup(fu, new A.GoogleAuthProvider());
+      else await A.reauthenticateWithCredential(fu, A.EmailAuthProvider.credential(fu.email, password || ''));
+      // temps au classement (à garder si les règles de la base ne permettent pas encore de les effacer)
+      try {
+        const times = (await D.get(D.ref(db, 'times'))).val() || {};
+        const paths = {};
+        for (const [quest, board] of Object.entries(times)) if (board?.[fu.uid]) paths[`times/${quest}/${fu.uid}`] = null;
+        if (Object.keys(paths).length) await D.update(D.ref(db), paths);
+      } catch { /* règles anciennes : les temps restent */ }
+      await D.remove(D.ref(db, `users/${fu.uid}`));
+      await D.remove(D.ref(db, `lastChat/${fu.uid}`)).catch(() => {});
+      await A.deleteUser(fu);
+    } catch (e) {
+      if (e?.code === 'auth/missing-password') throw new Error(t('E-mail ou mot de passe incorrect.'));
+      throw fail(e);
+    }
+    this.user = null;
+    this.onChange(null);
+  }
+
   async logout() {
     await this.flush();
     try { const { auth, A } = await firebase(); await A.signOut(auth); } catch { /* déjà déconnecté */ }

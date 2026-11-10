@@ -213,4 +213,11 @@ export default {
   "✈️ Progression de ton ancien compte récupérée, {name} !": "✈️ Your old account's progress has been recovered, {name}!",
   "E-mail ou mot de passe incorrect. (Pour récupérer un compte de l'ancien serveur, connecte-toi depuis chez toi : l'ancien serveur est injoignable d'ici.)": "Incorrect e-mail or password. (To recover an account from the old server, sign in from home: the old server can't be reached from here.)",
   "Progression de l'ancien serveur récupérée sur cet appareil ✔. Un compte existe déjà avec cette adresse : connecte-toi avec « Continuer avec Google » ou ton nouveau mot de passe pour l'y ajouter.": "Progress from the old server recovered on this device ✔. An account already exists with this address: sign in with \"Continue with Google\" or your new password to add it.",
+  // suppression du compte
+  "Supprimer mon compte": "Delete my account",
+  "Supprimer définitivement ton compte, ta sauvegarde en ligne et tes temps au classement ? La progression reste sur cet appareil.": "Permanently delete your account, your online save and your leaderboard times? Your progress stays on this device.",
+  "Ton mot de passe, pour confirmer": "Your password, to confirm",
+  "Annuler": "Cancel",
+  "Supprimer": "Delete",
+  "Compte supprimé. Ta progression reste sur cet appareil.": "Account deleted. Your progress stays on this device.",
 };

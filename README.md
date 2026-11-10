@@ -39,6 +39,9 @@ presque partout. Aucun serveur à faire tourner.
   des deux dernières positions, trajet réseau rattrapé) ; un joueur qui réapparaît ailleurs est replacé d'un coup.
   Test par simulation : `node scripts/net-motion-test.mjs`.
 - Pas encore de réinitialisation du mot de passe par e-mail (Firebase sait le faire : à ajouter).
+- **Supprimer mon compte** (menu, sous le compte connecté) : confirmation par le mot de passe, ou par une fenêtre Google
+  pour un compte Google ; efface la sauvegarde en ligne, les temps au classement et le compte. La progression reste
+  sur l'appareil.
 - **Comptes de l'ancien serveur (VPS)** : se connecter (ou créer un compte) avec le même e-mail et le même mot de passe
   récupère automatiquement la progression de l'ancien compte (`legacyLogin` dans `account.js`). Le VPS doit rester
   allumé le temps que les joueurs passent ; les anciens comptes Google ne peuvent pas être importés ainsi.

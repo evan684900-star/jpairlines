@@ -54,6 +54,13 @@
           <div class="acc-user"><span class="acc-avatar" id="acc-avatar"></span><div><b id="acc-name"></b><small id="acc-mail"></small></div>
             <button type="button" id="acc-logout" class="secondary">Se déconnecter</button></div>
           <p class="acc-msg ok">Connecté : ta progression est sauvegardée dans ton compte.</p>
+          <button type="button" id="acc-delete" class="acc-delete">Supprimer mon compte</button>
+          <form id="acc-del-form" class="acc-del hidden" novalidate>
+            <p>Supprimer définitivement ton compte, ta sauvegarde en ligne et tes temps au classement ? La progression reste sur cet appareil.</p>
+            <input id="acc-del-pass" type="password" placeholder="Ton mot de passe, pour confirmer" autocomplete="current-password" maxlength="200" />
+            <div class="acc-del-btns"><button type="button" id="acc-del-cancel" class="secondary">Annuler</button><button type="submit" id="acc-del-ok" class="danger">Supprimer</button></div>
+            <p id="acc-del-msg" class="acc-msg"></p>
+          </form>
         </div>
       </div>
       <div class="actions">

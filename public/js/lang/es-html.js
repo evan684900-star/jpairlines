@@ -97,4 +97,11 @@ export default {
   // onglet Pilote
   // caisses et raretés
   "🎁 Caisses": "🎁 Cajas",
+  // suppression du compte
+  "Supprimer mon compte": "Eliminar mi cuenta",
+  "Supprimer définitivement ton compte, ta sauvegarde en ligne et tes temps au classement ? La progression reste sur cet appareil.": "¿Eliminar definitivamente tu cuenta, tu partida en línea y tus tiempos en la clasificación? El progreso se queda en este dispositivo.",
+  "Ton mot de passe, pour confirmer": "Tu contraseña, para confirmar",
+  "Annuler": "Cancelar",
+  "Supprimer": "Eliminar",
+  "Compte supprimé. Ta progression reste sur cet appareil.": "Cuenta eliminada. Tu progreso se queda en este dispositivo.",
 };

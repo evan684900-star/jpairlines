@@ -22,7 +22,7 @@
       ".read": true,
       "$quest": {
         "$uid": {
-          ".write": "$quest.matches(/^[a-z0-9-]{1,60}$/) && auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous' && newData.exists() && (!data.exists() || newData.child('ms').val() < data.child('ms').val())",
+          ".write": "$quest.matches(/^[a-z0-9-]{1,60}$/) && auth != null && auth.uid === $uid && auth.token.firebase.sign_in_provider !== 'anonymous' && (!newData.exists() || !data.exists() || newData.child('ms').val() < data.child('ms').val())",
           ".validate": "newData.hasChildren(['name', 'ms', 'at'])",
           "name": {
             ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 16"

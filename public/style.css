@@ -470,3 +470,12 @@ kbd.pad { white-space: nowrap; }
   border-radius: 999px; background: #fff; color: #1f1f1f; font-weight: 600; border: 1px solid #dadce0; cursor: pointer; }
 .google-btn:hover { background: #f2f2f2; }
 .google-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* suppression du compte : lien discret, puis confirmation (mot de passe ou Google) */
+.acc-delete { display: block; margin: 8px auto 0; background: none; border: none; color: var(--dim); font-size: 0.8em; text-decoration: underline; cursor: pointer; padding: 2px; }
+.acc-delete:hover { color: #ffb4a8; }
+.acc-del { margin-top: 10px; padding: 10px; border: 1px solid #ff6b5a66; border-radius: 10px; background: #ff3b2a14; }
+.acc-del p { margin: 0 0 8px; font-size: 0.85em; }
+.acc-del input { width: 100%; box-sizing: border-box; }
+.acc-del-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.acc-del .danger { background: #c8261e; color: #fff; }

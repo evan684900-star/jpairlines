@@ -201,4 +201,10 @@ export default {
   "✈️ Progression de ton ancien compte récupérée, {name} !": "✈️ ¡Progreso de tu antigua cuenta recuperado, {name}!",
   "E-mail ou mot de passe incorrect. (Pour récupérer un compte de l'ancien serveur, connecte-toi depuis chez toi : l'ancien serveur est injoignable d'ici.)": "Correo o contraseña incorrectos. (Para recuperar una cuenta del antiguo servidor, conéctate desde casa: el antiguo servidor no es accesible desde aquí.)",
   "Progression de l'ancien serveur récupérée sur cet appareil ✔. Un compte existe déjà avec cette adresse : connecte-toi avec « Continuer avec Google » ou ton nouveau mot de passe pour l'y ajouter.": "Progreso del antiguo servidor recuperado en este dispositivo ✔. Ya existe una cuenta con esta dirección: inicia sesión con «Continuar con Google» o tu nueva contraseña para añadirlo.",
+  // suppression du compte
+  "Supprimer mon compte": "Eliminar mi cuenta",
+  "Supprimer définitivement ton compte, ta sauvegarde en ligne et tes temps au classement ? La progression reste sur cet appareil.": "¿Eliminar definitivamente tu cuenta, tu partida en línea y tus tiempos en la clasificación? El progreso se queda en este dispositivo.",
+  "Ton mot de passe, pour confirmer": "Tu contraseña, para confirmar",
+  "Supprimer": "Eliminar",
+  "Compte supprimé. Ta progression reste sur cet appareil.": "Cuenta eliminada. Tu progreso se queda en este dispositivo.",
 };

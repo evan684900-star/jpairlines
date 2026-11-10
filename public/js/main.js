@@ -1809,6 +1809,30 @@ $('acc-form').onsubmit = async (e) => {
   } catch (err) { accMsg(t(err.message)); }
   $('acc-submit').disabled = false;
 };
+// suppression du compte (confirmation par mot de passe, ou par une fenêtre Google pour un compte Google)
+{
+  const form = $('acc-del-form'), msg = (m) => { $('acc-del-msg').textContent = m; };
+  const close = () => { form.classList.add('hidden'); $('acc-delete').classList.remove('hidden'); $('acc-del-pass').value = ''; msg(''); };
+  $('acc-delete').onclick = () => {
+    $('acc-del-pass').classList.toggle('hidden', !!account.user?.google);
+    form.classList.remove('hidden');
+    $('acc-delete').classList.add('hidden');
+    if (!account.user?.google) $('acc-del-pass').focus();
+  };
+  $('acc-del-cancel').onclick = close;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    $('acc-del-ok').disabled = true;
+    msg('');
+    try {
+      await account.remove($('acc-del-pass').value);
+      close();
+      toast(t('Compte supprimé. Ta progression reste sur cet appareil.'));
+    } catch (err) { msg(t(err.message)); }
+    $('acc-del-ok').disabled = false;
+  };
+  $('acc-logout').addEventListener('click', close);
+}
 $('acc-logout').onclick = async () => { await account.logout(); toast(t('Déconnecté : la progression reste aussi sur cet appareil.')); };
 // connexion Google (Firebase) : fenêtre de connexion, ou redirection si le navigateur bloque les fenêtres
 {
