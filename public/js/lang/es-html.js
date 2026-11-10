@@ -1,7 +1,7 @@
 // Traductions espagnoles (clé = texte français)
 export default {
   "Génération du monde…": "Generando el mundo…",
-  "Un monde de 80 × 80 km, tous les pilotes dans le même ciel.": "Un mundo de 80 × 80 km, todos los pilotos en el mismo cielo.",
+  "Un monde de 200 × 200 km, tous les pilotes dans le même ciel.": "Un mundo de 200 × 200 km, todos los pilotos en el mismo cielo.",
   "Nom de pilote": "Nombre de piloto",
   "Compte": "Cuenta",
   "— facultatif : garde ta progression sur tous tes appareils": "— opcional: conserva tu progreso en todos tus dispositivos",

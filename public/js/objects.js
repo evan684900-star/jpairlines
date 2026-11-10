@@ -78,7 +78,8 @@ function tileUV(geo, sx, sy, attr = 'uv') {
 }
 
 function runwayTexture(a) {
-  const W = 128, H = 2048;
+  // les longues pistes (aéroports internationaux) ont une image deux fois plus longue : marquages aussi nets que sur les autres
+  const W = 128, H = a.length > 2000 ? 4096 : 2048;
   const cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');

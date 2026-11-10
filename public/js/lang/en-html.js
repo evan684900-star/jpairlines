@@ -1,7 +1,7 @@
 // Traductions anglaises (clé = texte français)
 export default {
   "Génération du monde…": "Generating world…",
-  "Un monde de 80 × 80 km, tous les pilotes dans le même ciel.": "An 80 × 80 km world, every pilot in the same sky.",
+  "Un monde de 200 × 200 km, tous les pilotes dans le même ciel.": "A 200 × 200 km world, every pilot in the same sky.",
   "Nom de pilote": "Pilot name",
   "Compte": "Account",
   "— facultatif : garde ta progression sur tous tes appareils": "— optional: keep your progress across all your devices",

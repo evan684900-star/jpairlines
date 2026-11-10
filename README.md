@@ -328,7 +328,7 @@ nacelle cache la vue. Une touche, un clic ou un bouton de manette la passe ; ell
 
 ## Contenu
 
-- **Monde 80 × 80 km** généré à partir d'une graine fixe (identique pour tous) : grand continent, chaîne de montagnes enneigées, désert au sud-ouest, toundra au nord, île volcanique, archipels. Le terrain est chargé par morceaux autour de l'avion avec plusieurs niveaux de détail.
+- **Monde 200 × 200 km** (80 km d’origine au centre) généré à partir d'une graine fixe (identique pour tous) : grand continent, chaîne de montagnes enneigées, désert au sud-ouest, toundra au nord, île volcanique, archipels. Le terrain est chargé par morceaux autour de l'avion avec plusieurs niveaux de détail.
 - **14 aéroports** de 3 tailles (international avec terminal et avions de ligne, régional, piste en herbe), avec balisage, tour, hangars et pompe à essence.
 - **Villes et villages**, champs cultivés, forêts (sapins, feuillus, palmiers, cactus), éoliennes, bateaux qui naviguent, montgolfières, nuages.
 - **14 lieux** : volcan fumant, Toit du Monde, phares, tour radio, arche marine, épave, plateforme pétrolière, château, pyramides, observatoire, stade, colosse.

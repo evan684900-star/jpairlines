@@ -1199,11 +1199,36 @@ function mountGlb(g, src, k) {
   if (k.emblemTex) {
     const fin = find('Derive');
     if (fin) {
-      const b = box(fin), p = b.getCenter(new THREE.Vector3()), sz = Math.min(b.max.y - b.min.y, b.max.z - b.min.z) * 0.55;
-      for (const sx of [-1, 1]) k.decals.push(...projectDecal(g, targets, new THREE.Vector3(sx * 0.06, p.y, p.z + 0.2), new THREE.Vector3(sx, 0, 0), sz, sz, 0, k.emblemTex));
+      // l'emblème doit tenir sur la partie fixe de la dérive (il ne s'affiche pas sur la gouverne, qui bouge) :
+      // plus grand carré qui y tient, trouvé une fois par modèle en sondant la dérive de côté
+      const spot = (src.userData.emblemSpot ||= emblemSpot(targets, box(fin)));
+      for (const sx of [-1, 1]) k.decals.push(...projectDecal(g, targets, new THREE.Vector3(sx * 0.06, spot.y, spot.z), new THREE.Vector3(sx, 0, 0), spot.size, spot.size, 0, k.emblemTex));
     }
   }
   return out;
+}
+
+// Plus grand carré tenant sur les pièces `targets` vues de côté, dans la boîte b (plan y-z) : { y, z, size }
+function emblemSpot(targets, b) {
+  const step = 0.04, ray = new THREE.Raycaster(), dir = new THREE.Vector3(1, 0, 0), from = new THREE.Vector3();
+  const ny = Math.max(1, Math.floor((b.max.y - b.min.y) / step)), nz = Math.max(1, Math.floor((b.max.z - b.min.z) / step));
+  // best[i][j] : côté (en cases) du plus grand carré plein dont (i, j) est le coin haut-arrière
+  let prev = new Uint16Array(nz + 1), best = { n: 0, i: 0, j: 0 };
+  for (let i = 0; i < ny; i++) {
+    const row = new Uint16Array(nz + 1);
+    for (let j = 0; j < nz; j++) {
+      ray.set(from.set(b.min.x - 3, b.min.y + (i + 0.5) * step, b.min.z + (j + 0.5) * step), dir);
+      const hit = ray.intersectObjects(targets, false)[0];
+      // la dérive est fine : un point touché loin de l'axe appartient à une autre pièce (stabilisateur)
+      if (!hit || Math.abs(hit.point.x) > 0.15) continue;
+      row[j + 1] = Math.min(prev[j], prev[j + 1], row[j]) + 1;
+      if (row[j + 1] > best.n) best = { n: row[j + 1], i, j };
+    }
+    prev = row;
+  }
+  if (best.n < 3) { const c = b.getCenter(new THREE.Vector3()); return { y: c.y, z: c.z, size: Math.min(b.max.y - b.min.y, b.max.z - b.min.z) * 0.4 }; }
+  const side = best.n * step;
+  return { y: b.min.y + (best.i + 1) * step - side / 2, z: b.min.z + (best.j + 1) * step - side / 2, size: side * 0.9 };
 }
 
 // Fusion des pièces fixes : une géométrie par matériau (et par jeu d'attributs). Les pièces non peintes sont
