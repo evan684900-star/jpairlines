@@ -45,11 +45,16 @@ class Smooth {
   }
 }
 
+// Taille de l'image du canevas, d'après sa taille à l'écran. Garde-fous contre une taille qui s'emballe (vu sur des
+// PC portables affichés à 125 % ou 150 %, avec le zoom du HUD) : taille bornée, et l'image n'est refaite que si
+// l'écart dépasse 2 pixels ; le dessin s'adapte à la taille réelle de l'image (pas de flou, pas de décalage).
 function setupCanvas(cv, w, h) {
+  w = Math.min(1600, Math.max(1, w)); h = Math.min(1600, Math.max(1, h));
   const dpr = Math.min(2, devicePixelRatio || 1);
-  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const tw = Math.round(w * dpr), th = Math.round(h * dpr);
+  if (Math.abs(cv.width - tw) >= 2 || Math.abs(cv.height - th) >= 2) { cv.width = tw; cv.height = th; }
   const ctx = cv.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(cv.width / w, 0, 0, cv.height / h, 0, 0);
   return ctx;
 }
 

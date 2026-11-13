@@ -109,6 +109,9 @@ button:disabled { opacity: 0.5; cursor: wait; transform: none; }
 /* tailles adaptées à l'écran (largeur et hauteur) */
 #pfd { width: clamp(240px, min(34vw, 52vh), 430px); aspect-ratio: 3 / 2; height: auto; display: block; }
 #eis { width: clamp(110px, min(11vw, 18vh), 150px); align-self: stretch; display: block; }
+/* la taille affichée des instruments ne dépend jamais du contenu de leur canevas : sinon, sur certains navigateurs
+   (affichage à 125 %/150 % + zoom du HUD), canevas et mise en page se relancent et le panneau grandit sans fin */
+#pfd, #eis { contain: size; }
 
 #systems { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 8px 10px; }
 .sys { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; letter-spacing: 0.06em; color: var(--dim); min-width: 52px; }
